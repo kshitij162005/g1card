@@ -1,0 +1,12 @@
+# Ignore node modules and envs at the repo root
+node_modules/
+.env
+.env.*
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
+
+# Dist/builds
+dist/
