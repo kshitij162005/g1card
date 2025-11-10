@@ -9,13 +9,13 @@ const FormInput: React.FC<{ label: string; id: string; type?: string; placeholde
     </div>
 );
 
-const RadioGroup: React.FC<{ legend: string; name: string; options: string[] }> = ({ legend, name, options }) => (
+const RadioGroup: React.FC<{ legend: string; name: string; options: string[]; value?: string; onChange?: (v:string)=>void }> = ({ legend, name, options, value, onChange }) => (
     <div>
         <span className="block text-sm font-medium text-slate-700 dark:text-slate-300">{legend}</span>
         <div className="mt-2 flex flex-wrap gap-4">
             {options.map(option => (
                 <label key={option} className="flex items-center space-x-2">
-                    <input type="radio" name={name} value={option} className="form-radio h-4 w-4 text-brand-accent transition duration-150 ease-in-out" />
+                    <input type="radio" name={name} value={option} checked={value===option} onChange={(e)=>onChange?.(e.target.value)} className="form-radio h-4 w-4 text-brand-accent transition duration-150 ease-in-out" />
                     <span className="text-slate-700 dark:text-slate-300">{option}</span>
                 </label>
             ))}
@@ -27,6 +27,14 @@ const PatientRegistrationPage: React.FC = () => {
     const [step, setStep] = useState(1);
     const [files, setFiles] = useState<File[]>([]);
     const navigate = useNavigate();
+
+    // Controlled form state so inputs persist across steps
+    const [form, setForm] = useState({
+        firstName: '', lastName: '', email: '', dob: '', gender: '', phone: '', address: '', emergencyContactName: '', emergencyContactPhone: '',
+        allergies: '', conditions: '', surgeries: '', medications: '', familyHistory: '', smoking: '',
+        password: '', confirmPassword: ''
+    });
+    const update = (k: string, v: any) => setForm(prev => ({ ...prev, [k]: v }));
 
     const nextStep = () => setStep(prev => prev + 1);
     const prevStep = () => setStep(prev => prev - 1);
@@ -41,9 +49,59 @@ const PatientRegistrationPage: React.FC = () => {
         setFiles(prev => prev.filter(file => file.name !== fileName));
     };
     
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        navigate('/patient/verify-otp');
+
+        const { email, password, confirmPassword, firstName, lastName, dob, gender, phone, address, emergencyContactName, emergencyContactPhone } = form;
+        if (!email || !password) {
+            alert('Email and password required');
+            return;
+        }
+        if (password !== confirmPassword) {
+            alert('Passwords do not match');
+            return;
+        }
+
+        // Convert comma-separated text fields into arrays for the backend schema
+        const toArray = (val?: string) => (val ? val.split(',').map(s => s.trim()).filter(Boolean) : []);
+
+        const body = {
+            email,
+            password,
+            firstName,
+            lastName,
+            dob,
+            gender,
+            phone,
+            address,
+            emergencyContactName,
+            emergencyContactPhone,
+            allergies: toArray(form.allergies),
+            conditions: toArray(form.conditions),
+            surgeries: toArray(form.surgeries),
+            medications: toArray(form.medications),
+            familyHistory: form.familyHistory,
+            smoking: form.smoking,
+        };
+
+        try {
+            const resp = await fetch('http://localhost:8082/api/auth/signup/patient', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                alert('Registration failed: ' + (data?.error || data?.message || 'unknown'));
+                return;
+            }
+            // After registration go to login (OTP removed)
+            alert('Registration successful — please login');
+            navigate('/login');
+        } catch (err) {
+            console.error('patient signup error', err);
+            alert('Registration error');
+        }
     };
 
     return (
@@ -64,31 +122,31 @@ const PatientRegistrationPage: React.FC = () => {
                             <div className="space-y-4">
                                 <h3 className="text-lg font-medium leading-6 text-slate-900 dark:text-slate-200">Personal Information</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <FormInput id="firstName" label="First Name" required />
-                                    <FormInput id="lastName" label="Last Name" required />
+                                    <FormInput id="firstName" label="First Name" required value={form.firstName} onChange={(e)=>update('firstName', e.target.value)} />
+                                    <FormInput id="lastName" label="Last Name" required value={form.lastName} onChange={(e)=>update('lastName', e.target.value)} />
                                 </div>
-                                <FormInput id="email" label="Email" type="email" required />
-                                <FormInput id="dob" label="Date of Birth" type="date" required />
-                                <RadioGroup legend="Gender" name="gender" options={['Male', 'Female', 'Other', 'Prefer Not']} />
-                                <FormInput id="phone" label="Phone Number" type="tel" placeholder="+91-..." required />
-                                <FormInput id="address" label="Address" required />
-                                <FormInput id="emergencyContactName" label="Emergency Contact Name" required />
-                                <FormInput id="emergencyContactPhone" label="Emergency Contact Phone" type="tel" required />
+                                <FormInput id="email" label="Email" type="email" required value={form.email} onChange={(e)=>update('email', e.target.value)} />
+                                <FormInput id="dob" label="Date of Birth" type="date" required value={form.dob} onChange={(e)=>update('dob', e.target.value)} />
+                                <RadioGroup legend="Gender" name="gender" options={['Male', 'Female', 'Other', 'Prefer Not']} value={form.gender} onChange={(v)=>update('gender', v)} />
+                                <FormInput id="phone" label="Phone Number" type="tel" placeholder="+91-..." required value={form.phone} onChange={(e)=>update('phone', e.target.value)} />
+                                <FormInput id="address" label="Address" required value={form.address} onChange={(e)=>update('address', e.target.value)} />
+                                <FormInput id="emergencyContactName" label="Emergency Contact Name" required value={form.emergencyContactName} onChange={(e)=>update('emergencyContactName', e.target.value)} />
+                                <FormInput id="emergencyContactPhone" label="Emergency Contact Phone" type="tel" required value={form.emergencyContactPhone} onChange={(e)=>update('emergencyContactPhone', e.target.value)} />
                             </div>
                         )}
 
                         {step === 2 && (
                             <div className="space-y-4">
                                 <h3 className="text-lg font-medium leading-6 text-slate-900 dark:text-slate-200">Medical History</h3>
-                                <FormInput id="allergies" label="Known Allergies" placeholder="e.g., Penicillin, Nuts, Shellfish" />
-                                <FormInput id="conditions" label="Chronic Conditions" placeholder="e.g., Diabetes, Hypertension, Asthma" />
-                                <FormInput id="surgeries" label="Previous Surgeries/Injuries" placeholder="e.g., Appendectomy (2015), Fracture (2019)" />
-                                <FormInput id="medications" label="Current Medications" placeholder="e.g., Aspirin 100mg daily" />
+                                <FormInput id="allergies" label="Known Allergies" placeholder="e.g., Penicillin, Nuts, Shellfish" value={form.allergies} onChange={(e)=>update('allergies', e.target.value)} />
+                                <FormInput id="conditions" label="Chronic Conditions" placeholder="e.g., Diabetes, Hypertension, Asthma" value={form.conditions} onChange={(e)=>update('conditions', e.target.value)} />
+                                <FormInput id="surgeries" label="Previous Surgeries/Injuries" placeholder="e.g., Appendectomy (2015), Fracture (2019)" value={form.surgeries} onChange={(e)=>update('surgeries', e.target.value)} />
+                                <FormInput id="medications" label="Current Medications" placeholder="e.g., Aspirin 100mg daily" value={form.medications} onChange={(e)=>update('medications', e.target.value)} />
                                 <div>
                                     <label htmlFor="familyHistory" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Family Medical History</label>
-                                    <textarea id="familyHistory" rows={3} className="mt-1 block w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:outline-none focus:ring-brand-accent focus:border-brand-accent bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="Describe any hereditary conditions or significant family illnesses"></textarea>
+                                    <textarea id="familyHistory" rows={3} value={form.familyHistory} onChange={(e)=>update('familyHistory', e.target.value)} className="mt-1 block w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:outline-none focus:ring-brand-accent focus:border-brand-accent bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="Describe any hereditary conditions or significant family illnesses"></textarea>
                                 </div>
-                                <RadioGroup legend="Smoking" name="smoking" options={['Never', 'Former', 'Current']} />
+                                <RadioGroup legend="Smoking" name="smoking" options={['Never', 'Former', 'Current']} value={form.smoking} onChange={(v)=>update('smoking', v)} />
                             </div>
                         )}
 
@@ -133,6 +191,10 @@ const PatientRegistrationPage: React.FC = () => {
                         {step === 4 && (
                             <div className="space-y-6">
                                  <h3 className="text-lg font-medium leading-6 text-slate-900 dark:text-slate-200">Consent & Agreement</h3>
+                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                     <FormInput id="password" label="Password" type="password" required value={form.password} onChange={(e)=>update('password', e.target.value)} />
+                                     <FormInput id="confirmPassword" label="Confirm Password" type="password" required value={form.confirmPassword} onChange={(e)=>update('confirmPassword', e.target.value)} />
+                                 </div>
                                  <div className="flex items-start">
                                      <input id="terms" type="checkbox" className="h-4 w-4 text-brand-accent border-slate-300 rounded mt-1 focus:ring-brand-accent" required />
                                      <label htmlFor="terms" className="ml-3 block text-sm text-slate-900 dark:text-slate-300">I agree to G1CARD Terms of Service.</label>
@@ -165,7 +227,7 @@ const PatientRegistrationPage: React.FC = () => {
                             )}
                             {step === 4 && (
                                 <button type="submit" className="ml-auto px-6 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-brand-primary hover:bg-brand-secondary">
-                                    Register & Send OTP
+                                    Register
                                 </button>
                             )}
                         </div>

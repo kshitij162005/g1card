@@ -1,6 +1,7 @@
 import express from 'express';
 import routes from './routes.js';
 import dotenv from 'dotenv';
+import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { connectDB } from './db.js';
 
@@ -24,6 +25,8 @@ const PORT = process.env.PORT || 8082;
 const HOST = process.env.HOST || 'localhost';
 
 app.use(express.json());
+// Allow CORS from frontend dev server (adjust in production)
+app.use(cors({ origin: '*' }));
 
 // Mount API routes under /api
 app.use('/api', routes);
@@ -40,6 +43,32 @@ async function start() {
       await connectDB(process.env.MONGODB_URI);
     } else {
       console.warn('MONGODB_URI not provided. Skipping DB connection.');
+    }
+
+    // Ensure a Superadmin user exists in DB with the requested credentials.
+    // This will create the superadmin automatically on server start if missing.
+    try {
+      const crypto = await import('crypto');
+      const Superadmin = (await import('./models/Superadmin.js')).default;
+      // Read superadmin credentials from environment variables
+      const fixedEmail = process.env.SUPERADMIN_EMAIL;
+      const fixedPassword = process.env.SUPERADMIN_PASSWORD;
+
+      if (!fixedEmail || !fixedPassword) {
+        console.warn('SUPERADMIN_EMAIL or SUPERADMIN_PASSWORD not set in environment — skipping superadmin upsert');
+      } else {
+        const existing = await Superadmin.findOne({ username: fixedEmail });
+        if (!existing) {
+          const salt = crypto.randomBytes(16).toString('hex');
+          const derived = crypto.pbkdf2Sync(fixedPassword, salt, 100000, 64, 'sha256').toString('hex');
+          await Superadmin.updateOne({ username: fixedEmail }, { $setOnInsert: { username: fixedEmail, password: derived, salt, role: 'superadmin' } }, { upsert: true });
+          console.log('Superadmin created in DB (email):', fixedEmail);
+        } else {
+          console.log('Superadmin already present in DB:', fixedEmail);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not ensure superadmin in DB:', err && err.message ? err.message : err);
     }
 
     app.listen(PORT, () => {
