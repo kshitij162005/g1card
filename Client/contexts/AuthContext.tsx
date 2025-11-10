@@ -4,7 +4,7 @@ import { User, Role } from '../types';
 
 interface AuthContextType {
     user: User | null;
-    login: (role: Role, email: string) => void;
+    login: (role: Role, email: string, password: string) => Promise<boolean>;
     logout: () => void;
 }
 
@@ -13,20 +13,32 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
 
-    const login = (role: Role, email: string) => {
-        // Mock login logic
-        let name = "Admin User";
-        if (role === Role.HOSPITAL) name = "Hospital Admin";
-        if (role === Role.PATIENT) name = "Patient User";
-        
-        const mockUser: User = {
-            id: '1',
-            email: email,
-            role: role,
-            name: name,
-            lastLogin: '2 hours ago',
-        };
-        setUser(mockUser);
+    const login = async (role: Role, email: string, password: string) => {
+        try {
+            const resp = await fetch('http://localhost:8082/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ role: role, email, password }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                console.warn('login failed', data);
+                return false;
+            }
+            const u = data.user;
+            const newUser: User = {
+                id: u.id,
+                email: u.email,
+                name: u.name,
+                role: role,
+                lastLogin: new Date().toISOString(),
+            };
+            setUser(newUser);
+            return true;
+        } catch (err) {
+            console.error('login error', err);
+            return false;
+        }
     };
 
     const logout = () => {

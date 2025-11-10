@@ -4,16 +4,20 @@ import { useAuth } from '../contexts/AuthContext';
 import { Role } from '../types';
 
 const LoginPage: React.FC = () => {
-    const [email, setEmail] = useState('kotechakshitij@gmail.com');
-    const [password, setPassword] = useState('b5526b5');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
     const [role, setRole] = useState<Role>(Role.SUPER_ADMIN);
     const [showPassword, setShowPassword] = useState(false);
     const navigate = useNavigate();
     const { login } = useAuth();
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        login(role, email);
+        const ok = await login(role, email, password);
+        if (!ok) {
+            alert('Login failed. Check credentials.');
+            return;
+        }
         switch (role) {
             case Role.SUPER_ADMIN:
                 navigate('/admin/dashboard');
