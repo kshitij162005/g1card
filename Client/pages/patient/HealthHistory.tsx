@@ -1,30 +1,16 @@
 
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Card from '../../components/Card';
 import { DetailedPatient } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 
-const mockPatientData: DetailedPatient = {
-    id: 'P12345', name: 'John Doe', dob: '15-05-1990', age: 34, gender: 'Male', contact: '+91-9876543210', email: 'john@example.com', address: 'Mumbai, Maharashtra', bloodGroup: 'B+', height: "5'10\"", weight: '75 kg', bmi: '24.5 (Normal)',
-    allergies: [{ name: 'Penicillin', severity: 'Antibiotic' }],
-    chronicConditions: [{ name: 'Hypertension', diagnosed: '2018' }],
-    currentMedications: [
-        { name: 'Lisinopril 10mg + Metformin 500mg', dosage: '', since: '15-Oct-2024', prescribedBy: 'Dr. Patel' },
-        { name: 'Aspirin 100mg Daily', dosage: '', since: '28-Sep-2024', prescribedBy: 'Dr. Rajesh' },
-    ],
-    previousSurgeries: [{ name: 'Appendectomy', date: '10-May-2015', hospital: 'Max Healthcare', doctor: 'Dr. Sharma', treatment: 'Surgical Removal' }],
-    immunizationRecords: [{ name: 'Tetanus Booster', date: '05-Jun-2022' }],
-    consultationHistory: [
-        { date: '15-Oct-2024', hospital: 'Apollo', doctor: 'Dr. P...', reason: 'Check-up' },
-        { date: '28-Sep-2024', hospital: 'City Hosp', doctor: 'Dr. R...', reason: 'Follow-up' },
-        { date: '10-Aug-2024', hospital: 'Apollo', doctor: 'Dr. A...', reason: 'Lab Test' },
-    ],
-    uploadedDocuments: [
-        { name: 'Blood Test Report - 15-Oct-2024', date: 'Apollo Hospital', type: 'pdf' },
-        { name: 'CT Scan Report - 28-Sep-2024', date: 'City Hospital', type: 'pdf' },
-        { name: 'X-Ray Report - 10-Aug-2024', date: 'Apollo Hospital', type: 'pdf' },
-    ],
-    lastUpdated: '2 hours ago by Dr. Rajesh', created: '20-Mar-2022',
+// Normalize arrays that may be stored as strings or objects in DB
+const normalizeList = (list: any[] | undefined) => {
+    if (!list) return [];
+    // if strings -> convert to simple objects
+    if (list.length && typeof list[0] === 'string') return list.map((s: string) => ({ name: s }));
+    return list;
 };
 
 const Section: React.FC<{ title: string; children: React.ReactNode; }> = ({ title, children }) => (
@@ -36,6 +22,29 @@ const Section: React.FC<{ title: string; children: React.ReactNode; }> = ({ titl
 
 
 const HealthHistory: React.FC = () => {
+    const { user } = useAuth();
+    const [patient, setPatient] = useState<DetailedPatient | null>(null);
+
+    useEffect(() => {
+        const fetchPatient = async () => {
+            if (!user?.id) return;
+            try {
+                const resp = await fetch(`http://localhost:8082/api/patients/${user.id}`);
+                const data = await resp.json();
+                if (resp.ok && data?.patient) setPatient(data.patient as DetailedPatient);
+            } catch (err) {
+                console.warn('Could not fetch patient details', err);
+            }
+        };
+        fetchPatient();
+    }, [user?.id]);
+
+    const allergies = normalizeList(patient?.allergies as any[]);
+    const conditions = normalizeList(patient?.conditions as any[]);
+    const meds = normalizeList(patient?.medications as any[]);
+    const docs = patient?.uploadedDocuments || [];
+    const consultations = patient?.consultationHistory || [];
+
     return (
         <Card>
             <div className="p-4">
@@ -66,13 +75,13 @@ const HealthHistory: React.FC = () => {
                                </tr>
                            </thead>
                            <tbody className="text-slate-700 dark:text-slate-300">
-                               {mockPatientData.consultationHistory.map((item, index) => (
+                               {(consultations as any[]).map((item: any, index: number) => (
                                    <tr key={index} className="border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600/50">
-                                       <td className="px-4 py-2">{item.date}</td>
-                                       <td className="px-4 py-2">{item.hospital}</td>
-                                       <td className="px-4 py-2">{item.doctor}</td>
-                                       <td className="px-4 py-2">{item.reason}</td>
-                                       <td className="px-4 py-2 text-right"><button onClick={() => alert(`Viewing details for consultation on ${item.date}`)} className="text-brand-accent hover:underline">View Details</button></td>
+                                       <td className="px-4 py-2">{item.date || '—'}</td>
+                                       <td className="px-4 py-2">{item.hospital || '—'}</td>
+                                       <td className="px-4 py-2">{item.doctor || '—'}</td>
+                                       <td className="px-4 py-2">{item.reason || item.type || '—'}</td>
+                                       <td className="px-4 py-2 text-right"><button onClick={() => alert(`Viewing details for consultation on ${item.date || 'N/A'}`)} className="text-brand-accent hover:underline">View Details</button></td>
                                    </tr>
                                ))}
                            </tbody>
@@ -81,13 +90,13 @@ const HealthHistory: React.FC = () => {
 
                     <Section title="Lab Reports">
                         <ul className="space-y-3">
-                            {mockPatientData.uploadedDocuments.map((doc, index) => (
+                            {(docs as any[]).map((doc: any, index: number) => (
                                 <li key={index} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
-                                    <span className="font-medium">📄 {doc.name}</span>
+                                    <span className="font-medium">📄 {doc.name || doc.title || 'Report'}</span>
                                     <div className="flex items-center gap-4">
-                                        <span className="text-xs text-slate-500 dark:text-slate-400">{doc.date}</span>
-                                        <button onClick={() => alert(`Viewing report: ${doc.name}`)} className="text-sm text-brand-accent hover:underline">View</button>
-                                        <button onClick={() => alert(`Downloading report: ${doc.name}`)} className="text-sm text-brand-accent hover:underline">Download</button>
+                                        <span className="text-xs text-slate-500 dark:text-slate-400">{doc.date || doc.hospital || ''}</span>
+                                        <button onClick={() => alert(`Viewing report: ${doc.name || doc.title || 'Report'}`)} className="text-sm text-brand-accent hover:underline">View</button>
+                                        <button onClick={() => alert(`Downloading report: ${doc.name || doc.title || 'Report'}`)} className="text-sm text-brand-accent hover:underline">Download</button>
                                     </div>
                                 </li>
                             ))}
@@ -96,12 +105,12 @@ const HealthHistory: React.FC = () => {
 
                     <Section title="Prescriptions">
                          <ul className="space-y-3">
-                            {mockPatientData.currentMedications.map((med, index) => (
+                            {(meds as any[]).map((med: any, index: number) => (
                                 <li key={index} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
-                                    <span className="font-medium">💊 {med.name}</span>
+                                    <span className="font-medium">💊 {med.name || med}</span>
                                     <div className="flex items-center gap-4">
-                                        <span className="text-xs text-slate-500 dark:text-slate-400">Issued: {med.since} by {med.prescribedBy}</span>
-                                        <button onClick={() => alert(`Viewing prescription for ${med.name}`)} className="text-sm text-brand-accent hover:underline">View</button>
+                                        <span className="text-xs text-slate-500 dark:text-slate-400">Issued: {med.since || med.date || '—'} by {med.prescribedBy || med.prescriber || '—'}</span>
+                                        <button onClick={() => alert(`Viewing prescription for ${med.name || med}`)} className="text-sm text-brand-accent hover:underline">View</button>
                                         <button onClick={() => window.print()} className="text-sm text-brand-accent hover:underline">Print</button>
                                     </div>
                                 </li>
@@ -112,18 +121,15 @@ const HealthHistory: React.FC = () => {
                     <Section title="Timeline View">
                         <div className="border-l-2 border-brand-accent pl-6 space-y-6">
                              <div>
-                                <h4 className="font-semibold text-lg text-slate-800 dark:text-slate-200">2024</h4>
+                                <h4 className="font-semibold text-lg text-slate-800 dark:text-slate-200">Recent</h4>
                                 <div className="ml-4 mt-2 space-y-4">
-                                    <div className="relative">
-                                        <div className="absolute -left-8 top-1.5 h-3 w-3 bg-brand-primary rounded-full"></div>
-                                        <p className="font-semibold">October</p>
-                                        <p className="text-sm ml-4">- 15: Consultation at Apollo (Blood Test Ordered)</p>
-                                    </div>
-                                    <div className="relative">
-                                        <div className="absolute -left-8 top-1.5 h-3 w-3 bg-brand-primary rounded-full"></div>
-                                        <p className="font-semibold">September</p>
-                                        <p className="text-sm ml-4">- 28: Follow-up at City Hospital (CT Scan Prescribed)</p>
-                                    </div>
+                                    {(consultations as any[]).slice(0, 5).map((c: any, idx: number) => (
+                                        <div key={idx} className="relative">
+                                            <div className="absolute -left-8 top-1.5 h-3 w-3 bg-brand-primary rounded-full"></div>
+                                            <p className="font-semibold">{new Date(c.date || '').toLocaleString() || 'Unknown'}</p>
+                                            <p className="text-sm ml-4">- {c.reason || c.hospital || 'Consultation'}</p>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         </div>

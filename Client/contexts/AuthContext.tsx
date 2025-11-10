@@ -31,7 +31,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 email: u.email,
                 name: u.name,
                 role: role,
-                lastLogin: new Date().toISOString(),
+                lastLogin: u.lastAccess || new Date().toISOString(),
             };
             setUser(newUser);
             return true;

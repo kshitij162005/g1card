@@ -21,6 +21,14 @@ const PatientSchema = new mongoose.Schema(
     medications: { type: Array },
     familyHistory: { type: String },
     smoking: { type: String },
+    // Health summary fields
+    bloodGroup: { type: String },
+    age: { type: Number },
+    height: { type: String },
+    weight: { type: Number },
+    bmi: { type: Number },
+    // track last access/login time
+    lastAccess: { type: Date },
   },
   { timestamps: true }
 );
