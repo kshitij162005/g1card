@@ -15,6 +15,10 @@ const PatientManagement: React.FC = () => {
     const [page, setPage] = useState(1);
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(false);
+    const [showFilters, setShowFilters] = useState(false);
+    const [statusFilter, setStatusFilter] = useState<string>('all');
+    const [dateFrom, setDateFrom] = useState<string>('');
+    const [dateTo, setDateTo] = useState<string>('');
     const navigate = useNavigate();
     const { user } = useAuth();
 
@@ -58,10 +62,66 @@ const PatientManagement: React.FC = () => {
                         onChange={e => { setSearchTerm(e.target.value); setPage(1); fetchPatients(e.target.value); }}
                     />
                     <div className="flex items-center gap-2">
-                         <button className="text-sm px-4 py-2 border dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700">Advanced Filter ▼</button>
-                         <button className="text-sm px-4 py-2 border dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700">Export CSV</button>
+                         <button 
+                             onClick={() => setShowFilters(!showFilters)}
+                             className="text-sm px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
+                         >
+                             {showFilters ? 'Hide Filters ▲' : 'Advanced Filter ▼'}
+                         </button>
+                         <button className="text-sm px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors">Export CSV</button>
                     </div>
                 </div>
+
+                {showFilters && (
+                    <Card className="bg-slate-50 dark:bg-slate-800/50">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Status</label>
+                                <select 
+                                    value={statusFilter}
+                                    onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+                                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-accent focus:border-brand-accent outline-none"
+                                >
+                                    <option value="all">All Status</option>
+                                    <option value={PatientStatus.ACTIVE}>Active</option>
+                                    <option value={PatientStatus.INACTIVE}>Inactive</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Date From</label>
+                                <input 
+                                    type="date"
+                                    value={dateFrom}
+                                    onChange={e => { setDateFrom(e.target.value); setPage(1); }}
+                                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-accent focus:border-brand-accent outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Date To</label>
+                                <input 
+                                    type="date"
+                                    value={dateTo}
+                                    onChange={e => { setDateTo(e.target.value); setPage(1); }}
+                                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-accent focus:border-brand-accent outline-none"
+                                />
+                            </div>
+                            <div className="flex items-end">
+                                <button 
+                                    onClick={() => {
+                                        setStatusFilter('all');
+                                        setDateFrom('');
+                                        setDateTo('');
+                                        setPage(1);
+                                        fetchPatients(searchTerm);
+                                    }}
+                                    className="w-full px-4 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
+                                >
+                                    Clear Filters
+                                </button>
+                            </div>
+                        </div>
+                    </Card>
+                )}
 
                 <div className="overflow-x-auto">
                     <table className="min-w-full">

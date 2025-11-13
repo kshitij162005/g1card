@@ -19,6 +19,47 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// Get dashboard metrics for hospital
+router.get('/:id/dashboard-metrics', async (req, res) => {
+  try {
+    const Hospital = (await import('../models/Hospital.js')).default;
+    const Patient = (await import('../models/Patient.js')).default;
+    const Staff = (await import('../models/Staff.js')).default;
+    const Record = (await import('../models/Record.js')).default;
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ error: 'Missing hospital id' });
+    const hospital = await Hospital.findById(id);
+    if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
+
+    const [patientsTotal, staffTotal, recordsTotal, recentPatients] = await Promise.all([
+      Patient.countDocuments({ hospital: id }),
+      Staff.countDocuments({ hospital: id }),
+      Record.countDocuments({ hospital: id }),
+      Patient.find({ hospital: id }).sort({ createdAt: -1 }).limit(5).lean(),
+    ]);
+
+    const metrics = {
+      patientsTotal,
+      staffTotal,
+      recordsTotal,
+      recentPatients: recentPatients.map(p => ({
+        id: p._id,
+        patientId: p.patientId || p._id,
+        name: p.name || `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Unknown',
+        email: p.email,
+        phone: p.phone,
+        gender: p.gender,
+        createdAt: p.createdAt,
+      })),
+    };
+
+    return res.json({ ok: true, metrics });
+  } catch (err) {
+    console.error('fetch dashboard metrics error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
 // Placeholder: update hospital fields
 router.patch('/:id', async (req, res) => {
   try {
@@ -215,7 +256,7 @@ router.post('/:id/forms', async (req, res) => {
     const { name, description, fields, createdBy } = req.body || {};
     if (!name || !Array.isArray(fields)) return res.status(400).json({ error: 'name and fields (array) are required' });
 
-    const doc = new FormTemplate({ hospital: hospital._id, name, description, fields, createdBy });
+    const doc = new FormTemplate({ hospital: hospital._id, name, description, fields, createdBy, active: true });
     await doc.save();
     return res.json({ ok: true, form: doc });
   } catch (err) {
@@ -238,6 +279,24 @@ router.get('/:id/forms', async (req, res) => {
   }
 });
 
+// Check if a form name already exists for a hospital
+router.get('/:id/forms/check-name', async (req, res) => {
+  try {
+    const FormTemplate = (await import('../models/FormTemplate.js')).default;
+    const id = req.params.id;
+    const name = (req.query.name || '').toString().trim();
+    const excludeId = req.query.excludeId;
+    if (!id || !name) return res.status(400).json({ error: 'Missing hospital id or name' });
+    const filter = { hospital: id, name: { $regex: new RegExp(`^${name}$`, 'i') } };
+    if (excludeId) filter._id = { $ne: excludeId };
+    const exists = await FormTemplate.findOne(filter).lean();
+    return res.json({ ok: true, exists: !!exists });
+  } catch (err) {
+    console.error('check form name error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
 // Get single form template
 router.get('/:id/forms/:formId', async (req, res) => {
   try {
@@ -250,6 +309,50 @@ router.get('/:id/forms/:formId', async (req, res) => {
     return res.json({ ok: true, form });
   } catch (err) {
     console.error('get form template error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Update form template fields (including soft delete via active flag)
+router.patch('/:id/forms/:formId', async (req, res) => {
+  try {
+    const FormTemplate = (await import('../models/FormTemplate.js')).default;
+    const id = req.params.id;
+    const formId = req.params.formId;
+    if (!id || !formId) return res.status(400).json({ error: 'Missing hospital id or form id' });
+
+    const allowed = ['name', 'description', 'fields', 'active'];
+    const updates = {};
+    for (const key of Object.keys(req.body || {})) {
+      if (allowed.includes(key)) updates[key] = req.body[key];
+    }
+    if (!Object.keys(updates).length) return res.status(400).json({ error: 'No valid fields to update' });
+
+    const form = await FormTemplate.findOneAndUpdate(
+      { _id: formId, hospital: id },
+      { $set: updates },
+      { new: true }
+    ).lean();
+    if (!form) return res.status(404).json({ error: 'Form not found' });
+    return res.json({ ok: true, form });
+  } catch (err) {
+    console.error('update form template error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Permanently delete a form template
+router.delete('/:id/forms/:formId', async (req, res) => {
+  try {
+    const FormTemplate = (await import('../models/FormTemplate.js')).default;
+    const id = req.params.id;
+    const formId = req.params.formId;
+    if (!id || !formId) return res.status(400).json({ error: 'Missing hospital id or form id' });
+    const result = await FormTemplate.findOneAndDelete({ _id: formId, hospital: id });
+    if (!result) return res.status(404).json({ error: 'Form not found' });
+    return res.json({ ok: true, message: 'Form template deleted permanently' });
+  } catch (err) {
+    console.error('delete form template error:', err);
     return res.status(500).json({ error: err.message || String(err) });
   }
 });
@@ -287,6 +390,81 @@ router.post('/:id/patients/:patientId/records', async (req, res) => {
     return res.json({ ok: true, record: rec });
   } catch (err) {
     console.error('submit record error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Get all records for a patient
+router.get('/:id/patients/:patientId/records', async (req, res) => {
+  try {
+    const Record = (await import('../models/Record.js')).default;
+    const FormTemplate = (await import('../models/FormTemplate.js')).default;
+    const Hospital = (await import('../models/Hospital.js')).default;
+    const Patient = (await import('../models/Patient.js')).default;
+    const id = req.params.id;
+    const patientId = req.params.patientId;
+    if (!id || !patientId) return res.status(400).json({ error: 'Missing hospital id or patient id' });
+    const hospital = await Hospital.findById(id);
+    if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
+    const patient = await Patient.findById(patientId);
+    if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
+    // check patient linked to hospital
+    if (!patient.hospital || patient.hospital.toString() !== hospital._id.toString()) {
+      return res.status(400).json({ error: 'Patient is not linked to this hospital' });
+    }
+
+    const records = await Record.find({ hospital: hospital._id, patient: patient._id })
+      .populate('form', 'name description fields')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.json({ ok: true, records });
+  } catch (err) {
+    console.error('fetch records error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Dashboard metrics for hospital
+router.get('/:id/dashboard-metrics', async (req, res) => {
+  try {
+    const Hospital = (await import('../models/Hospital.js')).default;
+    const Patient = (await import('../models/Patient.js')).default;
+    const Staff = (await import('../models/Staff.js')).default;
+    const Record = (await import('../models/Record.js')).default;
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ error: 'Missing hospital id' });
+
+    const hospital = await Hospital.findById(id).lean();
+    if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
+
+    const [patientsTotal, recentPatients, staffTotal, recordsTotal] = await Promise.all([
+      Patient.countDocuments({ hospital: id }),
+      Patient.find({ hospital: id }).sort({ createdAt: -1 }).limit(5).select('name patientId createdAt email phone gender').lean(),
+      Staff.countDocuments({ hospital: id }),
+      Record.countDocuments({ hospital: id }),
+    ]);
+
+    return res.json({
+      ok: true,
+      metrics: {
+        patientsTotal,
+        staffTotal,
+        recordsTotal,
+        recentPatients: recentPatients.map(p => ({
+          id: p._id,
+          patientId: p.patientId || p._id,
+          name: p.name || '',
+          email: p.email || '',
+          phone: p.phone || '',
+          gender: p.gender || '',
+          createdAt: p.createdAt,
+        })),
+      },
+    });
+  } catch (err) {
+    console.error('dashboard metrics error:', err);
     return res.status(500).json({ error: err.message || String(err) });
   }
 });
