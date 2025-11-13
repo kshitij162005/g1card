@@ -1,12 +1,12 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import Card from '../../components/Card';
 import { useNavigate } from 'react-router-dom';
 
-const StatCard: React.FC<{ title: string; value: string | number; }> = ({ title, value }) => (
+const StatCard: React.FC<{ title: string; value: string | number; loading?: boolean }> = ({ title, value, loading }) => (
     <Card className="text-center">
         <p className="text-sm text-slate-500 dark:text-slate-400">{title}</p>
-        <p className="text-3xl font-bold text-brand-primary dark:text-brand-accent">{value}</p>
+        <p className="text-3xl font-bold text-brand-primary dark:text-brand-accent">{loading ? '...' : value}</p>
     </Card>
 );
 
@@ -30,43 +30,67 @@ const SystemHealthItem: React.FC<{ name: string; status: 'Healthy' | 'Used' | 'P
 const AdminDashboard: React.FC = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
-    const recentHospitals = [
-        { name: 'City Hospital - Pune', status: 'Pending' },
-        { name: 'Apollo Hospital - Mumbai', status: 'Active' },
-        { name: 'Max Healthcare - Delhi', status: 'Active' },
-    ];
+    const [loading, setLoading] = useState(true);
+    const [stats, setStats] = useState({ totalHospitals: 0, activeHospitals: 0, activePatients: 0, recentHospitals: [] as any[] });
+
+    useEffect(() => {
+        fetchStats();
+    }, []);
+
+    const fetchStats = async () => {
+        setLoading(true);
+        try {
+            const resp = await fetch('http://localhost:8082/api/superadmin/dashboard/stats');
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Failed to fetch stats');
+            setStats(data.stats || { totalHospitals: 0, activeHospitals: 0, activePatients: 0, recentHospitals: [] });
+        } catch (err) {
+            console.error('fetch dashboard stats error:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
     
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <div>
                     <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200">Welcome, {user?.name}</h2>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Last Login: {user?.lastLogin}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Super Admin Dashboard</p>
                 </div>
                  <div className="flex space-x-2">
                     <button onClick={() => navigate('/admin/hospitals/add')} className="px-4 py-2 bg-brand-primary text-white text-sm rounded-lg hover:bg-brand-secondary transition-transform transform hover:scale-105">+ Add Hospital</button>
-                    <button onClick={() => navigate('/admin/users')} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-transform transform hover:scale-105">View All Users</button>
+                    <button onClick={() => navigate('/admin/hospitals')} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-transform transform hover:scale-105">View All Hospitals</button>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <StatCard title="Total Hospitals" value={45} />
-                <StatCard title="Active Hospitals" value={42} />
-                <StatCard title="Active Patients" value="12,450" />
+                <StatCard title="Total Hospitals" value={stats.totalHospitals} loading={loading} />
+                <StatCard title="Active Hospitals" value={stats.activeHospitals} loading={loading} />
+                <StatCard title="Active Patients" value={stats.activePatients.toLocaleString()} loading={loading} />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card title="Recent Hospital Registrations">
-                    <ul className="divide-y divide-slate-200 dark:divide-slate-700">
-                        {recentHospitals.map(hospital => (
-                            <li key={hospital.name} className="py-3 flex justify-between items-center">
-                               <span className="text-slate-800 dark:text-slate-300">{hospital.name}</span>
-                               <span className={`px-2 py-1 text-xs rounded-full font-semibold ${hospital.status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'}`}>
-                                   {hospital.status}
-                               </span>
-                            </li>
-                        ))}
-                    </ul>
+                    {loading ? (
+                        <p className="text-sm text-slate-500 dark:text-slate-400">Loading...</p>
+                    ) : stats.recentHospitals.length === 0 ? (
+                        <p className="text-sm text-slate-500 dark:text-slate-400">No hospitals registered yet.</p>
+                    ) : (
+                        <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+                            {stats.recentHospitals.map((hospital: any) => (
+                                <li key={hospital._id} className="py-3 flex justify-between items-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors" onClick={() => navigate(`/admin/hospitals/${hospital._id}`)}>
+                                   <div className="flex-1">
+                                       <span className="text-slate-800 dark:text-slate-300 font-medium">{hospital.name}</span>
+                                       <p className="text-xs text-slate-500 dark:text-slate-400">{hospital.city}, {hospital.state}</p>
+                                   </div>
+                                   <span className={`px-2 py-1 text-xs rounded-full font-semibold ${hospital.active ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}`}>
+                                       {hospital.active ? 'Active' : 'Inactive'}
+                                   </span>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
                 </Card>
                 <Card title="System Health">
                     <div className="divide-y divide-slate-200 dark:divide-slate-700">

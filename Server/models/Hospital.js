@@ -19,6 +19,7 @@ const HospitalSchema = new mongoose.Schema(
     adminEmail: { type: String },
     adminPhone: { type: String },
     designation: { type: String },
+    active: { type: Boolean, default: true },
   },
   { timestamps: true }
 );
