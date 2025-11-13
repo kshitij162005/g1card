@@ -16,6 +16,7 @@ const FormTemplateSchema = new mongoose.Schema(
     description: { type: String },
     fields: { type: [FieldSchema], default: [] },
     createdBy: { type: String }, // staff id or user id who created
+    active: { type: Boolean, default: true },
   },
   { timestamps: true }
 );

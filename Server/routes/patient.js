@@ -19,6 +19,26 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// Fetch all medical records for a patient (across hospitals)
+router.get('/:id/records', async (req, res) => {
+  try {
+    const Record = (await import('../models/Record.js')).default;
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ error: 'Missing patient id' });
+
+    const records = await Record.find({ patient: id })
+      .populate('hospital', 'name')
+      .populate('form', 'name description fields')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.json({ ok: true, records });
+  } catch (err) {
+    console.error('fetch patient records error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
 // Update patient fields (health summary and profile fields)
 router.patch('/:id', async (req, res) => {
   try {

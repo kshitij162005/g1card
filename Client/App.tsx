@@ -30,6 +30,7 @@ import HospitalStaffManagement from './pages/hospital/StaffManagement';
 import PatientRecord from './pages/hospital/PatientRecord';
 import AddEditMedicalRecord from './pages/hospital/AddEditMedicalRecord';
 import FormTemplatesList from './pages/hospital/FormTemplatesList';
+import FormDetails from './pages/hospital/FormDetails';
 import CreateForm from './pages/hospital/CreateForm';
 import AddPatientPage from './pages/hospital/AddPatientPage';
 import EditPatientPage from './pages/hospital/EditPatientPage';
@@ -96,6 +97,8 @@ const AppRoutes: React.FC = () => {
                         <Route path="patients/:patientId/add-record" element={<AddEditMedicalRecord />} />
                         <Route path="forms" element={<FormTemplatesList />} />
                         <Route path="forms/create" element={<CreateForm />} />
+                        <Route path="forms/:formId/edit" element={<CreateForm />} />
+                        <Route path="forms/:formId" element={<FormDetails />} />
                         <Route path="staff" element={<HospitalStaffManagement />} />
                         <Route path="staff/add" element={<AddStaffPage />} />
                         <Route path="staff/:staffId" element={<StaffDetailsPage />} />
