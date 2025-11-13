@@ -29,6 +29,8 @@ import HospitalPatientManagement from './pages/hospital/PatientManagement';
 import HospitalStaffManagement from './pages/hospital/StaffManagement';
 import PatientRecord from './pages/hospital/PatientRecord';
 import AddEditMedicalRecord from './pages/hospital/AddEditMedicalRecord';
+import FormTemplatesList from './pages/hospital/FormTemplatesList';
+import CreateForm from './pages/hospital/CreateForm';
 import AddPatientPage from './pages/hospital/AddPatientPage';
 import EditPatientPage from './pages/hospital/EditPatientPage';
 import ReportsPage from './pages/hospital/ReportsPage';
@@ -92,6 +94,8 @@ const AppRoutes: React.FC = () => {
                         <Route path="patients/:patientId" element={<PatientRecord />} />
                         <Route path="patients/:patientId/edit" element={<EditPatientPage />} />
                         <Route path="patients/:patientId/add-record" element={<AddEditMedicalRecord />} />
+                        <Route path="forms" element={<FormTemplatesList />} />
+                        <Route path="forms/create" element={<CreateForm />} />
                         <Route path="staff" element={<HospitalStaffManagement />} />
                         <Route path="staff/add" element={<AddStaffPage />} />
                         <Route path="staff/:staffId" element={<StaffDetailsPage />} />
