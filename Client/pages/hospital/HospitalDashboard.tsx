@@ -28,7 +28,7 @@ const HospitalDashboard: React.FC = () => {
     return (
         <div className="space-y-6">
             <Card>
-                <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200">Welcome, Apollo Hospital - Mumbai</h2>
+                <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200">Welcome, {user?.name || 'Hospital'}</h2>
                 <div className="flex space-x-6 text-sm text-slate-500 dark:text-slate-400 mt-2">
                     <span>Verification Status: <span className="text-status-green font-semibold">✓ Approved</span></span>
                     <span>Last Activity: 30 minutes ago</span>

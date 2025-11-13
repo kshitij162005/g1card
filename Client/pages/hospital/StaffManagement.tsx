@@ -1,9 +1,12 @@
 
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Card from '../../components/Card';
 import { Staff, StaffRole } from '../../types';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+
+interface ApiStaff { _id: string; staffId?: string; name: string; email: string; role?: string; status?: string }
 
 const mockStaff: Staff[] = [
     { id: 's1', name: 'Dr. Raj', email: 'raj@apollo.com', role: StaffRole.DOCTOR, status: 'Active' },
@@ -13,14 +16,38 @@ const mockStaff: Staff[] = [
 ];
 
 const StaffManagement: React.FC = () => {
-    const [staff, setStaff] = useState<Staff[]>(mockStaff);
+    const [staff, setStaff] = useState<Staff[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [page, setPage] = useState(1);
+    const [total, setTotal] = useState(0);
+    const [loading, setLoading] = useState(false);
+    const { user } = useAuth();
+
+    useEffect(() => { fetchStaff(); }, []);
+
+    const fetchStaff = async (q = '', pageArg = page) => {
+        if (!user) return;
+        setLoading(true);
+        try {
+            const resp = await fetch(`http://localhost:8082/api/hospitals/${user.id}/staff?q=${encodeURIComponent(q)}&page=${pageArg}&limit=10`);
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Failed');
+            const items: ApiStaff[] = data.staff || [];
+            setTotal(data.total || 0);
+            // map to UI Staff type
+            setStaff(items.map(it => ({ id: it.staffId || it._id, name: it.name, email: it.email, role: (it.role || 'Admin') as StaffRole, status: (it.status || 'Active') as 'Active' | 'Inactive' })));
+        } catch (err) {
+            console.error('fetch staff', err);
+        } finally { setLoading(false); }
+    };
     const [filterRole, setFilterRole] = useState<StaffRole | 'All'>('All');
     const navigate = useNavigate();
 
-    const filteredStaff = staff
-        .filter(s => filterRole === 'All' || s.role === filterRole)
-        .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.email.toLowerCase().includes(searchTerm.toLowerCase()));
+    // server provides search results; only apply role filter on the client
+    const filteredStaff = staff.filter(s => filterRole === 'All' || s.role === filterRole);
+
+    // debounce search
+    const searchTimer = React.useRef<number | null>(null);
     
     const getStatusChip = (status: 'Active' | 'Inactive') => {
         return status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300';
@@ -30,15 +57,26 @@ const StaffManagement: React.FC = () => {
         <Card title="Staff Management">
             <div className="space-y-4">
                  <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-                     <input 
+                    <input
                         type="text"
                         placeholder="Search staff..."
-                        className="w-full md:w-1/3 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-brand-accent focus:border-brand-accent"
+                        className="w-full md:w-1/3 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-brand-accent focus:border-brand-accent bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-400"
                         value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
+                        onChange={e => {
+                            const v = e.target.value;
+                            setSearchTerm(v);
+                            // debounce server call and reset to page 1
+                            if (searchTimer.current) window.clearTimeout(searchTimer.current);
+                            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                            // @ts-ignore
+                            searchTimer.current = window.setTimeout(() => {
+                                setPage(1);
+                                fetchStaff(v, 1);
+                            }, 300);
+                        }}
                     />
-                    <select 
-                        className="w-full md:w-1/4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-brand-accent focus:border-brand-accent"
+                    <select
+                        className="w-full md:w-1/4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-brand-accent focus:border-brand-accent bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
                         value={filterRole}
                         onChange={e => setFilterRole(e.target.value as StaffRole | 'All')}
                     >
@@ -70,15 +108,38 @@ const StaffManagement: React.FC = () => {
                                         </span>
                                     </td>
                                     <td className="py-4 px-6 whitespace-nowrap text-sm font-medium space-x-2">
-                                        <button onClick={() => navigate(`/hospital/staff/${s.id}`)} className="text-brand-accent hover:text-brand-primary">View</button>
-                                        <button onClick={() => alert('Edit Role functionality to be implemented.')} className="text-blue-600 hover:text-blue-900">Edit Role</button>
-                                        <button onClick={() => confirm(`Are you sure you want to deactivate ${s.name}?`)} className="text-yellow-600 hover:text-yellow-900">Deactivate</button>
-                                        <button onClick={() => confirm(`Are you sure you want to delete ${s.name}?`)} className="text-red-600 hover:text-red-900">Delete</button>
+                                        <button onClick={() => navigate(`/hospital/staff/${s.id}`)} className="px-3 py-1 text-sm font-medium rounded-md border border-transparent text-brand-accent hover:bg-slate-50 dark:hover:bg-slate-700/60">View</button>
+
+                                        <button onClick={() => navigate(`/hospital/staff/${s.id}/add-record`)} className="px-3 py-1 text-sm font-medium rounded-md bg-emerald-600 text-white hover:bg-emerald-700">Add Record</button>
+
+                                        <button onClick={async () => {
+                                            if (!confirm(`Are you sure you want to remove ${s.name} from hospital records?`)) return;
+                                            try {
+                                                // best-effort: call backend to remove staff (endpoint not implemented yet)
+                                                alert('Removed from hospital records (simulated)');
+                                                fetchStaff(searchTerm);
+                                            } catch (err) { console.error(err); alert('Error removing staff'); }
+                                        }} className="px-3 py-1 text-sm font-medium rounded-md bg-rose-600 text-white hover:bg-rose-700">Remove</button>
                                     </td>
                                 </tr>
                              ))}
                          </tbody>
                     </table>
+                </div>
+                <div className="flex justify-between items-center pt-4">
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Showing {(page-1)*10+1} to {Math.min(page*10, total)} of {total} results</p>
+                    <div className="flex items-center space-x-2">
+                        <button disabled={page<=1} onClick={() => {
+                            const newP = Math.max(1, page-1);
+                            setPage(newP);
+                            fetchStaff(searchTerm, newP);
+                        }} className="px-3 py-1 border dark:border-slate-600 rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-700">Previous</button>
+                        <button disabled={page*10>=total} onClick={() => {
+                            const newP = page+1;
+                            setPage(newP);
+                            fetchStaff(searchTerm, newP);
+                        }} className="px-3 py-1 border dark:border-slate-600 rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-700">Next</button>
+                    </div>
                 </div>
             </div>
         </Card>

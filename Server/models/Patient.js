@@ -2,9 +2,14 @@ import mongoose from 'mongoose';
 
 const PatientSchema = new mongoose.Schema(
   {
-    username: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
+  username: { type: String, required: true, unique: true },
+  // password is optional for hospital-created patients (they may not have user credentials)
+  password: { type: String },
     salt: { type: String },
+    // unique patient identifier for hospital records (e.g., P1636567890123)
+    patientId: { type: String, unique: true, sparse: true },
+    // reference to a Hospital if this patient was created by a hospital
+    hospital: { type: mongoose.Schema.Types.ObjectId, ref: 'Hospital', required: false },
     name: { type: String },
     firstName: { type: String },
     lastName: { type: String },

@@ -69,8 +69,50 @@ const Section: React.FC<{ title: string; onAdd?: () => void; children: React.Rea
 const PatientRecord: React.FC = () => {
     const { patientId } = useParams<{ patientId: string }>();
     const navigate = useNavigate();
-    const patient = patientId ? mockPatientData[patientId] : null;
+    const [patient, setPatient] = React.useState<DetailedPatient | null>(null);
+    const [loading, setLoading] = React.useState(true);
 
+    React.useEffect(() => {
+        if (!patientId) { setLoading(false); return; }
+        (async () => {
+            try {
+                const resp = await fetch(`http://localhost:8082/api/patients/${patientId}`);
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || 'Not found');
+                // Normalize server patient to DetailedPatient shape minimally
+                const p = data.patient || {};
+                const detailed: DetailedPatient = {
+                    id: p._id || patientId,
+                    name: p.name || `${p.firstName || ''} ${p.lastName || ''}`.trim(),
+                    dob: p.dob || '',
+                    age: p.age || 0,
+                    gender: p.gender || '',
+                    contact: p.phone || '',
+                    email: p.email || p.username || '',
+                    address: p.address || '',
+                    bloodGroup: p.bloodGroup || '',
+                    height: p.height || '',
+                    weight: p.weight ? String(p.weight) : '',
+                    bmi: p.bmi ? String(p.bmi) : '',
+                    allergies: (p.allergies || []).map((a:any) => ({ name: a, severity: '' })),
+                    chronicConditions: (p.conditions || []).map((c:any) => ({ name: c, diagnosed: '' })),
+                    currentMedications: (p.medications || []).map((m:any) => ({ name: m, dosage: '', since: '', prescribedBy: '' })),
+                    previousSurgeries: (p.surgeries || []).map((s:any) => ({ name: s, date: '', hospital: '', doctor: '', treatment: '' })),
+                    immunizationRecords: [],
+                    consultationHistory: [],
+                    uploadedDocuments: [],
+                    lastUpdated: p.updatedAt || '',
+                    created: p.createdAt || '',
+                };
+                setPatient(detailed);
+            } catch (err) {
+                console.error('fetch patient', err);
+                setPatient(null);
+            } finally { setLoading(false); }
+        })();
+    }, [patientId]);
+
+    if (loading) return <div className="text-center p-8">Loading...</div>;
     if (!patient) return <div className="text-center p-8">Patient data not found.</div>;
 
     const handleAddRecord = () => {

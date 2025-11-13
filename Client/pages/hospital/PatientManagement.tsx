@@ -1,28 +1,43 @@
 
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../../components/Card';
 import { Patient, PatientStatus } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 
-const mockPatients: Patient[] = [
-    { id: 'P12345', name: 'John Doe', dob: '15-05-1990', status: PatientStatus.ACTIVE },
-    { id: 'P12346', name: 'Jane Smith', dob: '22-07-1985', status: PatientStatus.ACTIVE },
-    { id: 'P12347', name: 'Mike Patel', dob: '10-03-1992', status: PatientStatus.INACTIVE },
-    { id: 'P12348', name: 'Emily White', dob: '01-11-2001', status: PatientStatus.ACTIVE },
-    { id: 'P12349', name: 'Chris Green', dob: '18-09-1978', status: PatientStatus.ACTIVE },
-];
+interface ApiPatient { _id: string; patientId?: string; name: string; dob?: string; status?: string }
 
 
 const PatientManagement: React.FC = () => {
-    const [patients] = useState<Patient[]>(mockPatients);
+    const [patients, setPatients] = useState<Patient[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [page, setPage] = useState(1);
+    const [total, setTotal] = useState(0);
+    const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
+    const { user } = useAuth();
 
-    const filteredPatients = patients.filter(p => 
-        p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        p.id.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    useEffect(() => { fetchPatients(); }, [page]);
+
+    const fetchPatients = async (q = '') => {
+        if (!user) return;
+        setLoading(true);
+        try {
+            const resp = await fetch(`http://localhost:8082/api/hospitals/${user.id}/patients?q=${encodeURIComponent(q)}&page=${page}&limit=10`);
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Failed');
+            const items: ApiPatient[] = data.patients || [];
+            setTotal(data.total || 0);
+            // keep Mongo _id as route id, show patientId as external identifier
+            setPatients(items.map(it => {
+                const displayName = it.name || `${(it as any).firstName || ''} ${(it as any).lastName || ''}`.trim();
+                return ({ id: it._id, name: displayName || 'Unknown', dob: it.dob || '', status: (it.status || PatientStatus.ACTIVE), patientId: it.patientId || it._id }) as unknown as Patient;
+            }));
+        } catch (err) {
+            console.error('fetch patients', err);
+        } finally { setLoading(false); }
+    };
     
     const getStatusChip = (status: PatientStatus) => {
         return status === PatientStatus.ACTIVE ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300';
@@ -32,12 +47,15 @@ const PatientManagement: React.FC = () => {
         <Card title="Patient Management">
             <div className="space-y-4">
                 <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => navigate('/hospital/patients/add')} className="px-4 py-2 bg-brand-primary text-white text-sm rounded-lg hover:bg-brand-secondary">+ Add Patient</button>
+                    </div>
                     <input 
                         type="text"
                         placeholder="Search by Patient ID/Name..."
-                        className="w-full md:w-1/3 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-brand-accent focus:border-brand-accent"
+                        className="w-full md:w-1/3 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-brand-accent focus:border-brand-accent bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                         value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
+                        onChange={e => { setSearchTerm(e.target.value); setPage(1); fetchPatients(e.target.value); }}
                     />
                     <div className="flex items-center gap-2">
                          <button className="text-sm px-4 py-2 border dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700">Advanced Filter ▼</button>
@@ -57,9 +75,9 @@ const PatientManagement: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                            {filteredPatients.map(patient => (
+                            {patients.map(patient => (
                                 <tr key={patient.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-slate-700 dark:text-slate-300">
-                                    <td className="py-4 px-6 whitespace-nowrap font-mono text-sm">{patient.id}</td>
+                                    <td className="py-4 px-6 whitespace-nowrap font-mono text-sm">{(patient as any).patientId || patient.id}</td>
                                     <td className="py-4 px-6 whitespace-nowrap">{patient.name}</td>
                                     <td className="py-4 px-6 whitespace-nowrap">{patient.dob}</td>
                                     <td className="py-4 px-6 whitespace-nowrap">
@@ -68,10 +86,38 @@ const PatientManagement: React.FC = () => {
                                         </span>
                                     </td>
                                     <td className="py-4 px-6 whitespace-nowrap text-sm font-medium space-x-2">
-                                        <button onClick={() => navigate(`/hospital/patients/${patient.id}`)} className="text-brand-accent hover:text-brand-primary">View</button>
-                                        <button onClick={() => navigate(`/hospital/patients/${patient.id}/edit`)} className="text-blue-600 hover:text-blue-900">Edit</button>
-                                        <button onClick={() => navigate(`/hospital/patients/${patient.id}/add-record`)} className="text-green-600 hover:text-green-900">Add Record</button>
-                                        <button onClick={() => confirm(`Are you sure you want to delete patient ${patient.name}?`)} className="text-red-600 hover:text-red-900">Delete</button>
+                                        <button
+                                            onClick={() => navigate(`/hospital/patients/${patient.id}`)}
+                                            className="px-3 py-1 text-sm font-medium rounded-md border border-transparent text-brand-accent hover:bg-slate-50 dark:hover:bg-slate-700/60"
+                                            aria-label={`View ${patient.name}`}
+                                        >
+                                            View
+                                        </button>
+
+                                        <button
+                                            onClick={() => navigate(`/hospital/patients/${patient.id}/add-record`)}
+                                            className="px-3 py-1 text-sm font-medium rounded-md bg-emerald-600 text-white hover:bg-emerald-700"
+                                            aria-label={`Add record for ${patient.name}`}
+                                        >
+                                            Add Record
+                                        </button>
+
+                                        <button
+                                            onClick={async () => {
+                                                if (!confirm(`Are you sure you want to remove patient ${patient.name} from your hospital records? This will not delete the patient from the system.`)) return;
+                                                try {
+                                                    const resp = await fetch(`http://localhost:8082/api/hospitals/${user?.id}/patients/${patient.id}`, { method: 'DELETE' });
+                                                    const d = await resp.json();
+                                                    if (!resp.ok) throw new Error(d.error || 'Failed to remove patient');
+                                                    alert('Patient unlinked from hospital records');
+                                                    fetchPatients(searchTerm);
+                                                } catch (err) { console.error(err); alert('Error removing patient'); }
+                                            }}
+                                            className="px-3 py-1 text-sm font-medium rounded-md bg-rose-600 text-white hover:bg-rose-700"
+                                            aria-label={`Remove ${patient.name}`}
+                                        >
+                                            Remove
+                                        </button>
                                     </td>
                                 </tr>
                             ))}
@@ -80,10 +126,10 @@ const PatientManagement: React.FC = () => {
                 </div>
 
                 <div className="flex justify-between items-center pt-4">
-                    <p className="text-sm text-slate-600 dark:text-slate-400">Showing 1 to 5 of 23 results</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Showing {(page-1)*10+1} to {Math.min(page*10, total)} of {total} results</p>
                     <div className="flex items-center space-x-2">
-                        <button className="px-3 py-1 border dark:border-slate-600 rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-700">Previous</button>
-                        <button className="px-3 py-1 border dark:border-slate-600 rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-700">Next</button>
+                        <button disabled={page<=1} onClick={() => setPage(p => Math.max(1,p-1))} className="px-3 py-1 border dark:border-slate-600 rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-700">Previous</button>
+                        <button disabled={page*10>=total} onClick={() => setPage(p => p+1)} className="px-3 py-1 border dark:border-slate-600 rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-700">Next</button>
                     </div>
                 </div>
 
