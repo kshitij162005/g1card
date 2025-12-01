@@ -1,3 +1,4 @@
+import { API_URL } from '../../config/api';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../../components/Card';
@@ -89,7 +90,7 @@ const HospitalManagement: React.FC = () => {
     const fetchHospitals = async () => {
         setLoading(true);
         try {
-            const resp = await fetch(`http://localhost:8082/api/superadmin/hospitals?search=${searchTerm}&page=${page}&limit=20`);
+            const resp = await fetch(`${API_URL}/superadmin/hospitals?search=${searchTerm}&page=${page}&limit=20`);
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Failed');
             setHospitals(data.hospitals || []);
@@ -119,7 +120,7 @@ const HospitalManagement: React.FC = () => {
 
     const performDelete = async () => {
         try {
-            const resp = await fetch(`http://localhost:8082/api/superadmin/hospitals/${deleteModal.hospitalId}`, { method: 'DELETE' });
+            const resp = await fetch(`${API_URL}/superadmin/hospitals/${deleteModal.hospitalId}`, { method: 'DELETE' });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Failed');
             alert('Hospital deleted successfully');

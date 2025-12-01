@@ -1,3 +1,4 @@
+import { API_URL } from '../../config/api';
 
 import React, { useState, useEffect } from 'react';
 import Card from '../../components/Card';
@@ -31,7 +32,7 @@ const UserManagement: React.FC = () => {
     const fetchPatients = async () => {
         setLoading(true);
         try {
-            const resp = await fetch(`http://localhost:8082/api/superadmin/patients?search=${searchTerm}&page=${patientPage}&limit=10`);
+            const resp = await fetch(`${API_URL}/superadmin/patients?search=${searchTerm}&page=${patientPage}&limit=10`);
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Failed');
             setPatients(data.patients || []);

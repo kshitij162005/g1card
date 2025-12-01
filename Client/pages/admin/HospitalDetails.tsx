@@ -1,3 +1,4 @@
+import { API_URL } from '../../config/api';
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -142,7 +143,7 @@ const HospitalDetails: React.FC = () => {
         if (!id) return;
         setLoading(true);
         try {
-            const resp = await fetch(`http://localhost:8082/api/superadmin/hospitals/${id}`);
+            const resp = await fetch(`${API_URL}/superadmin/hospitals/${id}`);
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Failed');
             setHospital(data.hospital);
@@ -197,7 +198,7 @@ const HospitalDetails: React.FC = () => {
     const performToggleActiveStatus = async () => {
         if (!hospital) return;
         try {
-            const resp = await fetch(`http://localhost:8082/api/superadmin/hospitals/${id}`, {
+            const resp = await fetch(`${API_URL}/superadmin/hospitals/${id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ active: !hospital.active }),
@@ -237,7 +238,7 @@ const HospitalDetails: React.FC = () => {
     const performDelete = async () => {
         if (!hospital) return;
         try {
-            const resp = await fetch(`http://localhost:8082/api/superadmin/hospitals/${id}`, { method: 'DELETE' });
+            const resp = await fetch(`${API_URL}/superadmin/hospitals/${id}`, { method: 'DELETE' });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Failed');
             alert('Hospital deleted successfully');

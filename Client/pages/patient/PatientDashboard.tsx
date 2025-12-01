@@ -1,3 +1,4 @@
+import { API_URL } from '../../config/api';
 
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -64,7 +65,7 @@ const PatientDashboard: React.FC = () => {
             if (form.weight) body.weight = Number(form.weight);
             if (form.bmi) body.bmi = Number(form.bmi);
 
-            const resp = await fetch(`http://localhost:8082/api/patients/${user.id}`, {
+            const resp = await fetch(`${API_URL}/patients/${user.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
@@ -85,7 +86,7 @@ const PatientDashboard: React.FC = () => {
         const fetchPatient = async () => {
             if (!user?.id) return;
             try {
-                const resp = await fetch(`http://localhost:8082/api/patients/${user.id}`);
+                const resp = await fetch(`${API_URL}/patients/${user.id}`);
                 const data = await resp.json();
                 if (resp.ok && data?.patient) setPatient(data.patient as DetailedPatient);
             } catch (err) {

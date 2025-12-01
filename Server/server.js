@@ -80,4 +80,19 @@ async function start() {
   }
 }
 
-start();
+// For local development, start the server
+// For Vercel, we export the app and let Vercel handle the request
+if (process.env.VERCEL) {
+  // On Vercel, connect to DB when the module is loaded
+  if (process.env.MONGODB_URI) {
+    connectDB(process.env.MONGODB_URI).catch(err => {
+      console.error('DB connection error:', err.message || err);
+    });
+  }
+} else {
+  // Local development - start the server
+  start();
+}
+
+// Export for Vercel serverless
+export default app;

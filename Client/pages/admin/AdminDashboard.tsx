@@ -1,3 +1,4 @@
+import { API_URL } from '../../config/api';
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import Card from '../../components/Card';
@@ -40,7 +41,7 @@ const AdminDashboard: React.FC = () => {
     const fetchStats = async () => {
         setLoading(true);
         try {
-            const resp = await fetch('http://localhost:8082/api/superadmin/dashboard/stats');
+            const resp = await fetch(`${API_URL}/superadmin/dashboard/stats`);
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Failed to fetch stats');
             setStats(data.stats || { totalHospitals: 0, activeHospitals: 0, activePatients: 0, recentHospitals: [] });

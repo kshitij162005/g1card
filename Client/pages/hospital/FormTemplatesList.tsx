@@ -1,3 +1,4 @@
+import { API_URL } from '../../config/api';
 import React, { useEffect, useState } from 'react';
 import Card from '../../components/Card';
 import { useAuth } from '../../contexts/AuthContext';
@@ -17,7 +18,7 @@ const FormTemplatesList: React.FC = () => {
         if (!user) return;
         setLoading(true);
         try {
-            const resp = await fetch(`http://localhost:8082/api/hospitals/${user.id}/forms`);
+            const resp = await fetch(`${API_URL}/hospitals/${user.id}/forms`);
             const d = await resp.json();
             if (!resp.ok) throw new Error(d.error || 'Failed');
             setTemplates(d.templates || []);
@@ -29,7 +30,7 @@ const FormTemplatesList: React.FC = () => {
         if (!user) return;
         if (!confirm(`Are you sure you want to permanently delete the form "${templateName}"? This action cannot be undone.`)) return;
         try {
-            const resp = await fetch(`http://localhost:8082/api/hospitals/${user.id}/forms/${templateId}`, { method: 'DELETE' });
+            const resp = await fetch(`${API_URL}/hospitals/${user.id}/forms/${templateId}`, { method: 'DELETE' });
             const d = await resp.json();
             if (!resp.ok) throw new Error(d.error || 'Failed');
             alert('Form template deleted successfully');
@@ -44,7 +45,7 @@ const FormTemplatesList: React.FC = () => {
         if (!user) return;
         try {
             const nextStatus = !template.active;
-            const resp = await fetch(`http://localhost:8082/api/hospitals/${user.id}/forms/${template._id}`, {
+            const resp = await fetch(`${API_URL}/hospitals/${user.id}/forms/${template._id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ active: nextStatus }),

@@ -1,3 +1,4 @@
+import { API_URL } from '../config/api';
 
 import React, { createContext, useState, useContext, ReactNode } from 'react';
 import { User, Role } from '../types';
@@ -27,7 +28,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const login = async (role: Role, email: string, password: string) => {
         try {
-            const resp = await fetch('http://localhost:8082/api/auth/login', {
+            const resp = await fetch(`${API_URL}/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ role: role, email, password }),

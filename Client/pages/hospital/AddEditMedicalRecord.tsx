@@ -1,3 +1,4 @@
+import { API_URL } from '../../config/api';
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '../../components/Card';
@@ -29,7 +30,7 @@ const AddEditMedicalRecord: React.FC = () => {
         if (!user) return;
         setLoadingTemplates(true);
         try {
-            const resp = await fetch(`http://localhost:8082/api/hospitals/${user.id}/forms`);
+            const resp = await fetch(`${API_URL}/hospitals/${user.id}/forms`);
             const d = await resp.json();
             if (!resp.ok) throw new Error(d.error || 'Failed');
             setTemplates(d.templates || []);
@@ -126,7 +127,7 @@ const AddEditMedicalRecord: React.FC = () => {
         setSubmitting(true);
         try {
             const payload = { formId: selectedFormId === 'custom' ? null : selectedFormId, data, attachments, createdBy: user.id };
-            const resp = await fetch(`http://localhost:8082/api/hospitals/${user.id}/patients/${patientId}/records`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const resp = await fetch(`${API_URL}/hospitals/${user.id}/patients/${patientId}/records`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const d = await resp.json();
             if (!resp.ok) throw new Error(d.error || 'Failed to submit record');
             alert('Record submitted');
