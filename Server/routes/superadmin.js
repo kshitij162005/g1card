@@ -143,6 +143,10 @@ router.get('/patients', async (req, res) => {
         if (patient.hospital) {
           const hospital = await Hospital.findById(patient.hospital).select('name').lean();
           hospitalName = hospital?.name || 'N/A';
+        } else if (patient.hospitals && patient.hospitals.length > 0) {
+          // Check hospitals array if legacy hospital field is empty
+          const hospital = await Hospital.findById(patient.hospitals[0]).select('name').lean();
+          hospitalName = hospital?.name || 'N/A';
         }
 
         // Normalize name field - combine firstName + lastName if name is missing
@@ -152,8 +156,12 @@ router.get('/patients', async (req, res) => {
         }
         if (!displayName) displayName = 'N/A';
 
+        // Use patientId if available, otherwise use _id for consistency with hospital dashboard
+        const patientId = patient.patientId || patient._id.toString();
+
         return {
           ...patient,
+          patientId,
           name: displayName,
           hospitalName,
         };

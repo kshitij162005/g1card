@@ -61,13 +61,29 @@ const HospitalDashboard: React.FC = () => {
         { type: 'New patients pending verification', count: 5 },
     ];
 
+    // Format last activity time
+    const formatLastActivity = () => {
+        if (!user?.lastAccess) return 'Just now';
+        const lastAccess = new Date(user.lastAccess);
+        const now = new Date();
+        const diffMs = now.getTime() - lastAccess.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHours / 24);
+        
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+        if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+        return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    };
+
     return (
         <div className="space-y-6">
             <Card>
                 <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200">Welcome, {user?.name || 'Hospital'}</h2>
                 <div className="flex space-x-6 text-sm text-slate-500 dark:text-slate-400 mt-2">
                     <span>Verification Status: <span className="text-status-green font-semibold">✓ Approved</span></span>
-                    <span>Last Activity: 30 minutes ago</span>
+                    <span>Last Activity: {formatLastActivity()}</span>
                 </div>
             </Card>
 

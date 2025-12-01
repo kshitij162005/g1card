@@ -11,6 +11,7 @@ export interface User {
     name: string;
     role: Role;
     lastLogin?: string;
+    lastAccess?: string;
 }
 
 export enum HospitalStatus {

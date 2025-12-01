@@ -12,6 +12,7 @@ interface FieldItem {
     type: FieldType;
     required?: boolean;
     options?: string[];
+    multiSelect?: boolean;
 }
 
 const slugify = (value: string): string => {
@@ -41,6 +42,7 @@ const buildField = (label: string, idx: number, existingKeys: string[]): FieldIt
         type: 'text',
         required: false,
         options: [],
+        multiSelect: false,
     };
 };
 
@@ -77,8 +79,10 @@ const CreateForm: React.FC = () => {
         if (patch.type && patch.type !== f.type) {
             if (patch.type === 'select') {
                 updated.options = (f.options && f.options.length > 0) ? f.options : [''];
+                updated.multiSelect = f.multiSelect || false;
             } else {
                 updated.options = [];
+                updated.multiSelect = false;
             }
         }
 
@@ -102,13 +106,14 @@ const CreateForm: React.FC = () => {
                 if (!resp.ok) throw new Error(data.error || 'Failed to load form');
                 setName(isEditing ? data.form.name : `${data.form.name} (Copy)`);
                 setDescription(data.form.description || '');
-                const mappedFields: FieldItem[] = (data.form.fields || []).map((f: any, idx: number) => ({
+                                const mappedFields: FieldItem[] = (data.form.fields || []).map((f: any, idx: number) => ({
                         id: f.id || `f${Date.now()}${idx}`,
                         label: f.label,
                         key: f.key,
                         type: f.type,
                         required: !!f.required,
                         options: f.options || [],
+                        multiSelect: !!f.multiSelect,
                     }));
                 if (!mappedFields.length) {
                     setFields(isEditing ? [] : [buildField('Field 1', 0, [])]);
@@ -172,7 +177,8 @@ const CreateForm: React.FC = () => {
             key: f.key,
             type: f.type,
             required: !!f.required,
-            options: f.type === 'select' ? (f.options || []).filter(opt => opt.trim()) : []
+            options: f.type === 'select' ? (f.options || []).filter(opt => opt.trim()) : [],
+            multiSelect: f.type === 'select' ? !!f.multiSelect : false
         }));
         
         try {
@@ -274,7 +280,18 @@ const CreateForm: React.FC = () => {
                                     </label>
                                     {f.type === 'select' && (
                                         <div className="flex-1 min-w-[300px]">
-                                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-2">Dropdown Options</label>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">Dropdown Options</label>
+                                                <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={!!f.multiSelect} 
+                                                        onChange={e => updateField(idx, { multiSelect: e.target.checked })} 
+                                                        className="w-3.5 h-3.5 text-brand-primary border-slate-300 dark:border-slate-600 rounded focus:ring-brand-accent"
+                                                    /> 
+                                                    <span>Allow Multiple Selection</span>
+                                                </label>
+                                            </div>
                                             <div className="space-y-2">
                                                 {(f.options || []).map((opt, optIdx) => (
                                                     <div key={optIdx} className="flex items-center gap-2">

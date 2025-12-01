@@ -37,21 +37,35 @@ router.get('/:id/dashboard-metrics', async (req, res) => {
       Patient.countDocuments(patientFilter),
       Staff.countDocuments({ hospital: id }),
       Record.countDocuments({ hospital: id }),
-      Patient.find(patientFilter).sort({ createdAt: -1 }).limit(5).lean(),
+      Patient.find(patientFilter).lean(),
     ]);
+
+    // Sort patients by when they were linked to this hospital (using hospitalLinks), fallback to createdAt
+    const patientsWithLinkDate = recentPatients.map(p => {
+      // Find the link entry for this hospital
+      const linkEntry = (p.hospitalLinks || []).find(
+        (link) => link.hospital && link.hospital.toString() === id
+      );
+      const linkedAt = linkEntry?.linkedAt || p.createdAt;
+      return { ...p, linkedAt };
+    });
+    
+    // Sort by linkedAt descending and take top 5
+    patientsWithLinkDate.sort((a, b) => new Date(b.linkedAt).getTime() - new Date(a.linkedAt).getTime());
+    const top5Patients = patientsWithLinkDate.slice(0, 5);
 
     const metrics = {
       patientsTotal,
       staffTotal,
       recordsTotal,
-      recentPatients: recentPatients.map(p => ({
+      recentPatients: top5Patients.map(p => ({
         id: p._id,
         patientId: p.patientId || p._id,
         name: p.name || `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Unknown',
         email: p.email,
         phone: p.phone,
         gender: p.gender,
-        createdAt: p.createdAt,
+        createdAt: p.linkedAt, // Use linkedAt as the displayed date
       })),
     };
 
@@ -175,6 +189,10 @@ router.post('/:id/patients', async (req, res) => {
     if (!patient.hospitals) {
       patient.hospitals = [];
     }
+    // Initialize hospitalLinks array if not present
+    if (!patient.hospitalLinks) {
+      patient.hospitalLinks = [];
+    }
 
     // Migrate legacy hospital field to hospitals array if needed
     if (patient.hospital && !patient.hospitals.some(h => h.toString() === patient.hospital.toString())) {
@@ -184,8 +202,11 @@ router.post('/:id/patients', async (req, res) => {
     // Add hospital to patient's hospitals array if not already linked
     const hospitalIdStr = hospital._id.toString();
     const alreadyLinked = patient.hospitals.some(h => h.toString() === hospitalIdStr);
+    const linkedAt = new Date();
     if (!alreadyLinked) {
       patient.hospitals.push(hospital._id);
+      // Also add to hospitalLinks with timestamp
+      patient.hospitalLinks.push({ hospital: hospital._id, linkedAt });
     }
 
     // Also set legacy hospital field for backward compatibility

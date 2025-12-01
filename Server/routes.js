@@ -44,10 +44,14 @@ router.post('/auth/signup/patient', async (req, res) => {
     const salt = generateSalt();
     const passwordHash = hashWithSalt(password, salt);
 
+    // Generate unique patient ID
+    const patientId = `P${Date.now()}`;
+
     const doc = new Patient({
       username: email,
       password: passwordHash,
       salt,
+      patientId,
       email,
       firstName,
       lastName,
@@ -163,7 +167,14 @@ router.post('/auth/login', async (req, res) => {
         if (user.status && user.status !== 'approved') {
           return res.status(403).json({ error: 'Hospital registration is not approved yet', status: user.status });
         }
-        return res.json({ ok: true, user: { id: user._id, email: user.contactEmail || user.username, name: user.name, role: 'Hospital' } });
+        // update lastAccess timestamp
+        try {
+          user.lastAccess = new Date();
+          await user.save();
+        } catch (e) {
+          console.warn('Could not update lastAccess for hospital', e && e.message ? e.message : e);
+        }
+        return res.json({ ok: true, user: { id: user._id, email: user.contactEmail || user.username, name: user.name, role: 'Hospital', lastAccess: user.lastAccess } });
       }
       return res.status(401).json({ error: 'Invalid credentials' });
     }
