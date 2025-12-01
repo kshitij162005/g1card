@@ -1,3 +1,4 @@
+import { API_URL } from '../../config/api';
 
 import React, { useEffect, useState } from 'react';
 import Card from '../../components/Card';
@@ -122,7 +123,7 @@ const HospitalSettingsPage: React.FC = () => {
         if (!user?.id) return;
         setLoading(true);
         try {
-            const resp = await fetch(`http://localhost:8082/api/superadmin/hospitals/${user.id}`);
+            const resp = await fetch(`${API_URL}/superadmin/hospitals/${user.id}`);
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Failed to fetch hospital data');
             setHospital(data.hospital);
@@ -180,7 +181,7 @@ const HospitalSettingsPage: React.FC = () => {
         const action = hospital.active ? 'deactivate' : 'activate';
         setUpdating(true);
         try {
-            const resp = await fetch(`http://localhost:8082/api/superadmin/hospitals/${user.id}`, {
+            const resp = await fetch(`${API_URL}/superadmin/hospitals/${user.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ active: !hospital.active }),

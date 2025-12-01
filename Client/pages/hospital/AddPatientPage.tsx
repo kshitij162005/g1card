@@ -1,3 +1,4 @@
+import { API_URL } from '../../config/api';
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -17,7 +18,7 @@ const AddPatientPage: React.FC = () => {
         if (!user) return alert('Not authenticated');
         setLoading(true);
         try {
-            const resp = await fetch(`http://localhost:8082/api/hospitals/${user.id}/patients`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: form.email, password: form.password }) });
+            const resp = await fetch(`${API_URL}/hospitals/${user.id}/patients`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: form.email, password: form.password }) });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Failed to add patient');
             alert('New patient added: ' + (data.patient?.patientId || ''));

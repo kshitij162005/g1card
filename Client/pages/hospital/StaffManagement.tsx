@@ -1,3 +1,4 @@
+import { API_URL } from '../../config/api';
 
 
 import React, { useState, useEffect } from 'react';
@@ -29,7 +30,7 @@ const StaffManagement: React.FC = () => {
         if (!user) return;
         setLoading(true);
         try {
-            const resp = await fetch(`http://localhost:8082/api/hospitals/${user.id}/staff?q=${encodeURIComponent(q)}&page=${pageArg}&limit=10`);
+            const resp = await fetch(`${API_URL}/hospitals/${user.id}/staff?q=${encodeURIComponent(q)}&page=${pageArg}&limit=10`);
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Failed');
             const items: ApiStaff[] = data.staff || [];

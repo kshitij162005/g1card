@@ -1,3 +1,4 @@
+import { API_URL } from '../../config/api';
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -42,7 +43,7 @@ const HospitalRegistrationPage: React.FC = () => {
         const body = { hospitalName, regNumber, address, city, state, pin, license, email, phone, website, adminName, adminEmail, adminPhone, designation, password };
 
         try {
-            const resp = await fetch('http://localhost:8082/api/auth/signup/hospital', {
+            const resp = await fetch(`${API_URL}/auth/signup/hospital`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),

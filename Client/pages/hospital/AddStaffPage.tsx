@@ -1,3 +1,4 @@
+import { API_URL } from '../../config/api';
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -18,7 +19,7 @@ const AddStaffPage: React.FC = () => {
         if (!user) return alert('Not authenticated');
         setLoading(true);
         try {
-            const resp = await fetch(`http://localhost:8082/api/hospitals/${user.id}/staff`, {
+            const resp = await fetch(`${API_URL}/hospitals/${user.id}/staff`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(form),
             });

@@ -1,3 +1,4 @@
+import { API_URL } from '../../config/api';
 
 
 import React, { useEffect, useState } from 'react';
@@ -29,7 +30,7 @@ const HealthHistory: React.FC = () => {
         const fetchPatient = async () => {
             if (!user?.id) return;
             try {
-                const resp = await fetch(`http://localhost:8082/api/patients/${user.id}`);
+                const resp = await fetch(`${API_URL}/patients/${user.id}`);
                 const data = await resp.json();
                 if (resp.ok && data?.patient) setPatient(data.patient as DetailedPatient);
             } catch (err) {

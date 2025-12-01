@@ -1,3 +1,4 @@
+import { API_URL } from '../../config/api';
 import React, { useEffect, useState } from 'react';
 import Card from '../../components/Card';
 import { useAuth } from '../../contexts/AuthContext';
@@ -101,7 +102,7 @@ const CreateForm: React.FC = () => {
         const loadTemplate = async () => {
             setLoadingTemplate(true);
             try {
-                const resp = await fetch(`http://localhost:8082/api/hospitals/${user.id}/forms/${targetId}`);
+                const resp = await fetch(`${API_URL}/hospitals/${user.id}/forms/${targetId}`);
                 const data = await resp.json();
                 if (!resp.ok) throw new Error(data.error || 'Failed to load form');
                 setName(isEditing ? data.form.name : `${data.form.name} (Copy)`);
@@ -160,7 +161,7 @@ const CreateForm: React.FC = () => {
 
         // Check for duplicate form names
         try {
-            const checkResp = await fetch(`http://localhost:8082/api/hospitals/${user.id}/forms/check-name?name=${encodeURIComponent(name.trim())}${isEditing ? `&excludeId=${formId}` : ''}`);
+            const checkResp = await fetch(`${API_URL}/hospitals/${user.id}/forms/check-name?name=${encodeURIComponent(name.trim())}${isEditing ? `&excludeId=${formId}` : ''}`);
             const checkData = await checkResp.json();
             if (!checkResp.ok) throw new Error(checkData.error || 'Failed to check name');
             if (checkData.exists) {
@@ -184,8 +185,8 @@ const CreateForm: React.FC = () => {
         try {
             const payload = { name: name.trim(), description, fields: cleanedFields };
             const endpoint = isEditing
-                ? `http://localhost:8082/api/hospitals/${user.id}/forms/${formId}`
-                : `http://localhost:8082/api/hospitals/${user.id}/forms`;
+                ? `${API_URL}/hospitals/${user.id}/forms/${formId}`
+                : `${API_URL}/hospitals/${user.id}/forms`;
             const method = isEditing ? 'PATCH' : 'POST';
             const resp = await fetch(endpoint, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const d = await resp.json();

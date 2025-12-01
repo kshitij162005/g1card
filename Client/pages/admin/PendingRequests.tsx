@@ -1,3 +1,4 @@
+import { API_URL } from '../../config/api';
 import React, { useEffect, useState } from 'react';
 import Card from '../../components/Card';
 
@@ -37,7 +38,7 @@ const PendingRequests: React.FC = () => {
     const fetchPendingHospitals = async () => {
         setLoading(true);
         try {
-            const resp = await fetch(`http://localhost:8082/api/superadmin/hospitals/pending?search=${encodeURIComponent(search)}`);
+            const resp = await fetch(`${API_URL}/superadmin/hospitals/pending?search=${encodeURIComponent(search)}`);
             const data = await resp.json();
             if (data.ok) {
                 setHospitals(data.hospitals || []);
@@ -53,7 +54,7 @@ const PendingRequests: React.FC = () => {
         if (!confirm('Are you sure you want to approve this hospital?')) return;
         setProcessing(true);
         try {
-            const resp = await fetch(`http://localhost:8082/api/superadmin/hospitals/${hospitalId}/approve`, {
+            const resp = await fetch(`${API_URL}/superadmin/hospitals/${hospitalId}/approve`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
             });
@@ -77,7 +78,7 @@ const PendingRequests: React.FC = () => {
         if (!selectedHospital) return;
         setProcessing(true);
         try {
-            const resp = await fetch(`http://localhost:8082/api/superadmin/hospitals/${selectedHospital._id}/reject`, {
+            const resp = await fetch(`${API_URL}/superadmin/hospitals/${selectedHospital._id}/reject`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ reason: rejectReason }),

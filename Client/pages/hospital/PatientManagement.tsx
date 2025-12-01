@@ -1,3 +1,4 @@
+import { API_URL } from '../../config/api';
 
 
 import React, { useState, useEffect } from 'react';
@@ -28,7 +29,7 @@ const PatientManagement: React.FC = () => {
         if (!user) return;
         setLoading(true);
         try {
-            const resp = await fetch(`http://localhost:8082/api/hospitals/${user.id}/patients?q=${encodeURIComponent(q)}&page=${page}&limit=10`);
+            const resp = await fetch(`${API_URL}/hospitals/${user.id}/patients?q=${encodeURIComponent(q)}&page=${page}&limit=10`);
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Failed');
             const items: ApiPatient[] = data.patients || [];
@@ -166,7 +167,7 @@ const PatientManagement: React.FC = () => {
                                             onClick={async () => {
                                                 if (!confirm(`Are you sure you want to remove patient ${patient.name} from your hospital records? This will not delete the patient from the system.`)) return;
                                                 try {
-                                                    const resp = await fetch(`http://localhost:8082/api/hospitals/${user?.id}/patients/${patient.id}`, { method: 'DELETE' });
+                                                    const resp = await fetch(`${API_URL}/hospitals/${user?.id}/patients/${patient.id}`, { method: 'DELETE' });
                                                     const d = await resp.json();
                                                     if (!resp.ok) throw new Error(d.error || 'Failed to remove patient');
                                                     alert('Patient unlinked from hospital records');

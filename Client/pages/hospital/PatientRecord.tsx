@@ -1,3 +1,4 @@
+import { API_URL } from '../../config/api';
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -106,7 +107,7 @@ const PatientRecord: React.FC = () => {
         if (!patientId) { setLoading(false); return; }
         (async () => {
             try {
-                const resp = await fetch(`http://localhost:8082/api/patients/${patientId}`);
+                const resp = await fetch(`${API_URL}/patients/${patientId}`);
                 const data = await resp.json();
                 if (!resp.ok) throw new Error(data.error || 'Not found');
                 // Normalize server patient to DetailedPatient shape minimally
@@ -147,7 +148,7 @@ const PatientRecord: React.FC = () => {
         (async () => {
             setLoadingRecords(true);
             try {
-                const resp = await fetch(`http://localhost:8082/api/patients/${patientId}/records`);
+                const resp = await fetch(`${API_URL}/patients/${patientId}/records`);
                 const data = await resp.json();
                 if (resp.ok && data.records) {
                     setRecords(data.records || []);

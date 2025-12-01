@@ -1,3 +1,4 @@
+import { API_URL } from '../../config/api';
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '../../components/Card';
@@ -43,7 +44,7 @@ const FormDetails: React.FC = () => {
             if (!user || !formId) return;
             setLoading(true);
             try {
-                const resp = await fetch(`http://localhost:8082/api/hospitals/${user.id}/forms/${formId}`);
+                const resp = await fetch(`${API_URL}/hospitals/${user.id}/forms/${formId}`);
                 const data = await resp.json();
                 if (!resp.ok) throw new Error(data.error || 'Failed to fetch form');
                 setForm(data.form);
@@ -61,7 +62,7 @@ const FormDetails: React.FC = () => {
         if (!user || !formId || !form) return;
         setUpdatingStatus(true);
         try {
-            const resp = await fetch(`http://localhost:8082/api/hospitals/${user.id}/forms/${formId}`, {
+            const resp = await fetch(`${API_URL}/hospitals/${user.id}/forms/${formId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ active: !form.active }),

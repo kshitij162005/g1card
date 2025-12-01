@@ -1,3 +1,4 @@
+import { API_URL } from '../config/api';
 import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -63,7 +64,7 @@ const HospitalLayout: React.FC = () => {
         if (!user?.id) return;
         setLoading(true);
         try {
-            const resp = await fetch(`http://localhost:8082/api/superadmin/hospitals/${user.id}`);
+            const resp = await fetch(`${API_URL}/superadmin/hospitals/${user.id}`);
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Failed');
             setHospitalStatus(data.hospital?.status || 'approved');
