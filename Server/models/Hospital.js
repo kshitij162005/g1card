@@ -24,6 +24,8 @@ const HospitalSchema = new mongoose.Schema(
     status: { type: String, enum: ['pending', 'approved', 'rejected', 'suspended'], default: 'approved' },
     // optional field to capture rejection reason provided by superadmin
     rejectionReason: { type: String },
+    // track last login time
+    lastAccess: { type: Date },
   },
   { timestamps: true }
 );

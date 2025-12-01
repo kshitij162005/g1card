@@ -23,6 +23,8 @@ router.get('/:id', async (req, res) => {
 router.get('/:id/records', async (req, res) => {
   try {
     const Record = (await import('../models/Record.js')).default;
+    // Import FormTemplate to register the schema for populate
+    await import('../models/FormTemplate.js');
     const id = req.params.id;
     if (!id) return res.status(400).json({ error: 'Missing patient id' });
 

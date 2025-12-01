@@ -43,7 +43,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 email: u.email,
                 name: u.name,
                 role: role,
-                lastLogin: u.lastAccess || new Date().toISOString(),
+                lastLogin: new Date().toISOString(),
+                lastAccess: u.lastAccess || new Date().toISOString(),
             };
             setUser(newUser);
             // Persist to localStorage

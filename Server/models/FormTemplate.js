@@ -7,6 +7,7 @@ const FieldSchema = new mongoose.Schema({
   type: { type: String, required: true }, // text, textarea, number, date, select, file
   required: { type: Boolean, default: false },
   options: { type: Array, default: [] }, // for select
+  multiSelect: { type: Boolean, default: false }, // for select - allow multiple selections
 });
 
 const FormTemplateSchema = new mongoose.Schema(

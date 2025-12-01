@@ -79,14 +79,13 @@ const UserManagement: React.FC = () => {
                                             <th className="py-3 px-6 text-left text-xs font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wider">Name</th>
                                             <th className="py-3 px-6 text-left text-xs font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wider">Email</th>
                                             <th className="py-3 px-6 text-left text-xs font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wider">Phone</th>
-                                            <th className="py-3 px-6 text-left text-xs font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wider">Hospital</th>
                                             <th className="py-3 px-6 text-left text-xs font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wider">Registered</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                                         {patients.length === 0 ? (
                                             <tr>
-                                                <td colSpan={7} className="py-4 px-6 text-center text-slate-500 dark:text-slate-400">
+                                                <td colSpan={6} className="py-4 px-6 text-center text-slate-500 dark:text-slate-400">
                                                     No patients found.
                                                 </td>
                                             </tr>
@@ -117,9 +116,6 @@ const UserManagement: React.FC = () => {
                                                         <span className={patient.phone ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500 italic'}>
                                                             {patient.phone || 'Not provided'}
                                                         </span>
-                                                    </td>
-                                                    <td className="py-4 px-6 whitespace-nowrap text-slate-700 dark:text-slate-300">
-                                                        {patient.hospitalName || 'N/A'}
                                                     </td>
                                                     <td className="py-4 px-6 whitespace-nowrap text-slate-700 dark:text-slate-300">
                                                         {new Date(patient.createdAt).toLocaleDateString()}
