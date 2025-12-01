@@ -20,6 +20,10 @@ const HospitalSchema = new mongoose.Schema(
     adminPhone: { type: String },
     designation: { type: String },
     active: { type: Boolean, default: true },
+    // status reflects review/approval lifecycle. 'approved' for existing behavior.
+    status: { type: String, enum: ['pending', 'approved', 'rejected', 'suspended'], default: 'approved' },
+    // optional field to capture rejection reason provided by superadmin
+    rejectionReason: { type: String },
   },
   { timestamps: true }
 );

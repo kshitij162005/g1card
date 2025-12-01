@@ -15,6 +15,66 @@ const Section: React.FC<{ title: string; onAdd?: () => void; children: React.Rea
     </Card>
 );
 
+const RecordCard: React.FC<{ 
+    record: any; 
+    isPinned: boolean; 
+    humanize: (value: string) => string; 
+    formatFieldType: (type?: string) => string;
+}> = ({ record, isPinned, humanize, formatFieldType }) => (
+    <Card className={`border ${isPinned ? 'border-brand-primary/80 shadow-lg' : 'border-slate-200 dark:border-slate-700'}`}>
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 pb-4 border-b dark:border-slate-700">
+            <div>
+                <div className="flex items-center gap-2">
+                    <h4 className="text-base font-semibold text-slate-800 dark:text-slate-200">
+                        {record.form?.name || 'Custom Record'}
+                    </h4>
+                    {isPinned && <span className="px-2 py-0.5 text-xs rounded-full bg-brand-light text-brand-primary font-medium">Your Hospital</span>}
+                </div>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                    {record.hospital?.name || 'Unknown Hospital'}
+                </p>
+                {record.form?.description && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        {record.form.description}
+                    </p>
+                )}
+            </div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+                <p>Added on {new Date(record.createdAt).toLocaleString()}</p>
+                {record.updatedAt && <p>Last updated {new Date(record.updatedAt).toLocaleString()}</p>}
+            </div>
+        </div>
+        <div className="pt-4 space-y-3">
+            {Object.entries(record.data || {}).map(([key, value]) => {
+                const meta = record.form?.fields?.find((f: any) => f.key === key);
+                const label = meta?.label || humanize(key);
+                const typeLabel = formatFieldType(meta?.type);
+                return (
+                    <div key={key} className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-slate-50 dark:bg-slate-800/60 px-3 py-2 rounded-lg">
+                        <div className="flex flex-col">
+                            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{label}</span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400">{typeLabel}</span>
+                        </div>
+                        <span className="text-sm text-slate-700 dark:text-slate-200 mt-2 sm:mt-0 sm:ml-4 break-words max-w-3xl">{String(value) || '—'}</span>
+                    </div>
+                );
+            })}
+            {record.attachments && record.attachments.length > 0 && (
+                <div className="pt-3 border-t dark:border-slate-700">
+                    <p className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-2">Attachments</p>
+                    <div className="flex flex-wrap gap-2">
+                        {record.attachments.map((att: any, attIdx: number) => (
+                            <span key={attIdx} className="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-700 rounded">
+                                {att.name || `File ${attIdx + 1}`}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    </Card>
+);
+
 const PatientRecord: React.FC = () => {
     const { patientId } = useParams<{ patientId: string }>();
     const navigate = useNavigate();
@@ -255,63 +315,35 @@ const PatientRecord: React.FC = () => {
                     ) : allRecordsOrdered.length === 0 ? (
                         <Card><p className="text-sm text-slate-500 dark:text-slate-400">No medical records found yet.</p></Card>
                     ) : (
-                        allRecordsOrdered.map((record, idx) => {
-                            const isPinned = user && record.hospital && record.hospital._id === user.id;
-                            return (
-                                <Card key={record._id || idx} className={`border ${isPinned ? 'border-brand-primary/80 shadow-lg' : 'border-slate-200 dark:border-slate-700'}`}>
-                                    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 pb-4 border-b dark:border-slate-700">
-                                        <div>
-                                            <div className="flex items-center gap-2">
-                                                <h4 className="text-base font-semibold text-slate-800 dark:text-slate-200">
-                                                    {record.form?.name || 'Custom Record'}
-                                                </h4>
-                                                {isPinned && <span className="px-2 py-0.5 text-xs rounded-full bg-brand-light text-brand-primary font-medium">Your Hospital</span>}
-                                            </div>
-                                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                                                {record.hospital?.name || 'Unknown Hospital'}
-                                            </p>
-                                            {record.form?.description && (
-                                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                                    {record.form.description}
-                                                </p>
-                                            )}
-                                        </div>
-                                        <div className="text-xs text-slate-500 dark:text-slate-400">
-                                            <p>Added on {new Date(record.createdAt).toLocaleString()}</p>
-                                            {record.updatedAt && <p>Last updated {new Date(record.updatedAt).toLocaleString()}</p>}
-                                        </div>
+                        <>
+                            {/* Your Hospital's Records */}
+                            {pinnedRecords.length > 0 && (
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-px flex-1 bg-brand-primary/30"></div>
+                                        <span className="text-sm font-semibold text-brand-primary dark:text-brand-accent px-2">Your Hospital's Records ({pinnedRecords.length})</span>
+                                        <div className="h-px flex-1 bg-brand-primary/30"></div>
                                     </div>
-                                    <div className="pt-4 space-y-3">
-                                        {Object.entries(record.data || {}).map(([key, value]) => {
-                                            const meta = record.form?.fields?.find((f: any) => f.key === key);
-                                            const label = meta?.label || humanize(key);
-                                            const typeLabel = formatFieldType(meta?.type);
-                                            return (
-                                                <div key={key} className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-slate-50 dark:bg-slate-800/60 px-3 py-2 rounded-lg">
-                                                    <div className="flex flex-col">
-                                                        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{label}</span>
-                                                        <span className="text-xs text-slate-500 dark:text-slate-400">{typeLabel}</span>
-                                                    </div>
-                                                    <span className="text-sm text-slate-700 dark:text-slate-200 mt-2 sm:mt-0 sm:ml-4 break-words max-w-3xl">{String(value) || '—'}</span>
-                                                </div>
-                                            );
-                                        })}
-                                        {record.attachments && record.attachments.length > 0 && (
-                                            <div className="pt-3 border-t dark:border-slate-700">
-                                                <p className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-2">Attachments</p>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {record.attachments.map((att: any, attIdx: number) => (
-                                                        <span key={attIdx} className="text-xs px-2 py-1 bg-slate-200 dark:bg-slate-700 rounded">
-                                                            {att.name || `File ${attIdx + 1}`}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
+                                    {pinnedRecords.map((record, idx) => (
+                                        <RecordCard key={record._id || idx} record={record} isPinned={true} humanize={humanize} formatFieldType={formatFieldType} />
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Other Hospitals' Records */}
+                            {otherRecords.length > 0 && (
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-2 mt-6">
+                                        <div className="h-px flex-1 bg-slate-300 dark:bg-slate-600"></div>
+                                        <span className="text-sm font-semibold text-slate-500 dark:text-slate-400 px-2">Other Hospitals' Records ({otherRecords.length})</span>
+                                        <div className="h-px flex-1 bg-slate-300 dark:bg-slate-600"></div>
                                     </div>
-                                </Card>
-                            );
-                        })
+                                    {otherRecords.map((record, idx) => (
+                                        <RecordCard key={record._id || idx} record={record} isPinned={false} humanize={humanize} formatFieldType={formatFieldType} />
+                                    ))}
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
             )}

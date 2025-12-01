@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const FormInput: React.FC<{ label: string; id: string; type?: string; placeholder?: string; required?: boolean }> = (props) => (
+const FormInput: React.FC<{ label: string; id: string; type?: string; placeholder?: string; required?: boolean; value?: string; onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void }> = (props) => (
     <div>
         <label htmlFor={props.id} className="block text-sm font-medium text-slate-700 dark:text-slate-300">{props.label}</label>
         <input {...props} className="mt-1 block w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:outline-none focus:ring-brand-accent focus:border-brand-accent sm:text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
@@ -11,6 +11,7 @@ const FormInput: React.FC<{ label: string; id: string; type?: string; placeholde
 
 const HospitalRegistrationPage: React.FC = () => {
     const [step, setStep] = useState(1);
+    const [registrationComplete, setRegistrationComplete] = useState(false);
     const navigate = useNavigate();
 
     // Controlled form state so data persists across steps
@@ -51,14 +52,83 @@ const HospitalRegistrationPage: React.FC = () => {
                 alert('Registration failed: ' + (data?.error || data?.message || 'unknown'));
                 return;
             }
-            // After registration go to login (OTP removed)
-            alert('Registration successful — please login');
-            navigate('/login');
+            // Show success message with pending verification info
+            setRegistrationComplete(true);
         } catch (err) {
             console.error('hospital signup error', err);
             alert('Registration error');
         }
     };
+
+    // Success screen after registration
+    if (registrationComplete) {
+        return (
+            <div className="min-h-screen bg-slate-100 dark:bg-slate-900 py-12 px-4 sm:px-6 lg:px-8">
+                <div className="max-w-2xl mx-auto bg-white dark:bg-slate-800 rounded-2xl shadow-xl overflow-hidden">
+                    <div className="p-8">
+                        <div className="text-center space-y-6">
+                            <div className="inline-flex items-center justify-center w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full">
+                                <svg className="w-10 h-10 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                </svg>
+                            </div>
+                            
+                            <div>
+                                <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-200">Registration Submitted Successfully!</h1>
+                                <p className="text-slate-600 dark:text-slate-400 mt-2">Thank you for registering with G1CARD Medical Network</p>
+                            </div>
+
+                            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                                <div className="flex items-center justify-center mb-2">
+                                    <svg className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                                    </svg>
+                                    <span className="font-semibold text-yellow-800 dark:text-yellow-200">Verification Pending</span>
+                                </div>
+                                <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                                    Your registration is now under review by our verification team. This process typically takes 1-3 business days.
+                                </p>
+                            </div>
+
+                            <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4 text-left">
+                                <h3 className="font-semibold text-slate-700 dark:text-slate-300 mb-3">What happens next?</h3>
+                                <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+                                    <li className="flex items-start">
+                                        <span className="inline-flex items-center justify-center w-5 h-5 bg-brand-primary text-white rounded-full text-xs mr-2 mt-0.5">1</span>
+                                        Our team will verify your hospital registration details and documents
+                                    </li>
+                                    <li className="flex items-start">
+                                        <span className="inline-flex items-center justify-center w-5 h-5 bg-brand-primary text-white rounded-full text-xs mr-2 mt-0.5">2</span>
+                                        You'll receive a notification once your account is approved
+                                    </li>
+                                    <li className="flex items-start">
+                                        <span className="inline-flex items-center justify-center w-5 h-5 bg-brand-primary text-white rounded-full text-xs mr-2 mt-0.5">3</span>
+                                        After approval, you can login and access all platform features
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                                <p className="text-sm text-blue-700 dark:text-blue-300">
+                                    <strong>Note:</strong> You can login to check your verification status at any time. 
+                                    If your account is still pending, you'll see the verification status page.
+                                </p>
+                            </div>
+
+                            <div className="pt-4">
+                                <button
+                                    onClick={() => navigate('/login')}
+                                    className="px-8 py-3 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary transition-colors font-medium"
+                                >
+                                    Go to Login
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-slate-100 dark:bg-slate-900 py-12 px-4 sm:px-6 lg:px-8">
