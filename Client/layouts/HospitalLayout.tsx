@@ -4,6 +4,8 @@ import { useAuth } from '../contexts/AuthContext';
 import ThemeToggle from '../components/ThemeToggle';
 import Card from '../components/Card';
 
+type HospitalStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
+
 const HospitalHeader: React.FC<{ isActive: boolean }> = ({ isActive }) => {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
@@ -33,9 +35,11 @@ const HospitalHeader: React.FC<{ isActive: boolean }> = ({ isActive }) => {
                 <div className="flex items-center space-x-4">
                     <span className="text-slate-600 dark:text-slate-300 text-sm hidden sm:block">Welcome, {user?.name}</span>
                     <ThemeToggle />
-                    <button onClick={() => navigate('/hospital/settings')} className="px-4 py-2 bg-slate-600 dark:bg-slate-700 text-white rounded-lg text-sm font-medium hover:bg-slate-700 dark:hover:bg-slate-600 transition-all transform hover:scale-105 shadow-sm hover:shadow-md">
-                        Settings
-                    </button>
+                    {isActive && (
+                        <button onClick={() => navigate('/hospital/settings')} className="px-4 py-2 bg-slate-600 dark:bg-slate-700 text-white rounded-lg text-sm font-medium hover:bg-slate-700 dark:hover:bg-slate-600 transition-all transform hover:scale-105 shadow-sm hover:shadow-md">
+                            Settings
+                        </button>
+                    )}
                     <button onClick={handleLogout} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-all transform hover:scale-105 shadow-sm hover:shadow-md">
                         Logout
                     </button>
@@ -47,7 +51,8 @@ const HospitalHeader: React.FC<{ isActive: boolean }> = ({ isActive }) => {
 
 const HospitalLayout: React.FC = () => {
     const { user } = useAuth();
-    const [hospitalActive, setHospitalActive] = useState(true);
+    const [hospitalStatus, setHospitalStatus] = useState<HospitalStatus>('approved');
+    const [rejectionReason, setRejectionReason] = useState<string>('');
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -61,10 +66,11 @@ const HospitalLayout: React.FC = () => {
             const resp = await fetch(`http://localhost:8082/api/superadmin/hospitals/${user.id}`);
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Failed');
-            setHospitalActive(data.hospital?.active ?? true);
+            setHospitalStatus(data.hospital?.status || 'approved');
+            setRejectionReason(data.hospital?.rejectionReason || '');
         } catch (err) {
             console.error('fetch hospital status error:', err);
-            setHospitalActive(true); // fail-open: assume active if error
+            setHospitalStatus('approved'); // fail-open: assume approved if error
         } finally {
             setLoading(false);
         }
@@ -81,7 +87,94 @@ const HospitalLayout: React.FC = () => {
         );
     }
 
-    if (!hospitalActive) {
+    // Pending approval state
+    if (hospitalStatus === 'pending') {
+        return (
+            <div className="min-h-screen">
+                <HospitalHeader isActive={false} />
+                <main className="container mx-auto p-4 md:p-6 max-w-2xl mt-12">
+                    <Card>
+                        <div className="text-center py-8 space-y-4">
+                            <div className="inline-flex items-center justify-center w-16 h-16 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4">
+                                <svg className="w-8 h-8 text-yellow-600 dark:text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                                </svg>
+                            </div>
+                            <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200">Verification Pending</h2>
+                            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mx-auto max-w-md">
+                                <p className="text-yellow-800 dark:text-yellow-200 text-sm font-medium">
+                                    🕐 Your registration is under review
+                                </p>
+                            </div>
+                            <p className="text-slate-600 dark:text-slate-400 max-w-md mx-auto">
+                                Thank you for registering with G1CARD! Your hospital registration request has been submitted successfully and is currently being reviewed by our verification team.
+                            </p>
+                            <p className="text-slate-600 dark:text-slate-400 max-w-md mx-auto">
+                                This process typically takes 1-3 business days. You will be notified once your account has been approved.
+                            </p>
+                            <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4 mx-auto max-w-md mt-4">
+                                <h3 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">What we're verifying:</h3>
+                                <ul className="text-sm text-slate-600 dark:text-slate-400 space-y-1 text-left">
+                                    <li>✓ Hospital registration details</li>
+                                    <li>✓ License and certification documents</li>
+                                    <li>✓ Administrator credentials</li>
+                                    <li>✓ Contact information</li>
+                                </ul>
+                            </div>
+                            <div className="pt-4">
+                                <button onClick={fetchHospitalStatus} className="px-6 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary transition-colors">
+                                    Check Status
+                                </button>
+                            </div>
+                        </div>
+                    </Card>
+                </main>
+            </div>
+        );
+    }
+
+    // Rejected state
+    if (hospitalStatus === 'rejected') {
+        return (
+            <div className="min-h-screen">
+                <HospitalHeader isActive={false} />
+                <main className="container mx-auto p-4 md:p-6 max-w-2xl mt-12">
+                    <Card>
+                        <div className="text-center py-8 space-y-4">
+                            <div className="inline-flex items-center justify-center w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full mb-4">
+                                <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                </svg>
+                            </div>
+                            <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200">Registration Rejected</h2>
+                            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mx-auto max-w-md">
+                                <p className="text-red-800 dark:text-red-200 text-sm font-medium">
+                                    ❌ Your registration request was not approved
+                                </p>
+                            </div>
+                            {rejectionReason && (
+                                <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4 mx-auto max-w-md">
+                                    <h3 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">Reason:</h3>
+                                    <p className="text-sm text-slate-600 dark:text-slate-400">{rejectionReason}</p>
+                                </div>
+                            )}
+                            <p className="text-slate-600 dark:text-slate-400 max-w-md mx-auto">
+                                If you believe this is an error or would like to provide additional information, please contact our support team.
+                            </p>
+                            <div className="pt-4">
+                                <button onClick={fetchHospitalStatus} className="px-6 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary transition-colors">
+                                    Check Status Again
+                                </button>
+                            </div>
+                        </div>
+                    </Card>
+                </main>
+            </div>
+        );
+    }
+
+    // Suspended/Inactive state
+    if (hospitalStatus === 'suspended') {
         return (
             <div className="min-h-screen">
                 <HospitalHeader isActive={false} />
@@ -93,13 +186,13 @@ const HospitalLayout: React.FC = () => {
                                     <path fillRule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clipRule="evenodd" />
                                 </svg>
                             </div>
-                            <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200">Hospital Account Inactive</h2>
+                            <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200">Hospital Account Suspended</h2>
                             <p className="text-slate-600 dark:text-slate-400 max-w-md mx-auto">
-                                Your hospital account has been deactivated by the system administrator. 
+                                Your hospital account has been suspended by the system administrator. 
                                 All features and services are currently unavailable.
                             </p>
                             <p className="text-slate-600 dark:text-slate-400 max-w-md mx-auto">
-                                Please contact the super admin to reactivate your account and restore access to all hospital management features.
+                                Please contact the super admin to resolve this issue and restore access to all hospital management features.
                             </p>
                             <div className="pt-4">
                                 <button onClick={fetchHospitalStatus} className="px-6 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary transition-colors">

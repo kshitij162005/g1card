@@ -34,6 +34,82 @@ router.get('/dashboard/stats', async (req, res) => {
   }
 });
 
+// List pending hospital registration requests (for approval)
+router.get('/hospitals/pending', async (req, res) => {
+  try {
+    const Hospital = (await import('../models/Hospital.js')).default;
+    const { search = '', page = 1, limit = 20 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const filter = { status: 'pending' };
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { contactEmail: { $regex: search, $options: 'i' } },
+        { city: { $regex: search, $options: 'i' } },
+        { state: { $regex: search, $options: 'i' } },
+        { regNumber: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const total = await Hospital.countDocuments(filter);
+    const hospitals = await Hospital.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .select('-password -salt')
+      .lean();
+
+    return res.json({ ok: true, hospitals, pagination: { total, page: parseInt(page), limit: parseInt(limit), pages: Math.ceil(total / parseInt(limit)) } });
+  } catch (err) {
+    console.error('list pending hospitals error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Approve a pending hospital
+router.patch('/hospitals/:id/approve', async (req, res) => {
+  try {
+    const Hospital = (await import('../models/Hospital.js')).default;
+    const id = req.params.id;
+    const hospital = await Hospital.findById(id);
+    if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
+    hospital.status = 'approved';
+    hospital.active = true;
+    await hospital.save();
+    const safe = hospital.toObject();
+    if (safe.password) delete safe.password;
+    if (safe.salt) delete safe.salt;
+    return res.json({ ok: true, hospital: safe });
+  } catch (err) {
+    console.error('approve hospital error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Reject a pending hospital (mark rejected or optionally delete)
+router.patch('/hospitals/:id/reject', async (req, res) => {
+  try {
+    const Hospital = (await import('../models/Hospital.js')).default;
+    const id = req.params.id;
+    const { reason } = req.body || {};
+    const hospital = await Hospital.findById(id);
+    if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
+    hospital.status = 'rejected';
+    hospital.active = false;
+    // store optional rejection reason in a field (if exists) or audit logs
+    hospital.rejectionReason = reason || '';
+    await hospital.save();
+    const safe = hospital.toObject();
+    if (safe.password) delete safe.password;
+    if (safe.salt) delete safe.salt;
+    return res.json({ ok: true, hospital: safe });
+  } catch (err) {
+    console.error('reject hospital error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
 // List all patients with search and pagination (must come before /:id route)
 router.get('/patients', async (req, res) => {
   try {

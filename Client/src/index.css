@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', sans-serif;
+  
+  --color-brand-primary: #0D47A1;
+  --color-brand-secondary: #1565C0;
+  --color-brand-accent: #2196F3;
+  --color-brand-light: #E3F2FD;
+  --color-status-green: #4CAF50;
+  --color-status-yellow: #FFC107;
+  --color-status-red: #F44336;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #f1f5f9; /* slate-100 */
+}
+
+.dark body {
+  background-color: #0f172a; /* slate-900 */
+}
+
+.dark ::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}
+
+/* Smooth transitions for all elements */
+* {
+  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out, border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}

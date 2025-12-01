@@ -27,7 +27,7 @@ router.get('/:id/records', async (req, res) => {
     if (!id) return res.status(400).json({ error: 'Missing patient id' });
 
     const records = await Record.find({ patient: id })
-      .populate('hospital', 'name')
+      .populate('hospital', '_id name')
       .populate('form', 'name description fields')
       .sort({ createdAt: -1 })
       .lean();

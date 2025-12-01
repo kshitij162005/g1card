@@ -8,7 +8,9 @@ const PatientSchema = new mongoose.Schema(
     salt: { type: String },
     // unique patient identifier for hospital records (e.g., P1636567890123)
     patientId: { type: String, unique: true, sparse: true },
-    // reference to a Hospital if this patient was created by a hospital
+    // reference to Hospitals this patient is linked to (can be multiple)
+    hospitals: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Hospital' }],
+    // Keep legacy 'hospital' field for backward compatibility (will be migrated to hospitals array)
     hospital: { type: mongoose.Schema.Types.ObjectId, ref: 'Hospital', required: false },
     name: { type: String },
     firstName: { type: String },

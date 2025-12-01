@@ -86,6 +86,7 @@ router.post('/auth/signup/hospital', async (req, res) => {
     const salt = generateSalt();
     const passwordHash = hashWithSalt(password, salt);
 
+    // New registrations go into 'pending' status and are not active until approved by superadmin
     const doc = new Hospital({
       name: hospitalName,
       username: email,
@@ -104,6 +105,8 @@ router.post('/auth/signup/hospital', async (req, res) => {
       adminEmail,
       adminPhone,
       designation,
+      status: 'pending',
+      active: false,
     });
 
     await doc.save();
@@ -156,6 +159,10 @@ router.post('/auth/login', async (req, res) => {
       if (!user) return res.status(401).json({ error: 'Hospital not found' });
       const computed = hashWithSalt(password, user.salt || '');
       if (computed === user.password) {
+        // if hospital has a status and is not approved, deny full login
+        if (user.status && user.status !== 'approved') {
+          return res.status(403).json({ error: 'Hospital registration is not approved yet', status: user.status });
+        }
         return res.json({ ok: true, user: { id: user._id, email: user.contactEmail || user.username, name: user.name, role: 'Hospital' } });
       }
       return res.status(401).json({ error: 'Invalid credentials' });

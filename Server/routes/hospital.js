@@ -31,11 +31,13 @@ router.get('/:id/dashboard-metrics', async (req, res) => {
     const hospital = await Hospital.findById(id);
     if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
 
+    // Filter by hospitals array OR legacy hospital field
+    const patientFilter = { $or: [{ hospitals: id }, { hospital: id }] };
     const [patientsTotal, staffTotal, recordsTotal, recentPatients] = await Promise.all([
-      Patient.countDocuments({ hospital: id }),
+      Patient.countDocuments(patientFilter),
       Staff.countDocuments({ hospital: id }),
       Record.countDocuments({ hospital: id }),
-      Patient.find({ hospital: id }).sort({ createdAt: -1 }).limit(5).lean(),
+      Patient.find(patientFilter).sort({ createdAt: -1 }).limit(5).lean(),
     ]);
 
     const metrics = {
@@ -169,11 +171,26 @@ router.post('/:id/patients', async (req, res) => {
     const computed = crypto.pbkdf2Sync(password, patient.salt, 100000, 64, 'sha256').toString('hex');
     if (computed !== patient.password) return res.status(401).json({ error: 'Invalid patient credentials' });
 
-    // Link patient to hospital (if not already linked)
-    if (!patient.hospital || patient.hospital.toString() !== hospital._id.toString()) {
-      patient.hospital = hospital._id;
-      await patient.save();
+    // Initialize hospitals array if not present
+    if (!patient.hospitals) {
+      patient.hospitals = [];
     }
+
+    // Migrate legacy hospital field to hospitals array if needed
+    if (patient.hospital && !patient.hospitals.some(h => h.toString() === patient.hospital.toString())) {
+      patient.hospitals.push(patient.hospital);
+    }
+
+    // Add hospital to patient's hospitals array if not already linked
+    const hospitalIdStr = hospital._id.toString();
+    const alreadyLinked = patient.hospitals.some(h => h.toString() === hospitalIdStr);
+    if (!alreadyLinked) {
+      patient.hospitals.push(hospital._id);
+    }
+
+    // Also set legacy hospital field for backward compatibility
+    patient.hospital = hospital._id;
+    await patient.save();
 
     const safe = patient.toObject();
     if (safe.password) delete safe.password;
@@ -194,13 +211,18 @@ router.get('/:id/patients', async (req, res) => {
     const q = (req.query.q || '').toString().trim();
     const page = Math.max(1, parseInt(req.query.page || '1'));
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '10')));
-    const filter = { hospital: id };
+    // Filter by hospitals array OR legacy hospital field for backward compatibility
+    const filter = { $or: [{ hospitals: id }, { hospital: id }] };
     if (q) {
-      filter.$or = [
-        { name: { $regex: q, $options: 'i' } },
-        { email: { $regex: q, $options: 'i' } },
-        { patientId: { $regex: q, $options: 'i' } },
+      filter.$and = [
+        { $or: [{ hospitals: id }, { hospital: id }] },
+        { $or: [
+          { name: { $regex: q, $options: 'i' } },
+          { email: { $regex: q, $options: 'i' } },
+          { patientId: { $regex: q, $options: 'i' } },
+        ]}
       ];
+      delete filter.$or;
     }
     const total = await Patient.countDocuments(filter);
     const docs = await Patient.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean();
@@ -229,12 +251,27 @@ router.delete('/:id/patients/:patientId', async (req, res) => {
     const patient = await Patient.findById(patientId);
     if (!patient) return res.status(404).json({ error: 'Patient not found' });
 
-    // Only unlink if patient is linked to this hospital
-    if (!patient.hospital || patient.hospital.toString() !== hospital._id.toString()) {
+    const hospitalIdStr = hospital._id.toString();
+
+    // Check if patient is linked to this hospital (in hospitals array or legacy field)
+    const inHospitalsArray = patient.hospitals && patient.hospitals.some(h => h.toString() === hospitalIdStr);
+    const inLegacyField = patient.hospital && patient.hospital.toString() === hospitalIdStr;
+
+    if (!inHospitalsArray && !inLegacyField) {
       return res.status(400).json({ error: 'Patient is not linked to this hospital' });
     }
 
-    patient.hospital = null;
+    // Remove from hospitals array
+    if (patient.hospitals) {
+      patient.hospitals = patient.hospitals.filter(h => h.toString() !== hospitalIdStr);
+    }
+
+    // Clear legacy hospital field if it matches
+    if (patient.hospital && patient.hospital.toString() === hospitalIdStr) {
+      // Set to another hospital if available, otherwise null
+      patient.hospital = patient.hospitals && patient.hospitals.length > 0 ? patient.hospitals[0] : null;
+    }
+
     await patient.save();
     return res.json({ ok: true, message: 'Patient unlinked from hospital' });
   } catch (err) {
@@ -372,8 +409,11 @@ router.post('/:id/patients/:patientId/records', async (req, res) => {
     const patient = await Patient.findById(patientId);
     if (!patient) return res.status(404).json({ error: 'Patient not found' });
 
-    // check patient linked to hospital
-    if (!patient.hospital || patient.hospital.toString() !== hospital._id.toString()) {
+    // check patient linked to hospital (in hospitals array or legacy field)
+    const hospitalIdStr = hospital._id.toString();
+    const inHospitalsArray = patient.hospitals && patient.hospitals.some(h => h.toString() === hospitalIdStr);
+    const inLegacyField = patient.hospital && patient.hospital.toString() === hospitalIdStr;
+    if (!inHospitalsArray && !inLegacyField) {
       return res.status(400).json({ error: 'Patient is not linked to this hospital' });
     }
 
@@ -409,8 +449,11 @@ router.get('/:id/patients/:patientId/records', async (req, res) => {
     const patient = await Patient.findById(patientId);
     if (!patient) return res.status(404).json({ error: 'Patient not found' });
 
-    // check patient linked to hospital
-    if (!patient.hospital || patient.hospital.toString() !== hospital._id.toString()) {
+    // check patient linked to hospital (in hospitals array or legacy field)
+    const hospitalIdStr = hospital._id.toString();
+    const inHospitalsArray = patient.hospitals && patient.hospitals.some(h => h.toString() === hospitalIdStr);
+    const inLegacyField = patient.hospital && patient.hospital.toString() === hospitalIdStr;
+    if (!inHospitalsArray && !inLegacyField) {
       return res.status(400).json({ error: 'Patient is not linked to this hospital' });
     }
 
@@ -439,9 +482,11 @@ router.get('/:id/dashboard-metrics', async (req, res) => {
     const hospital = await Hospital.findById(id).lean();
     if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
 
+    // Filter by hospitals array OR legacy hospital field
+    const patientFilter = { $or: [{ hospitals: id }, { hospital: id }] };
     const [patientsTotal, recentPatients, staffTotal, recordsTotal] = await Promise.all([
-      Patient.countDocuments({ hospital: id }),
-      Patient.find({ hospital: id }).sort({ createdAt: -1 }).limit(5).select('name patientId createdAt email phone gender').lean(),
+      Patient.countDocuments(patientFilter),
+      Patient.find(patientFilter).sort({ createdAt: -1 }).limit(5).select('name patientId createdAt email phone gender').lean(),
       Staff.countDocuments({ hospital: id }),
       Record.countDocuments({ hospital: id }),
     ]);

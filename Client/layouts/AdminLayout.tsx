@@ -22,6 +22,7 @@ const AdminHeader: React.FC = () => {
                     <h1 className="text-xl font-bold text-brand-primary dark:text-white tracking-wider">G1CARD ADMIN</h1>
                     <div className="hidden md:flex items-center space-x-1">
                         <NavLink to="/admin/dashboard" className={navLinkClasses}>Dashboard</NavLink>
+                        <NavLink to="/admin/pending" className={navLinkClasses}>Pending Requests</NavLink>
                         <NavLink to="/admin/hospitals" className={navLinkClasses}>Hospitals</NavLink>
                         <NavLink to="/admin/users" className={navLinkClasses}>Users</NavLink>
                         <NavLink to="/admin/settings" className={navLinkClasses}>Settings</NavLink>
