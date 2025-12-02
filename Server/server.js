@@ -24,6 +24,19 @@ const app = express();
 const PORT = process.env.PORT || 8082;
 const HOST = process.env.HOST || 'localhost';
 
+// Manual CORS headers - must be before everything else
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  
+  // Handle preflight requests immediately
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  next();
+});
+
 app.use(express.json());
 
 // CORS configuration - allow all origins with proper preflight handling
