@@ -25,8 +25,17 @@ const PORT = process.env.PORT || 8082;
 const HOST = process.env.HOST || 'localhost';
 
 app.use(express.json());
-// Allow CORS from frontend dev server (adjust in production)
-app.use(cors({ origin: '*' }));
+
+// CORS configuration - allow all origins with proper preflight handling
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: false
+}));
+
+// Handle preflight requests explicitly
+app.options('*', cors());
 
 // Mount API routes under /api
 app.use('/api', routes);
