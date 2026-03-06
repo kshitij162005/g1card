@@ -159,13 +159,14 @@ router.get('/:id/staff', async (req, res) => {
   }
 });
 
-// Create/link patient under hospital by verifying existing patient credentials
+// Create a consent-based access request for an existing patient
 // Expected body: { email, password }
 router.post('/:id/patients', async (req, res) => {
   try {
     const crypto = await import('crypto');
     const Hospital = (await import('../models/Hospital.js')).default;
     const Patient = (await import('../models/Patient.js')).default;
+    const HospitalAccess = (await import('../models/HospitalAccess.js')).default;
     const id = req.params.id;
     if (!id) return res.status(400).json({ error: 'Missing hospital id' });
     const hospital = await Hospital.findById(id);
@@ -185,74 +186,117 @@ router.post('/:id/patients', async (req, res) => {
     const computed = crypto.pbkdf2Sync(password, patient.salt, 100000, 64, 'sha256').toString('hex');
     if (computed !== patient.password) return res.status(401).json({ error: 'Invalid patient credentials' });
 
-    // Initialize hospitals array if not present
-    if (!patient.hospitals) {
-      patient.hospitals = [];
-    }
-    // Initialize hospitalLinks array if not present
-    if (!patient.hospitalLinks) {
-      patient.hospitalLinks = [];
-    }
+    // Either create new or reset existing access to PENDING
+    const access = await HospitalAccess.findOneAndUpdate(
+      { hospital: hospital._id, patient: patient._id },
+      { $set: { status: 'PENDING', accessLevel: null } },
+      { upsert: true, new: true }
+    );
 
-    // Migrate legacy hospital field to hospitals array if needed
-    if (patient.hospital && !patient.hospitals.some(h => h.toString() === patient.hospital.toString())) {
-      patient.hospitals.push(patient.hospital);
-    }
-
-    // Add hospital to patient's hospitals array if not already linked
-    const hospitalIdStr = hospital._id.toString();
-    const alreadyLinked = patient.hospitals.some(h => h.toString() === hospitalIdStr);
-    const linkedAt = new Date();
-    if (!alreadyLinked) {
-      patient.hospitals.push(hospital._id);
-      // Also add to hospitalLinks with timestamp
-      patient.hospitalLinks.push({ hospital: hospital._id, linkedAt });
-    }
-
-    // Also set legacy hospital field for backward compatibility
-    patient.hospital = hospital._id;
-    await patient.save();
-
-    const safe = patient.toObject();
-    if (safe.password) delete safe.password;
-    if (safe.salt) delete safe.salt;
-
-    return res.json({ ok: true, patient: { id: safe._id, patientId: safe.patientId, name: safe.name, email: safe.email } });
+    return res.json({
+      ok: true,
+      accessRequest: {
+        id: access._id,
+        status: access.status,
+        accessLevel: access.accessLevel,
+        createdAt: access.createdAt,
+      },
+      message: 'Access request created. Waiting for patient consent.',
+    });
   } catch (err) {
     console.error('create/link patient error:', err);
     return res.status(500).json({ error: err.message || String(err) });
   }
 });
 
-// List patients for hospital with pagination and global search
+// Resend an existing access request for a linked patient (no password needed)
+router.post('/:id/patients/:patientId/resend-access', async (req, res) => {
+  try {
+    const Hospital = (await import('../models/Hospital.js')).default;
+    const Patient = (await import('../models/Patient.js')).default;
+    const HospitalAccess = (await import('../models/HospitalAccess.js')).default;
+    const id = req.params.id;
+    const patientId = req.params.patientId;
+    if (!id || !patientId) return res.status(400).json({ error: 'Missing hospital id or patient id' });
+
+    const hospital = await Hospital.findById(id);
+    if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
+    const patient = await Patient.findById(patientId);
+    if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
+    const access = await HospitalAccess.findOneAndUpdate(
+      { hospital: hospital._id, patient: patient._id },
+      { $set: { status: 'PENDING', accessLevel: null } },
+      { new: true }
+    );
+    if (!access) return res.status(404).json({ error: 'Access request not found to resend' });
+
+    return res.json({
+      ok: true,
+      accessRequest: {
+        id: access._id,
+        status: access.status,
+        accessLevel: access.accessLevel,
+        createdAt: access.createdAt,
+      },
+      message: 'Access request resent to patient.',
+    });
+  } catch (err) {
+    console.error('resend access error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// List patients & consent status for hospital with pagination and search
 router.get('/:id/patients', async (req, res) => {
   try {
     const Patient = (await import('../models/Patient.js')).default;
+    const HospitalAccess = (await import('../models/HospitalAccess.js')).default;
     const id = req.params.id;
     const q = (req.query.q || '').toString().trim();
     const page = Math.max(1, parseInt(req.query.page || '1'));
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '10')));
-    // Filter by hospitals array OR legacy hospital field for backward compatibility
-    const filter = { $or: [{ hospitals: id }, { hospital: id }] };
-    if (q) {
-      filter.$and = [
-        { $or: [{ hospitals: id }, { hospital: id }] },
-        { $or: [
-          { name: { $regex: q, $options: 'i' } },
-          { email: { $regex: q, $options: 'i' } },
-          { patientId: { $regex: q, $options: 'i' } },
-        ]}
-      ];
-      delete filter.$or;
-    }
-    const total = await Patient.countDocuments(filter);
-    const docs = await Patient.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean();
-    // remove sensitive fields
-    for (const d of docs) {
-      if (d.password) delete d.password;
-      if (d.salt) delete d.salt;
-    }
-    return res.json({ ok: true, total, page, limit, patients: docs });
+
+    const baseFilter = { hospital: id };
+    const accessDocs = await HospitalAccess.find(baseFilter)
+      .populate('patient', 'name firstName lastName email dob patientId')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+
+    const allForCount = await HospitalAccess.countDocuments(baseFilter);
+
+    const patients = accessDocs
+      .filter(doc => !!doc.patient)
+      .filter(doc => {
+        if (!q) return true;
+        const p = doc.patient;
+        const name = p.name || `${p.firstName || ''} ${p.lastName || ''}`.trim();
+        const email = p.email || '';
+        const pid = p.patientId || '';
+        const needle = q.toLowerCase();
+        return (
+          name.toLowerCase().includes(needle) ||
+          email.toLowerCase().includes(needle) ||
+          String(pid).toLowerCase().includes(needle)
+        );
+      })
+      .map(doc => {
+        const p = doc.patient;
+        const safeName = p.name || `${p.firstName || ''} ${p.lastName || ''}`.trim();
+        return {
+          _id: p._id,
+          patientId: p.patientId || p._id,
+          name: safeName || 'Unknown',
+          dob: p.dob || '',
+          status: doc.status,
+          accessLevel: doc.accessLevel,
+          requestedAt: doc.createdAt,
+        };
+      });
+
+    return res.json({ ok: true, total: allForCount, page, limit, patients });
   } catch (err) {
     console.error('list patients error:', err);
     return res.status(500).json({ error: err.message || String(err) });
@@ -455,13 +499,14 @@ router.post('/:id/patients/:patientId/records', async (req, res) => {
   }
 });
 
-// Get all records for a patient
+// Get records for a patient, respecting consent access level
 router.get('/:id/patients/:patientId/records', async (req, res) => {
   try {
     const Record = (await import('../models/Record.js')).default;
     const FormTemplate = (await import('../models/FormTemplate.js')).default;
     const Hospital = (await import('../models/Hospital.js')).default;
     const Patient = (await import('../models/Patient.js')).default;
+    const HospitalAccess = (await import('../models/HospitalAccess.js')).default;
     const id = req.params.id;
     const patientId = req.params.patientId;
     if (!id || !patientId) return res.status(400).json({ error: 'Missing hospital id or patient id' });
@@ -470,22 +515,90 @@ router.get('/:id/patients/:patientId/records', async (req, res) => {
     const patient = await Patient.findById(patientId);
     if (!patient) return res.status(404).json({ error: 'Patient not found' });
 
-    // check patient linked to hospital (in hospitals array or legacy field)
-    const hospitalIdStr = hospital._id.toString();
-    const inHospitalsArray = patient.hospitals && patient.hospitals.some(h => h.toString() === hospitalIdStr);
-    const inLegacyField = patient.hospital && patient.hospital.toString() === hospitalIdStr;
-    if (!inHospitalsArray && !inLegacyField) {
-      return res.status(400).json({ error: 'Patient is not linked to this hospital' });
+    // Check consent access
+    const access = await HospitalAccess.findOne({ hospital: hospital._id, patient: patient._id }).lean();
+    if (!access || access.status !== 'APPROVED') {
+      return res.status(403).json({ error: 'Access to patient records not approved' });
     }
 
-    const records = await Record.find({ hospital: hospital._id, patient: patient._id })
+    const recordFilter = { patient: patient._id };
+    if (access.accessLevel === 'GENERAL') {
+      // Only this hospital's own records
+      recordFilter.hospital = hospital._id;
+    }
+    // For COMPLETE access, show all hospitals' records for this patient
+
+    const records = await Record.find(recordFilter)
+      .populate('hospital', '_id name')
       .populate('form', 'name description fields')
       .sort({ createdAt: -1 })
       .lean();
 
-    return res.json({ ok: true, records });
+    return res.json({ ok: true, records, accessLevel: access.accessLevel });
   } catch (err) {
     console.error('fetch records error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Get patient summary for a hospital, applying consent access level
+router.get('/:id/patients/:patientId/summary', async (req, res) => {
+  try {
+    const Hospital = (await import('../models/Hospital.js')).default;
+    const Patient = (await import('../models/Patient.js')).default;
+    const HospitalAccess = (await import('../models/HospitalAccess.js')).default;
+
+    const id = req.params.id;
+    const patientId = req.params.patientId;
+    if (!id || !patientId) return res.status(400).json({ error: 'Missing hospital id or patient id' });
+
+    const hospital = await Hospital.findById(id);
+    if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
+    const patient = await Patient.findById(patientId).lean();
+    if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
+    const access = await HospitalAccess.findOne({ hospital: hospital._id, patient: patient._id }).lean();
+    if (!access || access.status !== 'APPROVED') {
+      return res.status(403).json({ error: 'Access to patient profile not approved' });
+    }
+
+    const base = {
+      id: patient._id,
+      name: patient.name || `${patient.firstName || ''} ${patient.lastName || ''}`.trim(),
+      dob: patient.dob,
+      age: patient.age,
+      gender: patient.gender,
+      phone: patient.phone,
+      email: patient.email,
+      address: patient.address,
+      lastUpdated: patient.updatedAt,
+      created: patient.createdAt,
+    };
+
+    const clinicalSummary = {
+      conditions: patient.conditions || [],
+      medications: patient.medications || [],
+      surgeries: patient.surgeries || [],
+      immunizationRecords: patient.immunizationRecords || patient.immunizations || [],
+    };
+
+    if (access.accessLevel === 'GENERAL') {
+      return res.json({ ok: true, patient: { ...base, ...clinicalSummary }, accessLevel: access.accessLevel });
+    }
+
+    const extended = {
+      ...base,
+      bloodGroup: patient.bloodGroup,
+      height: patient.height,
+      weight: patient.weight,
+      bmi: patient.bmi,
+      allergies: patient.allergies || [],
+      ...clinicalSummary,
+    };
+
+    return res.json({ ok: true, patient: extended, accessLevel: access.accessLevel });
+  } catch (err) {
+    console.error('fetch patient summary error:', err);
     return res.status(500).json({ error: err.message || String(err) });
   }
 });

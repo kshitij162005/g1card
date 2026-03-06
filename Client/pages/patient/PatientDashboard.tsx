@@ -31,6 +31,12 @@ const AuthorizedHospitalItem: React.FC<{ name: string; access: string }> = ({ na
     </li>
 );
 
+interface HospitalAccessEntry {
+    hospitalId: string;
+    hospitalName: string;
+    lastAccessed: string;
+}
+
 const PatientDashboard: React.FC = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
@@ -38,6 +44,7 @@ const PatientDashboard: React.FC = () => {
     const [showModal, setShowModal] = useState(false);
     const [form, setForm] = useState({ bloodGroup: '', age: '', height: '', weight: '', bmi: '' });
     const [saving, setSaving] = useState(false);
+    const [hospitalAccess, setHospitalAccess] = useState<HospitalAccessEntry[]>([]);
 
     const openModal = () => {
         setForm({
@@ -93,7 +100,40 @@ const PatientDashboard: React.FC = () => {
                 console.warn('Could not fetch patient details', err);
             }
         };
+        const fetchRecords = async () => {
+            if (!user?.id) return;
+            try {
+                const resp = await fetch(`${API_URL}/patients/${user.id}/records`);
+                const data = await resp.json();
+                if (!resp.ok || !data?.records) return;
+
+                const map = new Map<string, { name: string; lastAccessed: string }>();
+                (data.records as any[]).forEach((rec: any) => {
+                    const hospital = rec.hospital || {};
+                    const hospitalId = hospital._id || hospital.id;
+                    const hospitalName = hospital.name || 'Unknown Hospital';
+                    if (!hospitalId) return;
+                    const createdAt: string = rec.createdAt || rec.updatedAt || rec.date || new Date().toISOString();
+                    const existing = map.get(hospitalId);
+                    if (!existing || new Date(createdAt) > new Date(existing.lastAccessed)) {
+                        map.set(hospitalId, { name: hospitalName, lastAccessed: createdAt });
+                    }
+                });
+
+                const list: HospitalAccessEntry[] = Array.from(map.entries()).map(([hospitalId, v]) => ({
+                    hospitalId,
+                    hospitalName: v.name,
+                    lastAccessed: v.lastAccessed,
+                }));
+
+                list.sort((a, b) => new Date(b.lastAccessed).getTime() - new Date(a.lastAccessed).getTime());
+                setHospitalAccess(list);
+            } catch (err) {
+                console.warn('Could not fetch hospital access history', err);
+            }
+        };
         fetchPatient();
+        fetchRecords();
     }, [user?.id]);
 
     const relativeTime = (iso?: string) => {
@@ -107,6 +147,16 @@ const PatientDashboard: React.FC = () => {
         if (hrs < 24) return `${hrs} hour${hrs>1?'s':''} ago`;
         const days = Math.floor(hrs / 24);
         return `${days} day${days>1?'s':''} ago`;
+    };
+
+    const formatDate = (iso: string) => {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return 'N/A';
+        return d.toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+        });
     };
 
     return (
@@ -146,11 +196,19 @@ const PatientDashboard: React.FC = () => {
                         </div>
                     </Card>
                      <Card title="Authorized Hospitals">
-                         <ul className="divide-y divide-gray-200">
-                             <AuthorizedHospitalItem name="Apollo Hospital" access="Full Access" />
-                             <AuthorizedHospitalItem name="City Hospital" access="Limited Access" />
-                             <AuthorizedHospitalItem name="Max Healthcare" access="Read-Only" />
-                         </ul>
+                         {hospitalAccess.length === 0 ? (
+                             <p className="text-sm text-slate-500">No hospitals have accessed your records yet.</p>
+                         ) : (
+                             <ul className="divide-y divide-gray-200">
+                                 {hospitalAccess.map(h => (
+                                     <AuthorizedHospitalItem
+                                         key={h.hospitalId}
+                                         name={h.hospitalName}
+                                         access="Full Access"
+                                     />
+                                 ))}
+                             </ul>
+                         )}
                      </Card>
                 </div>
 
@@ -162,12 +220,25 @@ const PatientDashboard: React.FC = () => {
                         <QuickInfoItem icon="📋" label="Recent Consultations" value={patient && (patient.consultationHistory as any)?.length ? `${(patient.consultationHistory as any).length} (Last: ${(patient.consultationHistory as any)[0]?.date || 'N/A'})` : 'None'} color="text-blue-500" />
                     </Card>
                     <Card title="Hospital Access History">
-                        <ul className="divide-y divide-gray-200 text-sm">
-                            <li className="py-2">Apollo Hospital - 15-Oct-2024</li>
-                            <li className="py-2">City Hospital - 28-Sep-2024</li>
-                            <li className="py-2">Max Healthcare - 10-Aug-2024</li>
-                        </ul>
-                        <button onClick={() => alert('Viewing all hospital accesses - TBI')} className="text-sm text-brand-accent hover:underline mt-2 w-full text-right">View All Accesses</button>
+                        {hospitalAccess.length === 0 ? (
+                            <p className="text-sm text-slate-500">No access history available yet.</p>
+                        ) : (
+                            <>
+                                <ul className="divide-y divide-gray-200 text-sm">
+                                    {hospitalAccess.slice(0, 5).map(entry => (
+                                        <li key={entry.hospitalId} className="py-2">
+                                            {entry.hospitalName} - {formatDate(entry.lastAccessed)}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </>
+                        )}
+                        <button
+                            onClick={() => navigate('/patient/health-history')}
+                            className="text-sm text-brand-accent hover:underline mt-2 w-full text-right"
+                        >
+                            View Full History
+                        </button>
                     </Card>
                 </div>
             </div>

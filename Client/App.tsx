@@ -45,6 +45,7 @@ import PatientLayout from './layouts/PatientLayout';
 import PatientDashboard from './pages/patient/PatientDashboard';
 import HealthHistory from './pages/patient/HealthHistory';
 import PatientSettings from './pages/patient/PatientSettings';
+import PatientNotifications from './pages/patient/PatientNotifications';
 
 
 const AppRoutes: React.FC = () => {
@@ -118,6 +119,7 @@ const AppRoutes: React.FC = () => {
                         <Route path="dashboard" element={<PatientDashboard />} />
                         <Route path="health-history" element={<HealthHistory />} />
                         <Route path="settings" element={<PatientSettings />} />
+                        <Route path="notifications" element={<PatientNotifications />} />
                     </Route>
                     <Route path="*" element={<Navigate to="/patient/dashboard" />} />
                 </Routes>
