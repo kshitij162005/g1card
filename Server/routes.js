@@ -15,6 +15,19 @@ function hashWithSalt(password, salt) {
   return derived.toString('hex');
 }
 
+function calculateAgeFromDob(dob) {
+  if (!dob) return undefined;
+  const d = new Date(dob);
+  if (Number.isNaN(d.getTime())) return undefined;
+  const today = new Date();
+  let age = today.getFullYear() - d.getFullYear();
+  const m = today.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < d.getDate())) {
+    age--;
+  }
+  return age;
+}
+
 // Health endpoint — includes DB status
 router.get('/health', (req, res) => {
   const dbState = mongoose?.connection?.readyState ?? 0; // 0 = disconnected, 1 = connected
@@ -46,6 +59,7 @@ router.post('/auth/signup/patient', async (req, res) => {
 
     // Generate unique patient ID
     const patientId = `P${Date.now()}`;
+    const age = calculateAgeFromDob(dob);
 
     const doc = new Patient({
       username: email,
@@ -56,6 +70,7 @@ router.post('/auth/signup/patient', async (req, res) => {
       firstName,
       lastName,
       dob,
+      age,
       gender,
       phone,
       address,
@@ -182,6 +197,37 @@ router.post('/auth/login', async (req, res) => {
     return res.status(400).json({ error: 'Unknown role' });
   } catch (err) {
     console.error('login error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Auth: change password (no email flow, in-app only for patients)
+router.post('/auth/change-password', async (req, res) => {
+  try {
+    const { role, email, currentPassword, newPassword } = req.body || {};
+    if (!role || !email || !currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'role, email, currentPassword and newPassword are required' });
+    }
+
+    if (role === 'Patient' || role === 'PATIENT') {
+      const Patient = (await import('./models/Patient.js')).default;
+      const user = await Patient.findOne({ username: email });
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      const computed = hashWithSalt(currentPassword, user.salt || '');
+      if (computed !== user.password) {
+        return res.status(401).json({ error: 'Current password is incorrect' });
+      }
+      const salt = generateSalt();
+      const passwordHash = hashWithSalt(newPassword, salt);
+      user.salt = salt;
+      user.password = passwordHash;
+      await user.save();
+      return res.json({ ok: true, message: 'Password updated successfully' });
+    }
+
+    return res.status(400).json({ error: 'Password change is currently supported only for Patient role' });
+  } catch (err) {
+    console.error('change password error:', err);
     return res.status(500).json({ error: err.message || String(err) });
   }
 });

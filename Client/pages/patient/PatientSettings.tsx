@@ -2,7 +2,7 @@ import { API_URL } from '../../config/api';
 import React, { useEffect, useState } from 'react';
 import Card from '../../components/Card';
 import { useAuth } from '../../contexts/AuthContext';
-import { DetailedPatient } from '../../types';
+import { DetailedPatient, Role } from '../../types';
 
 const Section: React.FC<{ title: string; children: React.ReactNode; }> = ({ title, children }) => (
     <div className="py-6">
@@ -24,7 +24,7 @@ const ToggleSwitch: React.FC<{ label: string; defaultChecked?: boolean; disabled
 );
 
 
-const PermissionControl: React.FC<{ hospital: string; access: string; lastAccessed: string; }> = ({ hospital, access, lastAccessed }) => (
+const PermissionControl: React.FC<{ hospital: string; access: string; lastAccessed: string; onRevoke?: () => void; }> = ({ hospital, access, lastAccessed, onRevoke }) => (
     <div className="p-4 border dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-700/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
             <p className="font-semibold text-slate-800 dark:text-slate-200">{hospital}</p>
@@ -36,7 +36,7 @@ const PermissionControl: React.FC<{ hospital: string; access: string; lastAccess
                  <option>Limited</option>
                  <option>Read-only</option>
              </select>
-             <button className="text-sm text-red-600 hover:underline font-semibold">Revoke Access</button>
+             <button onClick={onRevoke} className="text-sm text-red-600 hover:underline font-semibold">Revoke Access</button>
         </div>
     </div>
 );
@@ -51,12 +51,21 @@ const ActiveSession: React.FC<{ browser: string; location: string; lastActive: s
     </div>
 );
 
+interface HospitalPermissionEntry {
+    hospitalId: string;
+    hospitalName: string;
+    lastAccessed: string;
+}
+
 const PatientSettings: React.FC = () => {
     const { user } = useAuth();
     const [patient, setPatient] = useState<DetailedPatient | null>(null);
     const [showEdit, setShowEdit] = useState(false);
     const [saving, setSaving] = useState(false);
     const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', dob: '', address: '', emergencyContactName: '', emergencyContactPhone: '' });
+    const [hospitalPermissions, setHospitalPermissions] = useState<HospitalPermissionEntry[]>([]);
+    const [changingPassword, setChangingPassword] = useState(false);
+    const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
 
     useEffect(() => {
         const fetchPatient = async () => {
@@ -69,7 +78,37 @@ const PatientSettings: React.FC = () => {
                 console.warn('Could not fetch patient details', err);
             }
         };
+        const fetchHospitalPermissions = async () => {
+            if (!user?.id) return;
+            try {
+                const resp = await fetch(`${API_URL}/patients/${user.id}/records`);
+                const data = await resp.json();
+                if (!resp.ok || !data?.records) return;
+                const map = new Map<string, { name: string; lastAccessed: string }>();
+                (data.records as any[]).forEach((rec: any) => {
+                    const hospital = rec.hospital || {};
+                    const hospitalId = hospital._id || hospital.id;
+                    const hospitalName = hospital.name || 'Unknown Hospital';
+                    if (!hospitalId) return;
+                    const createdAt: string = rec.createdAt || rec.updatedAt || rec.date || new Date().toISOString();
+                    const existing = map.get(hospitalId);
+                    if (!existing || new Date(createdAt) > new Date(existing.lastAccessed)) {
+                        map.set(hospitalId, { name: hospitalName, lastAccessed: createdAt });
+                    }
+                });
+                const list: HospitalPermissionEntry[] = Array.from(map.entries()).map(([hospitalId, v]) => ({
+                    hospitalId,
+                    hospitalName: v.name,
+                    lastAccessed: v.lastAccessed,
+                }));
+                list.sort((a, b) => new Date(b.lastAccessed).getTime() - new Date(a.lastAccessed).getTime());
+                setHospitalPermissions(list);
+            } catch (err) {
+                console.warn('Could not fetch hospital permissions', err);
+            }
+        };
         fetchPatient();
+        fetchHospitalPermissions();
     }, [user?.id]);
 
     const openEdit = () => {
@@ -87,6 +126,8 @@ const PatientSettings: React.FC = () => {
     };
 
     const updateField = (k: string, v: string) => setForm(prev => ({ ...prev, [k]: v }));
+
+    const updatePasswordField = (k: string, v: string) => setPasswordForm(prev => ({ ...prev, [k]: v }));
 
     const saveProfile = async () => {
         if (!user?.id) return alert('Not signed in');
@@ -115,6 +156,60 @@ const PatientSettings: React.FC = () => {
         } finally { setSaving(false); }
     };
 
+    const formatDate = (iso: string) => {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return 'N/A';
+        return d.toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+        });
+    };
+
+    const handleRevokeHospital = (hospitalId: string) => {
+        if (!window.confirm('Are you sure you want to revoke this hospital\'s access?')) return;
+        setHospitalPermissions(prev => prev.filter(h => h.hospitalId !== hospitalId));
+        // Note: actual enforcement of revocation will be implemented later on the backend.
+    };
+
+    const submitPasswordChange = async () => {
+        if (!user?.email) {
+            alert('Unable to identify user email for password change');
+            return;
+        }
+        if (!passwordForm.currentPassword || !passwordForm.newPassword) {
+            alert('Please fill all password fields');
+            return;
+        }
+        if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+            alert('New passwords do not match');
+            return;
+        }
+        try {
+            const resp = await fetch(`${API_URL}/auth/change-password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    role: Role.PATIENT,
+                    email: user.email,
+                    currentPassword: passwordForm.currentPassword,
+                    newPassword: passwordForm.newPassword,
+                }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                alert(data?.error || data?.message || 'Unable to change password');
+                return;
+            }
+            alert('Password updated successfully');
+            setChangingPassword(false);
+            setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        } catch (err) {
+            console.error('change password error', err);
+            alert('Error while changing password');
+        }
+    };
+
     return (
         <>
         <Card title="Account Settings & Privacy">
@@ -134,16 +229,31 @@ const PatientSettings: React.FC = () => {
                 
                 <Section title="Hospital Permissions">
                     <p className="text-sm text-slate-600 dark:text-slate-400">Manage which hospitals can access your data.</p>
-                    <PermissionControl hospital="Apollo Hospital" access="Full Access" lastAccessed="15-Oct-2024" />
-                    <PermissionControl hospital="City Hospital" access="Limited" lastAccessed="28-Sep-2024" />
-                    <PermissionControl hospital="Max Healthcare" access="Read-only" lastAccessed="10-Aug-2024" />
+                    {hospitalPermissions.length === 0 ? (
+                        <p className="text-sm text-slate-500">No hospitals have accessed your records yet.</p>
+                    ) : (
+                        hospitalPermissions.map(h => (
+                            <PermissionControl
+                                key={h.hospitalId}
+                                hospital={h.hospitalName}
+                                access="Full Access"
+                                lastAccessed={formatDate(h.lastAccessed)}
+                                onRevoke={() => handleRevokeHospital(h.hospitalId)}
+                            />
+                        ))
+                    )}
                     <button className="text-sm px-4 py-2 border border-dashed border-slate-400 dark:border-slate-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300">+ Add New Hospital</button>
                 </Section>
 
                 <Section title="Security Settings">
                     <div>
                         <p className="text-sm"><strong>Password:</strong> •••••••• <span className="text-xs text-slate-500 ml-4">Last Changed: 15 days ago</span></p>
-                        <button className="mt-2 px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">Change Password</button>
+                        <button
+                            onClick={() => setChangingPassword(true)}
+                            className="mt-2 px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600"
+                        >
+                            Change Password
+                        </button>
                     </div>
                    <ToggleSwitch label="Two-Factor Authentication" disabled comingSoon />
                 </Section>
@@ -237,6 +347,62 @@ const PatientSettings: React.FC = () => {
                     <div className="mt-4 flex justify-end gap-3">
                         <button onClick={()=>setShowEdit(false)} className="px-4 py-2 border rounded bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200">Cancel</button>
                         <button onClick={saveProfile} disabled={saving} className="px-4 py-2 bg-brand-primary text-white rounded">{saving ? 'Saving...' : 'Save'}</button>
+                    </div>
+                </div>
+            </div>
+        )}
+        {changingPassword && (
+            <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 dark:bg-black/60">
+                <div className="bg-white dark:bg-slate-900 rounded-lg p-6 w-full max-w-md ring-1 ring-slate-200 dark:ring-slate-800">
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Change Password</h3>
+                    <div className="mt-4 space-y-3">
+                        <div>
+                            <label htmlFor="currentPassword" className="block text-sm text-slate-700 dark:text-slate-300">Current password</label>
+                            <input
+                                id="currentPassword"
+                                type="password"
+                                className="mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                                value={passwordForm.currentPassword}
+                                onChange={(e) => updatePasswordField('currentPassword', e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="newPassword" className="block text-sm text-slate-700 dark:text-slate-300">New password</label>
+                            <input
+                                id="newPassword"
+                                type="password"
+                                className="mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                                value={passwordForm.newPassword}
+                                onChange={(e) => updatePasswordField('newPassword', e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="confirmPassword" className="block text-sm text-slate-700 dark:text-slate-300">Confirm new password</label>
+                            <input
+                                id="confirmPassword"
+                                type="password"
+                                className="mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                                value={passwordForm.confirmPassword}
+                                onChange={(e) => updatePasswordField('confirmPassword', e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <div className="mt-4 flex justify-end gap-3">
+                        <button
+                            onClick={() => {
+                                setChangingPassword(false);
+                                setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+                            }}
+                            className="px-4 py-2 border rounded bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={submitPasswordChange}
+                            className="px-4 py-2 bg-brand-primary text-white rounded"
+                        >
+                            Update Password
+                        </button>
                     </div>
                 </div>
             </div>

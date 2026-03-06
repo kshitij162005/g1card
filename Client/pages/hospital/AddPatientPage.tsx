@@ -20,8 +20,8 @@ const AddPatientPage: React.FC = () => {
         try {
             const resp = await fetch(`${API_URL}/hospitals/${user.id}/patients`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: form.email, password: form.password }) });
             const data = await resp.json();
-            if (!resp.ok) throw new Error(data.error || 'Failed to add patient');
-            alert('New patient added: ' + (data.patient?.patientId || ''));
+            if (!resp.ok) throw new Error(data.error || 'Failed to send access request');
+            alert('Access request sent to patient. Status: ' + (data.accessRequest?.status || 'PENDING'));
             navigate('/hospital/patients');
         } catch (err: any) {
             console.error(err);

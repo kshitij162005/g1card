@@ -104,22 +104,21 @@ const PatientRecord: React.FC = () => {
     const RECORDS_PER_PAGE = 10;
 
     useEffect(() => {
-        if (!patientId) { setLoading(false); return; }
+        if (!patientId || !user) { setLoading(false); return; }
         (async () => {
             try {
-                const resp = await fetch(`${API_URL}/patients/${patientId}`);
+                const resp = await fetch(`${API_URL}/hospitals/${user.id}/patients/${patientId}/summary`);
                 const data = await resp.json();
                 if (!resp.ok) throw new Error(data.error || 'Not found');
-                // Normalize server patient to DetailedPatient shape minimally
                 const p = data.patient || {};
                 const detailed: DetailedPatient = {
-                    id: p._id || patientId,
-                    name: p.name || `${p.firstName || ''} ${p.lastName || ''}`.trim(),
+                    id: p.id || patientId,
+                    name: p.name || '',
                     dob: p.dob || '',
                     age: p.age || 0,
                     gender: p.gender || '',
                     contact: p.phone || '',
-                    email: p.email || p.username || '',
+                    email: p.email || '',
                     address: p.address || '',
                     bloodGroup: p.bloodGroup || '',
                     height: p.height || '',
@@ -129,29 +128,34 @@ const PatientRecord: React.FC = () => {
                     chronicConditions: (p.conditions || []).map((c:any) => ({ name: c, diagnosed: '' })),
                     currentMedications: (p.medications || []).map((m:any) => ({ name: m, dosage: '', since: '', prescribedBy: '' })),
                     previousSurgeries: (p.surgeries || []).map((s:any) => ({ name: s, date: '', hospital: '', doctor: '', treatment: '' })),
-                    immunizationRecords: [],
+                    immunizationRecords: (p.immunizationRecords || p.immunizations || []).map((i:any) => ({
+                        name: i?.name || i?.vaccine || String(i || ''),
+                        date: i?.date || i?.takenOn || '',
+                    })),
                     consultationHistory: [],
                     uploadedDocuments: [],
-                    lastUpdated: p.updatedAt || '',
-                    created: p.createdAt || '',
+                    lastUpdated: p.lastUpdated || '',
+                    created: p.created || '',
                 };
                 setPatient(detailed);
             } catch (err) {
-                console.error('fetch patient', err);
+                console.error('fetch patient summary', err);
                 setPatient(null);
             } finally { setLoading(false); }
         })();
-    }, [patientId]);
+    }, [patientId, user]);
 
     useEffect(() => {
-        if (!patientId) return;
+        if (!patientId || !user) return;
         (async () => {
             setLoadingRecords(true);
             try {
-                const resp = await fetch(`${API_URL}/patients/${patientId}/records`);
+                const resp = await fetch(`${API_URL}/hospitals/${user.id}/patients/${patientId}/records`);
                 const data = await resp.json();
                 if (resp.ok && data.records) {
                     setRecords(data.records || []);
+                } else if (!resp.ok) {
+                    console.error('fetch records error', data.error);
                 }
             } catch (err) {
                 console.error('fetch records', err);
@@ -159,7 +163,7 @@ const PatientRecord: React.FC = () => {
                 setLoadingRecords(false);
             }
         })();
-    }, [patientId]);
+    }, [patientId, user]);
 
     const pinnedRecords = useMemo(() => {
         if (!user) return [];

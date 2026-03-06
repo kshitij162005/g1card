@@ -7,7 +7,15 @@ import Card from '../../components/Card';
 import { Patient, PatientStatus } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 
-interface ApiPatient { _id: string; patientId?: string; name: string; dob?: string; status?: string }
+interface ApiPatient {
+    _id: string;
+    patientId?: string;
+    name: string;
+    dob?: string;
+    status?: string;        // consent status: PENDING / APPROVED / DENIED
+    accessLevel?: string;   // GENERAL / COMPLETE
+    requestedAt?: string;
+}
 
 
 const PatientManagement: React.FC = () => {
@@ -36,16 +44,27 @@ const PatientManagement: React.FC = () => {
             setTotal(data.total || 0);
             // keep Mongo _id as route id, show patientId as external identifier
             setPatients(items.map(it => {
-                const displayName = it.name || `${(it as any).firstName || ''} ${(it as any).lastName || ''}`.trim();
-                return ({ id: it._id, name: displayName || 'Unknown', dob: it.dob || '', status: (it.status || PatientStatus.ACTIVE), patientId: it.patientId || it._id }) as unknown as Patient;
+                const displayName = it.name;
+                // Overload status field to show consent status text
+                const consentStatus = (it.status || 'PENDING') as any;
+                return ({
+                    id: it._id,
+                    name: displayName || 'Unknown',
+                    dob: it.dob || '',
+                    status: consentStatus,
+                    patientId: it.patientId || it._id,
+                    accessLevel: it.accessLevel,
+                } as any);
             }));
         } catch (err) {
             console.error('fetch patients', err);
         } finally { setLoading(false); }
     };
     
-    const getStatusChip = (status: PatientStatus) => {
-        return status === PatientStatus.ACTIVE ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300';
+    const getStatusChip = (status: any) => {
+        if (status === 'APPROVED') return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+        if (status === 'DENIED') return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
     };
 
     return (
@@ -131,37 +150,63 @@ const PatientManagement: React.FC = () => {
                                 <th className="py-3 px-6 text-left text-xs font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wider">Patient ID</th>
                                 <th className="py-3 px-6 text-left text-xs font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wider">Name</th>
                                 <th className="py-3 px-6 text-left text-xs font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wider">DOB</th>
-                                <th className="py-3 px-6 text-left text-xs font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wider">Status</th>
+                                <th className="py-3 px-6 text-left text-xs font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wider">Consent Status</th>
                                 <th className="py-3 px-6 text-left text-xs font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                            {patients.map(patient => (
+                            {patients.map(patient => {
+                                const isConsentPending = String(patient.status || '').toUpperCase() === 'PENDING';
+                                return (
                                 <tr key={patient.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-slate-700 dark:text-slate-300">
                                     <td className="py-4 px-6 whitespace-nowrap font-mono text-sm">{(patient as any).patientId || patient.id}</td>
                                     <td className="py-4 px-6 whitespace-nowrap">{patient.name}</td>
                                     <td className="py-4 px-6 whitespace-nowrap">{patient.dob}</td>
                                     <td className="py-4 px-6 whitespace-nowrap">
                                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusChip(patient.status)}`}>
-                                            {patient.status}
+                                            {patient.status}{(patient as any).accessLevel ? ` - ${(patient as any).accessLevel === 'COMPLETE' ? 'Complete Info' : 'General Info'}` : ''}
                                         </span>
                                     </td>
                                     <td className="py-4 px-6 whitespace-nowrap text-sm font-medium space-x-2">
                                         <button
                                             onClick={() => navigate(`/hospital/patients/${patient.id}`)}
-                                            className="px-3 py-1 text-sm font-medium rounded-md border border-transparent text-brand-accent hover:bg-slate-50 dark:hover:bg-slate-700/60"
+                                            className={`px-3 py-1 text-sm font-medium rounded-md border border-transparent text-brand-accent ${isConsentPending ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-50 dark:hover:bg-slate-700/60'}`}
                                             aria-label={`View ${patient.name}`}
+                                            disabled={isConsentPending}
                                         >
                                             View
                                         </button>
 
                                         <button
                                             onClick={() => navigate(`/hospital/patients/${patient.id}/add-record`)}
-                                            className="px-3 py-1 text-sm font-medium rounded-md bg-emerald-600 text-white hover:bg-emerald-700"
+                                            className={`px-3 py-1 text-sm font-medium rounded-md bg-emerald-600 text-white ${isConsentPending ? 'opacity-50 cursor-not-allowed' : 'hover:bg-emerald-700'}`}
                                             aria-label={`Add record for ${patient.name}`}
+                                            disabled={isConsentPending}
                                         >
                                             Add Record
                                         </button>
+
+                                        {(patient as any).status === 'DENIED' && (
+                                            <button
+                                                onClick={async () => {
+                                                    try {
+                                                        const resp = await fetch(`${API_URL}/hospitals/${user?.id}/patients/${patient.id}/resend-access`, {
+                                                            method: 'POST',
+                                                        });
+                                                        const d = await resp.json();
+                                                        if (!resp.ok) throw new Error(d.error || 'Failed to resend request');
+                                                        alert('Access request resent to patient.');
+                                                        fetchPatients(searchTerm);
+                                                    } catch (err) {
+                                                        console.error(err);
+                                                        alert('Error resending access request');
+                                                    }
+                                                }}
+                                                className="px-3 py-1 text-xs font-medium rounded-md bg-amber-500 text-white hover:bg-amber-600"
+                                            >
+                                                Resend Request
+                                            </button>
+                                        )}
 
                                         <button
                                             onClick={async () => {
@@ -181,7 +226,7 @@ const PatientManagement: React.FC = () => {
                                         </button>
                                     </td>
                                 </tr>
-                            ))}
+                            );})}
                         </tbody>
                     </table>
                 </div>
