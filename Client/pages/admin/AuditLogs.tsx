@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Card from '../../components/Card';
 import { API_URL } from '../../config/api';
+import Loader from '../../components/Loader';
 
 interface AuditLog {
     _id: string;
@@ -61,50 +62,83 @@ const AuditLogs: React.FC = () => {
     const [selectedEntityId, setSelectedEntityId] = useState<string>('');
     const [logs, setLogs] = useState<AuditLog[]>([]);
     const [loading, setLoading] = useState(false);
+    const [loadingEntities, setLoadingEntities] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [eventFilter, setEventFilter] = useState('');
     const [expandedLog, setExpandedLog] = useState<string | null>(null);
-    const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 0 });
+    const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
+    const [entityPagination, setEntityPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
 
-    // Fetch hospitals list
+    // Lazy load entities only when tab is selected
     useEffect(() => {
-        fetchHospitals();
-        fetchPatients();
-    }, []);
+        setSelectedEntityId('');
+        setLogs([]);
+        setSearchTerm('');
+        setEntityPagination({ page: 1, limit: 10, total: 0, totalPages: 0 });
+        
+        if (activeTab === 'hospital') {
+            fetchHospitals();
+        } else {
+            fetchPatients();
+        }
+    }, [activeTab]);
 
-    // Fetch logs when entity is selected
+    // Fetch entities when page changes
+    useEffect(() => {
+        if (activeTab === 'hospital') {
+            fetchHospitals();
+        } else {
+            fetchPatients();
+        }
+    }, [entityPagination.page]);
+
+    // Fetch logs when entity is selected or filters change
     useEffect(() => {
         if (selectedEntityId) {
             fetchLogs();
+        } else {
+            setLogs([]);
         }
     }, [selectedEntityId, activeTab, eventFilter, pagination.page]);
 
     const fetchHospitals = async () => {
+        setLoadingEntities(true);
         try {
-            const resp = await fetch(`${API_URL}/superadmin/hospitals`);
+            const resp = await fetch(`${API_URL}/superadmin/hospitals?page=${entityPagination.page}&limit=10&sortBy=updatedAt&sortOrder=desc`);
             const data = await resp.json();
             if (resp.ok && data.hospitals) {
                 setHospitals(data.hospitals);
+                if (data.pagination) {
+                    setEntityPagination(data.pagination);
+                }
             }
         } catch (err) {
             console.error('Failed to fetch hospitals:', err);
+        } finally {
+            setLoadingEntities(false);
         }
     };
 
     const fetchPatients = async () => {
+        setLoadingEntities(true);
         try {
-            const resp = await fetch(`${API_URL}/superadmin/patients`);
+            const resp = await fetch(`${API_URL}/superadmin/patients?page=${entityPagination.page}&limit=10&sortBy=updatedAt&sortOrder=desc`);
             const data = await resp.json();
             if (resp.ok && data.patients) {
                 setPatients(data.patients);
+                if (data.pagination) {
+                    setEntityPagination(data.pagination);
+                }
             }
         } catch (err) {
             console.error('Failed to fetch patients:', err);
+        } finally {
+            setLoadingEntities(false);
         }
     };
 
     const fetchLogs = async () => {
-        if (!selectedEntityId) return;
+        if (!selectedEntityId || loading) return; // Prevent duplicate fetches
         
         setLoading(true);
         try {
@@ -127,7 +161,12 @@ const AuditLogs: React.FC = () => {
             if (resp.ok && data.logs) {
                 setLogs(data.logs);
                 if (data.pagination) {
-                    setPagination(prev => ({ ...prev, ...data.pagination }));
+                    // Only update total and totalPages, not page to avoid triggering re-fetch
+                    setPagination(prev => ({ 
+                        ...prev, 
+                        total: data.pagination.total,
+                        totalPages: data.pagination.totalPages
+                    }));
                 }
             }
         } catch (err) {
@@ -177,13 +216,8 @@ const AuditLogs: React.FC = () => {
         });
     };
 
-    const filteredEntities = activeTab === 'hospital'
-        ? hospitals.filter(h => h.name.toLowerCase().includes(searchTerm.toLowerCase()))
-        : patients.filter(p => 
-            `${p.firstName || ''} ${p.lastName || ''}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            p.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            p.username?.toLowerCase().includes(searchTerm.toLowerCase())
-        );
+    // Display current entities (server-side paginated)
+    const displayedEntities = activeTab === 'hospital' ? hospitals : patients;
 
     const selectedEntity = activeTab === 'hospital'
         ? hospitals.find(h => h._id === selectedEntityId)
@@ -216,6 +250,10 @@ const AuditLogs: React.FC = () => {
         a.click();
         window.URL.revokeObjectURL(url);
     };
+
+    if (loading && logs.length === 0) {
+        return <Loader text="Loading system audit logs..." fullScreen />;
+    }
 
     return (
         <div className="space-y-6">
@@ -265,50 +303,78 @@ const AuditLogs: React.FC = () => {
                         Select {activeTab === 'hospital' ? 'Hospital' : 'Patient'}
                     </h3>
                     
-                    <input
-                        type="text"
-                        placeholder={`Search ${activeTab}s...`}
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 mb-4"
-                    />
+                    {loadingEntities ? (
+                        <div className="text-center py-8">
+                            <Loader text={`Loading ${activeTab}s...`} size="small" />
+                        </div>
+                    ) : (
+                        <>
+                            <div className="space-y-2 max-h-96 overflow-y-auto mb-4">
+                                {displayedEntities.length === 0 ? (
+                                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                                        No {activeTab}s found
+                                    </p>
+                                ) : (
+                                    displayedEntities.map((entity: any) => (
+                                        <button
+                                            key={entity._id}
+                                            onClick={() => {
+                                                setSelectedEntityId(entity._id);
+                                                setPagination(prev => ({ ...prev, page: 1 }));
+                                            }}
+                                            className={`w-full text-left p-3 rounded-lg transition-colors ${
+                                                selectedEntityId === entity._id
+                                                    ? 'bg-brand-primary text-white'
+                                                    : 'bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100'
+                                            }`}
+                                        >
+                                            <div className="font-medium text-sm">
+                                                {activeTab === 'hospital' 
+                                                    ? entity.name 
+                                                    : `${entity.firstName || ''} ${entity.lastName || ''}`.trim() || entity.username || 'Unknown'
+                                                }
+                                            </div>
+                                            {activeTab === 'hospital' && entity.city && (
+                                                <div className="text-xs opacity-75 mt-1">
+                                                    {entity.city}, {entity.state}
+                                                </div>
+                                            )}
+                                            {activeTab === 'patient' && entity.email && (
+                                                <div className="text-xs opacity-75 mt-1">
+                                                    {entity.email}
+                                                </div>
+                                            )}
+                                        </button>
+                                    ))
+                                )}
+                            </div>
 
-                    <div className="space-y-2 max-h-96 overflow-y-auto">
-                        {filteredEntities.length === 0 ? (
-                            <p className="text-sm text-slate-500 dark:text-slate-400">
-                                No {activeTab}s found
-                            </p>
-                        ) : (
-                            filteredEntities.map((entity: any) => (
-                                <button
-                                    key={entity._id}
-                                    onClick={() => setSelectedEntityId(entity._id)}
-                                    className={`w-full text-left p-3 rounded-lg transition-colors ${
-                                        selectedEntityId === entity._id
-                                            ? 'bg-brand-primary text-white'
-                                            : 'bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100'
-                                    }`}
-                                >
-                                    <div className="font-medium text-sm">
-                                        {activeTab === 'hospital' 
-                                            ? entity.name 
-                                            : `${entity.firstName || ''} ${entity.lastName || ''}`.trim() || entity.username || 'Unknown'
-                                        }
+                            {/* Entity pagination controls */}
+                            {entityPagination.totalPages > 1 && (
+                                <div className="flex items-center justify-between text-xs border-t border-slate-200 dark:border-slate-700 pt-3">
+                                    <span className="text-slate-600 dark:text-slate-400">
+                                        Page {entityPagination.page} of {entityPagination.totalPages}
+                                    </span>
+                                    <div className="flex gap-1">
+                                        <button
+                                            disabled={entityPagination.page === 1}
+                                            onClick={() => setEntityPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                                            className="px-2 py-1 border border-slate-300 dark:border-slate-600 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700"
+                                        >
+                                            Prev
+                                        </button>
+                                        <button
+                                            disabled={entityPagination.page >= entityPagination.totalPages}
+                                            onClick={() => setEntityPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                                            className="px-2 py-1 border border-slate-300 dark:border-slate-600 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700"
+                                        >
+                                            Next
+                                        </button>
                                     </div>
-                                    {activeTab === 'hospital' && entity.city && (
-                                        <div className="text-xs opacity-75 mt-1">
-                                            {entity.city}, {entity.state}
-                                        </div>
-                                    )}
-                                    {activeTab === 'patient' && entity.email && (
-                                        <div className="text-xs opacity-75 mt-1">
-                                            {entity.email}
-                                        </div>
-                                    )}
-                                </button>
-                            ))
-                        )}
-                    </div>
+                                </div>
+                            )}
+                        </>
+                    )}
                 </Card>
 
                 {/* Logs Display */}
@@ -345,7 +411,10 @@ const AuditLogs: React.FC = () => {
                                     <div className="flex gap-2">
                                         <select
                                             value={eventFilter}
-                                            onChange={(e) => setEventFilter(e.target.value)}
+                                            onChange={(e) => {
+                                                setEventFilter(e.target.value);
+                                                setPagination(prev => ({ ...prev, page: 1 }));
+                                            }}
                                             className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-sm"
                                         >
                                             <option value="">All Events</option>
@@ -516,24 +585,52 @@ const AuditLogs: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Pagination */}
-                            {pagination.totalPages > 1 && (
+                            {/* Pagination with Page Numbers */}
+                            {!loading && logs.length > 0 && (
                                 <div className="mt-6 flex items-center justify-between border-t border-slate-200 dark:border-slate-700 pt-4">
                                     <p className="text-sm text-slate-600 dark:text-slate-400">
-                                        Page {pagination.page} of {pagination.totalPages}
+                                        Showing {(pagination.page - 1) * pagination.limit + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} results
                                     </p>
-                                    <div className="flex gap-2">
+                                    <div className="flex items-center gap-2">
                                         <button
                                             onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
                                             disabled={pagination.page === 1}
-                                            className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800"
+                                            className="px-3 py-1 border border-slate-300 dark:border-slate-600 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                                         >
                                             Previous
                                         </button>
+                                        
+                                        {/* Page Numbers */}
+                                        {Array.from({ length: Math.min(pagination.totalPages, 5) }, (_, i) => {
+                                            let pageNum;
+                                            if (pagination.totalPages <= 5) {
+                                                pageNum = i + 1;
+                                            } else if (pagination.page <= 3) {
+                                                pageNum = i + 1;
+                                            } else if (pagination.page >= pagination.totalPages - 2) {
+                                                pageNum = pagination.totalPages - 4 + i;
+                                            } else {
+                                                pageNum = pagination.page - 2 + i;
+                                            }
+                                            return (
+                                                <button
+                                                    key={pageNum}
+                                                    onClick={() => setPagination(prev => ({ ...prev, page: pageNum }))}
+                                                    className={`px-3 py-1 border rounded-lg text-sm transition-colors ${
+                                                        pagination.page === pageNum
+                                                            ? 'bg-blue-500 text-white border-blue-500'
+                                                            : 'border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                                    }`}
+                                                >
+                                                    {pageNum}
+                                                </button>
+                                            );
+                                        })}
+                                        
                                         <button
                                             onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
-                                            disabled={!pagination.hasMore}
-                                            className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800"
+                                            disabled={pagination.page >= pagination.totalPages}
+                                            className="px-3 py-1 border border-slate-300 dark:border-slate-600 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                                         >
                                             Next
                                         </button>

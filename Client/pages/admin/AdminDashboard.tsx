@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import Card from '../../components/Card';
 import { useNavigate } from 'react-router-dom';
+import Loader from '../../components/Loader';
 
 const StatCard: React.FC<{ title: string; value: string | number; loading?: boolean }> = ({ title, value, loading }) => (
     <Card className="text-center">
@@ -51,7 +52,11 @@ const AdminDashboard: React.FC = () => {
             setLoading(false);
         }
     };
-    
+
+    if (loading) {
+        return <Loader text="Loading admin dashboard..." fullScreen />;
+    }
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">

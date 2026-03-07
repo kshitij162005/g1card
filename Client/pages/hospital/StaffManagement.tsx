@@ -6,6 +6,7 @@ import Card from '../../components/Card';
 import { Staff, StaffRole } from '../../types';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import Loader from '../../components/Loader';
 
 interface ApiStaff { _id: string; staffId?: string; name: string; email: string; role?: string; status?: string }
 
@@ -21,7 +22,7 @@ const StaffManagement: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [page, setPage] = useState(1);
     const [total, setTotal] = useState(0);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const { user } = useAuth();
 
     useEffect(() => { fetchStaff(); }, []);
@@ -53,6 +54,10 @@ const StaffManagement: React.FC = () => {
     const getStatusChip = (status: 'Active' | 'Inactive') => {
         return status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300';
     };
+
+    if (loading && staff.length === 0) {
+        return <Loader text="Loading staff members..." fullScreen />;
+    }
 
     return (
         <Card title="Staff Management">

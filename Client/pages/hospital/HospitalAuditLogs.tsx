@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Card from '../../components/Card';
 import { API_URL } from '../../config/api';
 import { useAuth } from '../../contexts/AuthContext';
+import Loader from '../../components/Loader';
 
 interface AuditLog {
     _id: string;
@@ -43,9 +44,9 @@ interface AuditLog {
 const HospitalAuditLogs: React.FC = () => {
     const { user } = useAuth();
     const [logs, setLogs] = useState<AuditLog[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [eventFilter, setEventFilter] = useState('');
-    const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 0, hasMore: false });
+    const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0, hasMore: false });
 
     useEffect(() => {
         if (user?.id) {
@@ -142,6 +143,10 @@ const HospitalAuditLogs: React.FC = () => {
         a.click();
         window.URL.revokeObjectURL(url);
     };
+
+    if (loading && logs.length === 0) {
+        return <Loader text="Loading audit logs..." fullScreen />;
+    }
 
     return (
         <div className="space-y-6">
@@ -240,24 +245,52 @@ const HospitalAuditLogs: React.FC = () => {
                     </div>
                 )}
 
-                {/* Pagination */}
-                {pagination.totalPages > 1 && (
+                {/* Pagination with Page Numbers */}
+                {!loading && logs.length > 0 && (
                     <div className="mt-6 flex items-center justify-between border-t border-slate-200 dark:border-slate-700 pt-4">
                         <p className="text-sm text-slate-600 dark:text-slate-400">
-                            Page {pagination.page} of {pagination.totalPages}
+                            Showing {(pagination.page - 1) * pagination.limit + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} results
                         </p>
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-2">
                             <button
                                 onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
                                 disabled={pagination.page === 1}
-                                className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800"
+                                className="px-3 py-1 border border-slate-300 dark:border-slate-600 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                             >
                                 Previous
                             </button>
+                            
+                            {/* Page Numbers */}
+                            {Array.from({ length: Math.min(pagination.totalPages, 5) }, (_, i) => {
+                                let pageNum;
+                                if (pagination.totalPages <= 5) {
+                                    pageNum = i + 1;
+                                } else if (pagination.page <= 3) {
+                                    pageNum = i + 1;
+                                } else if (pagination.page >= pagination.totalPages - 2) {
+                                    pageNum = pagination.totalPages - 4 + i;
+                                } else {
+                                    pageNum = pagination.page - 2 + i;
+                                }
+                                return (
+                                    <button
+                                        key={pageNum}
+                                        onClick={() => setPagination(prev => ({ ...prev, page: pageNum }))}
+                                        className={`px-3 py-1 border rounded-lg text-sm transition-colors ${
+                                            pagination.page === pageNum
+                                                ? 'bg-blue-500 text-white border-blue-500'
+                                                : 'border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                        }`}
+                                    >
+                                        {pageNum}
+                                    </button>
+                                );
+                            })}
+                            
                             <button
                                 onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
-                                disabled={!pagination.hasMore}
-                                className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800"
+                                disabled={pagination.page >= pagination.totalPages}
+                                className="px-3 py-1 border border-slate-300 dark:border-slate-600 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                             >
                                 Next
                             </button>

@@ -2,6 +2,7 @@ import { API_URL } from '../../config/api';
 
 import React, { useState, useEffect } from 'react';
 import Card from '../../components/Card';
+import Loader from '../../components/Loader';
 
 interface Patient {
     _id: string;
@@ -21,7 +22,7 @@ interface Patient {
 const UserManagement: React.FC = () => {
     const [patients, setPatients] = useState<Patient[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [patientPage, setPatientPage] = useState(1);
     const [patientPagination, setPatientPagination] = useState({ total: 0, pages: 1, limit: 10 });
 
@@ -47,6 +48,10 @@ const UserManagement: React.FC = () => {
 
 
 
+
+    if (loading && patients.length === 0) {
+        return <Loader text="Loading users..." fullScreen />;
+    }
 
     return (
         <Card title="User Management">

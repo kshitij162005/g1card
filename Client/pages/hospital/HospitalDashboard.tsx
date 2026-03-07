@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import Card from '../../components/Card';
 import { useNavigate } from 'react-router-dom';
+import Loader from '../../components/Loader';
 
 const StatCard: React.FC<{ title: string; value: string | number; loading?: boolean; }> = ({ title, value, loading }) => (
     <Card className="text-center">
@@ -26,7 +27,7 @@ interface RecentPatient {
 const HospitalDashboard: React.FC = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
-    const [loadingMetrics, setLoadingMetrics] = useState(false);
+    const [loadingMetrics, setLoadingMetrics] = useState(true);
     const [metrics, setMetrics] = useState<{ patientsTotal: number; recordsTotal: number; patientsPending: number; recentPatients: RecentPatient[] }>({
         patientsTotal: 0,
         recordsTotal: 0,
@@ -56,6 +57,10 @@ const HospitalDashboard: React.FC = () => {
         };
         fetchMetrics();
     }, [user]);
+
+    if (loadingMetrics) {
+        return <Loader text="Loading dashboard..." fullScreen />;
+    }
 
     // Format last activity time
     const formatLastActivity = () => {

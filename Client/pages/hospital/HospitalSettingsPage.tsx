@@ -3,6 +3,7 @@ import { API_URL } from '../../config/api';
 import React, { useEffect, useState } from 'react';
 import Card from '../../components/Card';
 import { useAuth } from '../../contexts/AuthContext';
+import Loader from '../../components/Loader';
 
 interface HospitalData {
     _id: string;
@@ -133,6 +134,10 @@ const HospitalSettingsPage: React.FC = () => {
             setLoading(false);
         }
     };
+
+    if (loading) {
+        return <Loader text="Loading hospital settings..." fullScreen />;
+    }
 
     const showDeactivateModal = () => {
         if (!hospital) return;

@@ -79,7 +79,7 @@ const FormDetails: React.FC = () => {
     };
 
     if (loading) {
-        return <Card><p>Loading form...</p></Card>;
+        return <Loader text="Loading form details..." fullScreen />;
     }
 
     if (!form) {

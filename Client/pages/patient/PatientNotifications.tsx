@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Card from '../../components/Card';
 import { API_URL } from '../../config/api';
 import { useAuth } from '../../contexts/AuthContext';
+import Loader from '../../components/Loader';
 
 interface AccessRequest {
     id: string;
@@ -43,14 +44,16 @@ const PatientNotifications: React.FC = () => {
     const { user } = useAuth();
     const [requests, setRequests] = useState<AccessRequest[]>([]);
     const [notifications, setNotifications] = useState<Notification[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [choiceById, setChoiceById] = useState<Record<string, 'GENERAL' | 'COMPLETE'>>({});
+    const [page, setPage] = useState(1);
+    const [pagination, setPagination] = useState({ total: 0, pages: 1, limit: 10 });
 
     const loadRequests = async () => {
         if (!user?.id) return;
         setLoading(true);
         try {
-            const resp = await fetch(`${API_URL}/patients/${user.id}/access-requests`);
+            const resp = await fetch(`${API_URL}/patients/${user.id}/access-requests?page=${page}&limit=10`);
             const data = await resp.json();
             if (!resp.ok) {
                 console.error('load requests error', data);
@@ -60,6 +63,9 @@ const PatientNotifications: React.FC = () => {
                 (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
             );
             setRequests(list);
+            if (data.pagination) {
+                setPagination(data.pagination);
+            }
         } catch (err) {
             console.error('load requests error', err);
         } finally {
@@ -71,7 +77,7 @@ const PatientNotifications: React.FC = () => {
         if (!user?.id) return;
         try {
             console.log('Loading notifications for patient:', user.id);
-            const resp = await fetch(`${API_URL}/patients/${user.id}/notifications`);
+            const resp = await fetch(`${API_URL}/patients/${user.id}/notifications?page=${page}&limit=10`);
             const data = await resp.json();
             console.log('Notifications response:', data);
             if (resp.ok && data.notifications) {
@@ -84,9 +90,13 @@ const PatientNotifications: React.FC = () => {
     };
 
     useEffect(() => {
-        loadRequests();
-        loadNotifications();
-    }, [user?.id]);
+        const loadData = async () => {
+            setLoading(true);
+            await Promise.all([loadRequests(), loadNotifications()]);
+            setLoading(false);
+        };
+        loadData();
+    }, [user?.id, page]);
 
     const updateChoice = (id: string, value: 'GENERAL' | 'COMPLETE') => {
         setChoiceById(prev => ({ ...prev, [id]: value }));
@@ -146,7 +156,7 @@ const PatientNotifications: React.FC = () => {
     return (
         <Card title="Notifications - Hospital Access Requests">
                 {loading ? (
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Loading requests...</p>
+                    <Loader text="Loading notifications..." size="medium" />
                 ) : upgradeNotifications.length === 0 && requests.length === 0 && previousUpgradeNotifications.length === 0 ? (
                     <p className="text-sm text-slate-500 dark:text-slate-400">No access requests at the moment.</p>
                 ) : (
@@ -362,6 +372,59 @@ const PatientNotifications: React.FC = () => {
                             ))}
                         </>
                     )}
+                </div>
+            )}
+
+            {/* Pagination Controls with Page Numbers */}
+            {!loading && pagination.pages > 1 && (
+                <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-200 dark:border-slate-700">
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                        Showing {((page - 1) * pagination.limit) + 1} to {Math.min(page * pagination.limit, pagination.total)} of {pagination.total} results
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <button
+                            disabled={page === 1}
+                            onClick={() => setPage(p => p - 1)}
+                            className="px-3 py-1 border dark:border-slate-600 rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            Previous
+                        </button>
+                        
+                        {/* Page Numbers */}
+                        {Array.from({ length: Math.min(pagination.pages, 5) }, (_, i) => {
+                            let pageNum;
+                            if (pagination.pages <= 5) {
+                                pageNum = i + 1;
+                            } else if (page <= 3) {
+                                pageNum = i + 1;
+                            } else if (page >= pagination.pages - 2) {
+                                pageNum = pagination.pages - 4 + i;
+                            } else {
+                                pageNum = page - 2 + i;
+                            }
+                            return (
+                                <button
+                                    key={pageNum}
+                                    onClick={() => setPage(pageNum)}
+                                    className={`px-3 py-1 border rounded-lg text-sm transition-colors ${
+                                        page === pageNum
+                                            ? 'bg-blue-500 text-white border-blue-500'
+                                            : 'border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                    }`}
+                                >
+                                    {pageNum}
+                                </button>
+                            );
+                        })}
+                        
+                        <button
+                            disabled={page === pagination.pages}
+                            onClick={() => setPage(p => p + 1)}
+                            className="px-3 py-1 border dark:border-slate-600 rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            Next
+                        </button>
+                    </div>
                 </div>
             )}
         </Card>

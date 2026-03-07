@@ -6,6 +6,7 @@ import ThemeToggle from '../components/ThemeToggle';
 import Card from '../components/Card';
 import { useSSE } from '../hooks/useSSE';
 import GlassNotification from '../components/GlassNotification';
+import Loader from '../components/Loader';
 
 type HospitalStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
 
@@ -165,14 +166,7 @@ const HospitalLayout: React.FC = () => {
     };
 
     if (loading) {
-        return (
-            <div className="min-h-screen">
-                <HospitalHeader isActive={true} notificationCount={0} />
-                <main className="container mx-auto p-4 md:p-6">
-                    <p className="text-center text-slate-600 dark:text-slate-400">Loading...</p>
-                </main>
-            </div>
-        );
+        return <Loader text="Verifying hospital status..." fullScreen />;
     }
 
     // Pending approval state

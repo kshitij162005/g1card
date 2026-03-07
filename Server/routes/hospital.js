@@ -926,18 +926,59 @@ router.get('/:id/notifications', async (req, res) => {
     const id = req.params.id;
     if (!id) return res.status(400).json({ error: 'Missing hospital id' });
 
-    console.log('Fetching notifications for hospital:', id);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const filter = req.query.filter || 'all'; // 'all' or 'unread'
+    const searchQuery = req.query.search || '';
+
+    console.log('Fetching notifications for hospital:', id, { page, limit, filter, searchQuery });
     
-    const notifications = await Notification.find({ 
+    // Build query
+    const query = { 
       recipient: id, 
       recipientModel: 'Hospital' 
-    })
+    };
+
+    // Apply filter
+    if (filter === 'unread') {
+      query.isRead = false;
+    }
+
+    // Apply search (search in title, message, or sender name)
+    if (searchQuery) {
+      query.$or = [
+        { title: { $regex: searchQuery, $options: 'i' } },
+        { message: { $regex: searchQuery, $options: 'i' } }
+      ];
+    }
+
+    // Get total counts
+    const totalCount = await Notification.countDocuments({ 
+      recipient: id, 
+      recipientModel: 'Hospital',
+      ...(searchQuery ? { $or: query.$or } : {})
+    });
+    
+    const unreadCount = await Notification.countDocuments({ 
+      recipient: id, 
+      recipientModel: 'Hospital',
+      isRead: false,
+      ...(searchQuery ? { $or: query.$or } : {})
+    });
+
+    // Get paginated notifications
+    const skip = (page - 1) * limit;
+    const notifications = await Notification.find(query)
       .populate('sender', 'firstName lastName email')
       .sort({ createdAt: -1 })
-      .limit(100)
+      .skip(skip)
+      .limit(limit)
       .lean();
 
-    console.log('Found notifications for hospital:', notifications.length);
+    const total = await Notification.countDocuments(query);
+    const totalPages = Math.ceil(total / limit);
+
+    console.log('Found notifications:', notifications.length, 'Total:', total, 'TotalCount:', totalCount, 'UnreadCount:', unreadCount);
 
     return res.json({
       ok: true,
@@ -954,7 +995,15 @@ router.get('/:id/notifications', async (req, res) => {
         sender: n.sender,
         createdAt: n.createdAt,
         updatedAt: n.updatedAt,
-      }))
+      })),
+      pagination: {
+        total: total, // Total matching current filter
+        pages: totalPages,
+        page: page,
+        limit: limit
+      },
+      totalCount: totalCount, // Total all notifications
+      unreadCount: unreadCount // Total unread notifications
     });
   } catch (err) {
     console.error('fetch notifications error:', err);

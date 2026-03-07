@@ -3,6 +3,7 @@ import { API_URL } from '../../config/api';
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '../../components/Card';
+import Loader from '../../components/Loader';
 
 interface Hospital {
     _id: string;
@@ -250,7 +251,7 @@ const HospitalDetails: React.FC = () => {
     };
 
     if (loading) {
-        return <div className="text-center p-8 text-slate-700 dark:text-slate-300">Loading hospital details...</div>;
+        return <Loader text="Loading hospital details..." fullScreen />;
     }
 
     if (!hospital) {

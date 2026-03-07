@@ -3,6 +3,7 @@ import { API_URL } from '../../config/api';
 import React, { useEffect, useState } from 'react';
 import Card from '../../components/Card';
 import { useAuth } from '../../contexts/AuthContext';
+import Loader from '../../components/Loader';
 
 interface MedicalRecord {
     _id: string;
@@ -226,12 +227,7 @@ const HealthHistory: React.FC = () => {
             </div>
 
             {loadingHospitals ? (
-                <Card>
-                    <div className="p-8 text-center">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-primary mx-auto"></div>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-4">Loading hospitals...</p>
-                    </div>
-                </Card>
+                <Loader text="Loading your health records..." fullScreen />
             ) : hospitals.length === 0 ? (
                 <Card>
                     <div className="p-8 text-center">

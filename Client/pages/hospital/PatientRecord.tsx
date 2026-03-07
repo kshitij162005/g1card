@@ -5,6 +5,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Card from '../../components/Card';
 import { DetailedPatient } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import Loader from '../../components/Loader';
 
 const Section: React.FC<{ title: string; onAdd?: () => void; children: React.ReactNode; }> = ({ title, onAdd, children }) => (
     <Card>
@@ -244,7 +245,7 @@ const PatientRecord: React.FC = () => {
         }
     };
 
-    if (loading) return <div className="text-center p-8">Loading...</div>;
+    if (loading) return <Loader text="Loading patient record..." fullScreen />;
     if (!patient) return <div className="text-center p-8">Patient data not found.</div>;
 
     const handleAddRecord = () => {

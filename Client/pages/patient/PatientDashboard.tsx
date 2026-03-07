@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import Card from '../../components/Card';
 import { useNavigate } from 'react-router-dom';
 import { DetailedPatient } from '../../types';
+import Loader from '../../components/Loader';
 
 const HealthSummaryItem: React.FC<{ label: string; value: string }> = ({ label, value }) => (
     <div className="text-center">
@@ -46,6 +47,7 @@ const PatientDashboard: React.FC = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const [patient, setPatient] = useState<DetailedPatient | null>(null);
+    const [initialLoading, setInitialLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [form, setForm] = useState({ bloodGroup: '', age: '', height: '', weight: '', bmi: '' });
     const [saving, setSaving] = useState(false);
@@ -161,6 +163,15 @@ const PatientDashboard: React.FC = () => {
         fetchPatient();
         fetchRecords();
         fetchNotifications();
+        
+        // Set loading to false after all initial fetches complete
+        Promise.all([
+            fetchPatient(),
+            fetchRecords(),
+            fetchNotifications()
+        ]).finally(() => {
+            setInitialLoading(false);
+        });
     }, [user?.id]);
 
     const relativeTime = (iso?: string) => {
@@ -218,6 +229,10 @@ const PatientDashboard: React.FC = () => {
     const handleDoLater = () => {
         setShowAccessRequestModal(false);
     };
+
+    if (initialLoading) {
+        return <Loader text="Loading your dashboard..." fullScreen />;
+    }
 
     return (
         <div className="space-y-6">
