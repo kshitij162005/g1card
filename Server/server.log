@@ -1,0 +1,134 @@
+dotenv parsed keys: [
+  'PORT',
+  'HOST',
+  'MONGODB_URI',
+  'MONGODB_DBNAME',
+  'SUPERADMIN_EMAIL',
+  'SUPERADMIN_PASSWORD'
+]
+Loaded .env path: /Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/.env
+MONGODB_URI present (process.env): true
+MONGODB_URI (masked): mongodb+srv:***@g1cluster.escdmtn.mongodb.net/
+MongoDB connected to database: g1card
+Superadmin already present in DB: kotechakshitij@gmail.com
+Server listening on http://localhost:8082
+fetch patient records error: MissingSchemaError: Schema hasn't been registered for model "Hospital".
+Use mongoose.model(name, schema)
+    at Connection.model (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/connection.js:1136:13)
+    at _getModelFromConn (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:585:15)
+    at addModelNamesToMap (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:512:17)
+    at getModelsMapForPopulate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:201:7)
+    at populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4394:21)
+    at _populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4354:5)
+    at /Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4326:5
+    at new Promise (<anonymous>)
+    at Function.populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4325:10)
+    at model.Query._find (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/query.js:2316:24)
+fetch patient records error: MissingSchemaError: Schema hasn't been registered for model "Hospital".
+Use mongoose.model(name, schema)
+    at Connection.model (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/connection.js:1136:13)
+    at _getModelFromConn (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:585:15)
+    at addModelNamesToMap (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:512:17)
+    at getModelsMapForPopulate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:201:7)
+    at populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4394:21)
+    at _populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4354:5)
+    at /Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4326:5
+    at new Promise (<anonymous>)
+    at Function.populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4325:10)
+    at model.Query._find (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/query.js:2316:24)
+fetch patient records error: MissingSchemaError: Schema hasn't been registered for model "Hospital".
+Use mongoose.model(name, schema)
+    at Connection.model (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/connection.js:1136:13)
+    at _getModelFromConn (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:585:15)
+    at addModelNamesToMap (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:512:17)
+    at getModelsMapForPopulate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:201:7)
+    at populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4394:21)
+    at _populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4354:5)
+    at /Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4326:5
+    at new Promise (<anonymous>)
+    at Function.populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4325:10)
+    at model.Query._find (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/query.js:2316:24)
+fetch patient records error: MissingSchemaError: Schema hasn't been registered for model "Hospital".
+Use mongoose.model(name, schema)
+    at Connection.model (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/connection.js:1136:13)
+    at _getModelFromConn (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:585:15)
+    at addModelNamesToMap (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:512:17)
+    at getModelsMapForPopulate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:201:7)
+    at populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4394:21)
+    at _populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4354:5)
+    at /Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4326:5
+    at new Promise (<anonymous>)
+    at Function.populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4325:10)
+    at model.Query._find (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/query.js:2316:24)
+fetch patient records error: MissingSchemaError: Schema hasn't been registered for model "Hospital".
+Use mongoose.model(name, schema)
+    at Connection.model (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/connection.js:1136:13)
+    at _getModelFromConn (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:585:15)
+    at addModelNamesToMap (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:512:17)
+    at getModelsMapForPopulate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:201:7)
+    at populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4394:21)
+    at _populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4354:5)
+    at /Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4326:5
+    at new Promise (<anonymous>)
+    at Function.populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4325:10)
+    at model.Query._find (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/query.js:2316:24)
+fetch patient records error: MissingSchemaError: Schema hasn't been registered for model "Hospital".
+Use mongoose.model(name, schema)
+    at Connection.model (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/connection.js:1136:13)
+    at _getModelFromConn (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:585:15)
+    at addModelNamesToMap (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:512:17)
+    at getModelsMapForPopulate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:201:7)
+    at populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4394:21)
+    at _populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4354:5)
+    at /Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4326:5
+    at new Promise (<anonymous>)
+    at Function.populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4325:10)
+    at model.Query._find (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/query.js:2316:24)
+fetch patient records error: MissingSchemaError: Schema hasn't been registered for model "Hospital".
+Use mongoose.model(name, schema)
+    at Connection.model (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/connection.js:1136:13)
+    at _getModelFromConn (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:585:15)
+    at addModelNamesToMap (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:512:17)
+    at getModelsMapForPopulate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:201:7)
+    at populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4394:21)
+    at _populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4354:5)
+    at /Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4326:5
+    at new Promise (<anonymous>)
+    at Function.populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4325:10)
+    at model.Query._find (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/query.js:2316:24)
+fetch patient records error: MissingSchemaError: Schema hasn't been registered for model "Hospital".
+Use mongoose.model(name, schema)
+    at Connection.model (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/connection.js:1136:13)
+    at _getModelFromConn (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:585:15)
+    at addModelNamesToMap (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:512:17)
+    at getModelsMapForPopulate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:201:7)
+    at populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4394:21)
+    at _populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4354:5)
+    at /Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4326:5
+    at new Promise (<anonymous>)
+    at Function.populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4325:10)
+    at model.Query._find (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/query.js:2316:24)
+fetch patient records error: MissingSchemaError: Schema hasn't been registered for model "Hospital".
+Use mongoose.model(name, schema)
+    at Connection.model (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/connection.js:1136:13)
+    at _getModelFromConn (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:585:15)
+    at addModelNamesToMap (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:512:17)
+    at getModelsMapForPopulate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:201:7)
+    at populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4394:21)
+    at _populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4354:5)
+    at /Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4326:5
+    at new Promise (<anonymous>)
+    at Function.populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4325:10)
+    at model.Query._find (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/query.js:2316:24)
+fetch patient records error: MissingSchemaError: Schema hasn't been registered for model "Hospital".
+Use mongoose.model(name, schema)
+    at Connection.model (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/connection.js:1136:13)
+    at _getModelFromConn (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:585:15)
+    at addModelNamesToMap (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:512:17)
+    at getModelsMapForPopulate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/helpers/populate/getModelsMapForPopulate.js:201:7)
+    at populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4394:21)
+    at _populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4354:5)
+    at /Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4326:5
+    at new Promise (<anonymous>)
+    at Function.populate (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/model.js:4325:10)
+    at model.Query._find (/Users/kshitijkotecha/Desktop/Grinding🚀/g1card/Server/node_modules/mongoose/lib/query.js:2316:24)

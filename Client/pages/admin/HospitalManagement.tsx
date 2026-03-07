@@ -2,6 +2,7 @@ import { API_URL } from '../../config/api';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../../components/Card';
+import Loader from '../../components/Loader';
 
 interface Hospital {
     _id: string;
@@ -75,7 +76,7 @@ const HospitalManagement: React.FC = () => {
     const [filter, setFilter] = useState<'All' | 'Active' | 'Inactive'>('All');
     const [loading, setLoading] = useState(false);
     const [page, setPage] = useState(1);
-    const [pagination, setPagination] = useState({ total: 0, pages: 1, limit: 20 });
+    const [pagination, setPagination] = useState({ total: 0, pages: 1, limit: 10 });
     const navigate = useNavigate();
     const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; hospitalId: string; hospitalName: string }>({
         isOpen: false,
@@ -84,17 +85,21 @@ const HospitalManagement: React.FC = () => {
     });
 
     useEffect(() => {
+        setPage(1); // Reset to page 1 when search changes
+    }, [searchTerm]);
+
+    useEffect(() => {
         fetchHospitals();
-    }, [searchTerm, page]);
+    }, [page]);
 
     const fetchHospitals = async () => {
         setLoading(true);
         try {
-            const resp = await fetch(`${API_URL}/superadmin/hospitals?search=${searchTerm}&page=${page}&limit=20`);
+            const resp = await fetch(`${API_URL}/superadmin/hospitals?search=${searchTerm}&page=${page}&limit=10`);
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Failed');
             setHospitals(data.hospitals || []);
-            setPagination(data.pagination || { total: 0, pages: 1, limit: 20 });
+            setPagination(data.pagination || { total: 0, pages: 1, limit: 10 });
         } catch (err) {
             console.error('fetch hospitals error:', err);
         } finally {
@@ -131,6 +136,10 @@ const HospitalManagement: React.FC = () => {
         }
     };
     
+    if (loading && hospitals.length === 0) {
+        return <Loader text="Loading hospitals..." fullScreen />;
+    }
+
     return (
         <Card title="Hospitals Directory">
             <DeleteModal
@@ -199,11 +208,56 @@ const HospitalManagement: React.FC = () => {
                                 </tbody>
                             </table>
                         </div>
-                        {pagination.pages > 1 && (
-                            <div className="flex justify-center gap-2 mt-4">
-                                <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-50">Previous</button>
-                                <span className="px-3 py-1 text-slate-700 dark:text-slate-300">Page {page} of {pagination.pages}</span>
-                                <button disabled={page === pagination.pages} onClick={() => setPage(p => p + 1)} className="px-3 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-50">Next</button>
+                        {/* Pagination with Page Numbers */}
+                        {!loading && filteredHospitals.length > 0 && (
+                            <div className="flex items-center justify-between pt-4">
+                                <p className="text-sm text-slate-600 dark:text-slate-400">
+                                    Showing {(page - 1) * pagination.limit + 1} to {Math.min(page * pagination.limit, pagination.total)} of {pagination.total} results
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        disabled={page === 1}
+                                        onClick={() => setPage(p => p - 1)}
+                                        className="px-3 py-1 border border-slate-300 dark:border-slate-600 rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                        Previous
+                                    </button>
+                                    
+                                    {/* Page Numbers */}
+                                    {Array.from({ length: Math.min(pagination.pages, 5) }, (_, i) => {
+                                        let pageNum;
+                                        if (pagination.pages <= 5) {
+                                            pageNum = i + 1;
+                                        } else if (page <= 3) {
+                                            pageNum = i + 1;
+                                        } else if (page >= pagination.pages - 2) {
+                                            pageNum = pagination.pages - 4 + i;
+                                        } else {
+                                            pageNum = page - 2 + i;
+                                        }
+                                        return (
+                                            <button
+                                                key={pageNum}
+                                                onClick={() => setPage(pageNum)}
+                                                className={`px-3 py-1 border rounded-lg text-sm transition-colors ${
+                                                    page === pageNum
+                                                        ? 'bg-blue-500 text-white border-blue-500'
+                                                        : 'border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                                }`}
+                                            >
+                                                {pageNum}
+                                            </button>
+                                        );
+                                    })}
+                                    
+                                    <button
+                                        disabled={page >= pagination.pages}
+                                        onClick={() => setPage(p => p + 1)}
+                                        className="px-3 py-1 border border-slate-300 dark:border-slate-600 rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                        Next
+                                    </button>
+                                </div>
                             </div>
                         )}
                     </>

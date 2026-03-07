@@ -5,6 +5,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Card from '../../components/Card';
 import { DetailedPatient } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import Loader from '../../components/Loader';
 
 const Section: React.FC<{ title: string; onAdd?: () => void; children: React.ReactNode; }> = ({ title, onAdd, children }) => (
     <Card>
@@ -47,12 +48,12 @@ const RecordCard: React.FC<{
                             <span className="text-xs text-slate-400 dark:text-slate-500 flex-shrink-0">({fieldCount} fields)</span>
                         </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                            {record.hospital?.name || 'Unknown Hospital'} • {new Date(record.createdAt).toLocaleDateString()}
+                            {record.hospital?.name || 'Unknown Hospital'} • {new Date(record.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}
                         </p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 flex-shrink-0 sm:text-right">
-                    <span className="hidden sm:inline">{new Date(record.createdAt).toLocaleTimeString()}</span>
+                    <span className="hidden sm:inline">{new Date(record.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })}</span>
                 </div>
             </div>
             
@@ -101,6 +102,9 @@ const PatientRecord: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'overview' | 'records'>('overview');
     const [pinnedPage, setPinnedPage] = useState(1);
     const [otherPage, setOtherPage] = useState(1);
+    const [accessError, setAccessError] = useState<string | null>(null);
+    const [accessLevel, setAccessLevel] = useState<'GENERAL' | 'COMPLETE' | null>(null);
+    const [requestingAccess, setRequestingAccess] = useState(false);
     const RECORDS_PER_PAGE = 10;
 
     useEffect(() => {
@@ -109,7 +113,15 @@ const PatientRecord: React.FC = () => {
             try {
                 const resp = await fetch(`${API_URL}/hospitals/${user.id}/patients/${patientId}/summary`);
                 const data = await resp.json();
-                if (!resp.ok) throw new Error(data.error || 'Not found');
+                if (!resp.ok) {
+                    if (resp.status === 403) {
+                        setAccessError(data.error || 'Access to this patient has been denied or revoked');
+                        throw new Error('Access denied');
+                    }
+                    throw new Error(data.error || 'Not found');
+                }
+                setAccessError(null);
+                setAccessLevel(data.accessLevel || null);
                 const p = data.patient || {};
                 const detailed: DetailedPatient = {
                     id: p.id || patientId,
@@ -155,7 +167,12 @@ const PatientRecord: React.FC = () => {
                 if (resp.ok && data.records) {
                     setRecords(data.records || []);
                 } else if (!resp.ok) {
-                    console.error('fetch records error', data.error);
+                    if (resp.status === 403) {
+                        console.error('Access denied to patient records');
+                        setRecords([]);
+                    } else {
+                        console.error('fetch records error', data.error);
+                    }
                 }
             } catch (err) {
                 console.error('fetch records', err);
@@ -193,6 +210,21 @@ const PatientRecord: React.FC = () => {
         return otherRecords.slice(start, start + RECORDS_PER_PAGE);
     }, [otherRecords, otherPage]);
 
+    const formatDateIST = (dateString: string) => {
+        if (!dateString) return 'N/A';
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return 'N/A';
+        return date.toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+    };
+
     const humanize = (value: string) => {
         return value
             .replace(/[_\-]+/g, ' ')
@@ -213,11 +245,33 @@ const PatientRecord: React.FC = () => {
         }
     };
 
-    if (loading) return <div className="text-center p-8">Loading...</div>;
+    if (loading) return <Loader text="Loading patient record..." fullScreen />;
     if (!patient) return <div className="text-center p-8">Patient data not found.</div>;
 
     const handleAddRecord = () => {
         navigate(`/hospital/patients/${patientId}/add-record`);
+    };
+
+    const handleRequestCompleteAccess = async () => {
+        if (!user || !patientId) return;
+        setRequestingAccess(true);
+        try {
+            const resp = await fetch(`${API_URL}/hospitals/${user.id}/patients/${patientId}/request-complete-access`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                alert(data.error || 'Failed to request complete access');
+            } else {
+                alert('Complete access request sent to patient. They will be notified to approve your request.');
+            }
+        } catch (err) {
+            console.error('request complete access error:', err);
+            alert('Failed to send request');
+        } finally {
+            setRequestingAccess(false);
+        }
     };
 
     return (
@@ -226,7 +280,7 @@ const PatientRecord: React.FC = () => {
                 <div>
                     <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200">PATIENT RECORD - {patient.name} (ID: {patient.id})</h2>
                     <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                        <span>Last Updated: {patient.lastUpdated}</span> | <span>Created: {patient.created}</span>
+                        <span>Last Updated: {formatDateIST(patient.lastUpdated)}</span> | <span>Created: {formatDateIST(patient.created)}</span>
                     </div>
                 </div>
                 <div className="flex gap-2">
@@ -235,6 +289,76 @@ const PatientRecord: React.FC = () => {
                     <button onClick={handleAddRecord} className="px-4 py-2 bg-brand-primary text-white text-sm rounded-lg hover:bg-brand-secondary">Add Record</button>
                 </div>
             </div>
+
+            {accessError && (
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-lg">
+                    <div className="flex items-start gap-3">
+                        <svg className="w-6 h-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <div className="flex-1">
+                            <h3 className="text-sm font-semibold text-red-800 dark:text-red-300">Access Denied</h3>
+                            <p className="text-sm text-red-700 dark:text-red-400 mt-1">{accessError}</p>
+                            <p className="text-sm text-red-600 dark:text-red-400 mt-2">
+                                The patient may have revoked your access or denied your access request. Please contact the patient to request access again.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {!accessError && accessLevel && (
+                <div className={`p-4 rounded-lg border ${
+                    accessLevel === 'COMPLETE' 
+                        ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900/30' 
+                        : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-900/30'
+                }`}>
+                    <div className="flex items-start gap-3">
+                        <svg className={`w-6 h-6 flex-shrink-0 mt-0.5 ${
+                            accessLevel === 'COMPLETE' 
+                                ? 'text-green-600 dark:text-green-400' 
+                                : 'text-yellow-600 dark:text-yellow-400'
+                        }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={
+                                accessLevel === 'COMPLETE'
+                                    ? "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                                    : "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                            } />
+                        </svg>
+                        <div className="flex-1">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                <div>
+                                    <h3 className={`text-sm font-semibold ${
+                                        accessLevel === 'COMPLETE' 
+                                            ? 'text-green-800 dark:text-green-300' 
+                                            : 'text-yellow-800 dark:text-yellow-300'
+                                    }`}>
+                                        {accessLevel === 'COMPLETE' ? 'Complete Access' : 'Partial Access'}
+                                    </h3>
+                                    <p className={`text-sm mt-1 ${
+                                        accessLevel === 'COMPLETE' 
+                                            ? 'text-green-700 dark:text-green-400' 
+                                            : 'text-yellow-700 dark:text-yellow-400'
+                                    }`}>
+                                        {accessLevel === 'COMPLETE' 
+                                            ? 'You have full access to this patient\'s medical records and personal health information.' 
+                                            : 'You have limited access to basic medical records.'}
+                                    </p>
+                                </div>
+                                {accessLevel === 'GENERAL' && (
+                                    <button
+                                        onClick={handleRequestCompleteAccess}
+                                        disabled={requestingAccess}
+                                        className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 dark:bg-yellow-700 dark:hover:bg-yellow-800 text-white text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                                    >
+                                        {requestingAccess ? 'Requesting...' : 'Request Complete Access'}
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="flex flex-wrap gap-3">
                 <button

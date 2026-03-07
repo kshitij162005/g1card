@@ -3,6 +3,9 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import ThemeToggle from '../components/ThemeToggle';
 import { API_URL } from '../config/api';
+import { useSSE } from '../hooks/useSSE';
+import AccessRequestModal from '../components/AccessRequestModal';
+import GlassNotification from '../components/GlassNotification';
 
 interface PatientHeaderProps {
     pendingCount?: number;
@@ -70,113 +73,169 @@ const PatientHeader: React.FC<PatientHeaderProps> = ({ pendingCount = 0, onOpenR
     );
 };
 
-interface AccessRequest {
-    id: string;
-    hospitalId: string;
-    hospitalName: string;
-    status: string;
-    createdAt: string;
-}
-
 const PatientLayout: React.FC = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
-    const [requests, setRequests] = useState<AccessRequest[]>([]);
-    const [activeRequest, setActiveRequest] = useState<AccessRequest | null>(null);
-    const [choice, setChoice] = useState<'GENERAL' | 'COMPLETE'>('GENERAL');
-    const [loadingDecision, setLoadingDecision] = useState(false);
-    const [dismissedIds, setDismissedIds] = useState<string[]>(() => {
-        try {
-            const raw = localStorage.getItem('g1card_dismissed_access_requests');
-            return raw ? JSON.parse(raw) : [];
-        } catch {
-            return [];
+    const [pendingCount, setPendingCount] = useState(0);
+    const [currentRequest, setCurrentRequest] = useState<{
+        requestId: string;
+        hospitalName: string;
+    } | null>(null);
+    const [notification, setNotification] = useState<{
+        title: string;
+        message: string;
+        type: 'info' | 'success' | 'warning' | 'error';
+    } | null>(null);
+
+    // SSE connection for real-time notifications
+    const { connected, lastEvent } = useSSE({
+        userId: user?.id || '',
+        userType: 'Patient',
+        enabled: !!user?.id,
+        onEvent: (eventData) => {
+            console.log('SSE Event received:', eventData);
+            
+            // Handle different event types
+            if (eventData.type === 'NEW_ACCESS_REQUEST' || eventData.type === 'ACCESS_UPGRADE_REQUEST') {
+                console.log('NEW ACCESS REQUEST detected - showing modal for:', eventData.hospitalName);
+                // Show modal for new access requests
+                setCurrentRequest({
+                    requestId: eventData.accessId || eventData.requestId,
+                    hospitalName: eventData.hospitalName || 'Hospital'
+                });
+                // Show notification toast as well
+                setNotification({
+                    title: eventData.title || 'New Access Request',
+                    message: eventData.message || `${eventData.hospitalName} wants to access your records`,
+                    type: 'info'
+                });
+                // Increment pending count
+                setPendingCount(prev => prev + 1);
+            } else if (eventData.type === 'ACCESS_REVOKED') {
+                // Show notification for revoked access
+                setNotification({
+                    title: eventData.title || 'Access Revoked',
+                    message: eventData.message || 'Hospital access has been revoked',
+                    type: 'info'
+                });
+                // Decrement pending count
+                setPendingCount(prev => Math.max(0, prev - 1));
+            } else if (eventData.type === 'MEDICAL_RECORD_CREATED') {
+                // Hospital added a new medical record
+                setNotification({
+                    title: eventData.title || 'New Medical Record',
+                    message: eventData.message || `${eventData.hospitalName} added a new record`,
+                    type: 'success'
+                });
+            } else if (eventData.type === 'RECORDS_ACCESSED') {
+                // Hospital viewed patient records
+                setNotification({
+                    title: eventData.title || 'Records Accessed',
+                    message: eventData.message || `${eventData.hospitalName} viewed your records`,
+                    type: 'info'
+                });
+            }
         }
     });
 
-    const pendingCount = requests.length;
+    // Log SSE connection status
+    useEffect(() => {
+        console.log('SSE Connection Status:', connected ? 'CONNECTED' : 'DISCONNECTED');
+    }, [connected]);
 
-    const saveDismissed = (next: string[]) => {
-        setDismissedIds(next);
-        try {
-            localStorage.setItem('g1card_dismissed_access_requests', JSON.stringify(next));
-        } catch {
-            // ignore
-        }
-    };
-
-    // Poll for pending access requests
+    // Fetch initial notification count
     useEffect(() => {
         if (!user?.id) return;
-        let cancelled = false;
-
-        const fetchPending = async () => {
+        const fetchCount = async () => {
             try {
-                const resp = await fetch(`${API_URL}/patients/${user.id}/access-requests?status=PENDING`);
+                const resp = await fetch(`${API_URL}/patients/${user.id}/notifications/count`);
                 const data = await resp.json();
-                if (!resp.ok) {
-                    return;
-                }
-                const list: AccessRequest[] = data.requests || [];
-                if (!cancelled) {
-                    setRequests(list);
-                    const next = list.find(r => !dismissedIds.includes(r.id));
-                    setActiveRequest(next || null);
+                if (resp.ok && data.counts) {
+                    setPendingCount(data.counts.total);
                 }
             } catch {
-                // ignore for now
+                // ignore
             }
         };
+        fetchCount();
+    }, [user?.id]);
 
-        fetchPending();
-        const interval = setInterval(fetchPending, 15000);
-        return () => {
-            cancelled = true;
-            clearInterval(interval);
-        };
-    }, [user?.id, dismissedIds]);
-
-    const handleDecision = async (approve: boolean) => {
-        if (!user?.id || !activeRequest) return;
-        setLoadingDecision(true);
+    const handleApproveAccess = async (accessLevel: 'general' | 'complete', requestId: string) => {
         try {
-            const body: any = { decision: approve ? 'APPROVE' : 'DENY' };
-            if (approve) {
-                body.accessLevel = choice;
+            const response = await fetch(
+                `${API_URL}/patients/${user?.id}/access-requests/${requestId}/decision`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        decision: 'APPROVE',
+                        accessLevel: accessLevel.toUpperCase()
+                    })
+                }
+            );
+
+            if (response.ok) {
+                setNotification({
+                    title: 'Access Granted',
+                    message: `${currentRequest?.hospitalName} has been granted ${accessLevel} access to your records.`,
+                    type: 'success'
+                });
+                setPendingCount(prev => Math.max(0, prev - 1));
+            } else {
+                const errorData = await response.json();
+                setNotification({
+                    title: 'Error',
+                    message: errorData.error || 'Failed to approve access request',
+                    type: 'error'
+                });
             }
-            const resp = await fetch(`${API_URL}/patients/${user.id}/access-requests/${activeRequest.id}/decision`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
+        } catch (error) {
+            setNotification({
+                title: 'Error',
+                message: 'Failed to approve access request',
+                type: 'error'
             });
-            const data = await resp.json();
-            if (!resp.ok) {
-                alert(data?.error || data?.message || 'Failed to update access request');
-                return;
-            }
-            setActiveRequest(null);
-        } catch (err) {
-            console.error('decision error', err);
-            alert('Error updating access request');
-        } finally {
-            setLoadingDecision(false);
         }
     };
 
-    const handleClosePopup = () => {
-        if (activeRequest) {
-            const next = Array.from(new Set([...dismissedIds, activeRequest.id]));
-            saveDismissed(next);
+    const handleDenyAccess = async (requestId: string) => {
+        try {
+            const response = await fetch(
+                `${API_URL}/patients/${user?.id}/access-requests/${requestId}/decision`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ decision: 'DENY' })
+                }
+            );
+
+            if (response.ok) {
+                setNotification({
+                    title: 'Access Denied',
+                    message: `Access request from ${currentRequest?.hospitalName} has been denied.`,
+                    type: 'info'
+                });
+                setPendingCount(prev => Math.max(0, prev - 1));
+            } else {
+                const errorData = await response.json();
+                setNotification({
+                    title: 'Error',
+                    message: errorData.error || 'Failed to deny access request',
+                    type: 'error'
+                });
+            }
+        } catch (error) {
+            setNotification({
+                title: 'Error',
+                message: 'Failed to deny access request',
+                type: 'error'
+            });
         }
-        setActiveRequest(null);
     };
 
     const handleOpenRequestsFromHeader = () => {
-        if (requests.length > 1) {
-            navigate('/patient/notifications');
-        } else if (requests.length === 1) {
-            setActiveRequest(requests[0]);
-        }
+        // Navigate to notifications page to see all pending and previous notifications
+        navigate('/patient/notifications');
     };
 
     return (
@@ -185,80 +244,25 @@ const PatientLayout: React.FC = () => {
             <main className="container mx-auto p-4 md:p-6">
                 <Outlet />
             </main>
-            {activeRequest && (
-                <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 dark:bg-black/60">
-                    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl p-6 w-full max-w-lg border border-slate-200 dark:border-slate-700 relative">
-                        <button
-                            type="button"
-                            onClick={handleClosePopup}
-                            className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                            aria-label="Close"
-                        >
-                            ×
-                        </button>
-                        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">
-                            Hospital Access Request
-                        </h3>
-                        <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">
-                            <strong>{activeRequest.hospitalName || 'A hospital'}</strong> is requesting access to your medical records.
-                        </p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-                            Requested at: {new Date(activeRequest.createdAt).toLocaleString()}
-                        </p>
-                        <div className="space-y-3 mb-4">
-                            <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Select what they can see:</p>
-                            <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-                                <input
-                                    type="radio"
-                                    name="accessLevel"
-                                    value="GENERAL"
-                                    checked={choice === 'GENERAL'}
-                                    onChange={() => setChoice('GENERAL')}
-                                />
-                                <span>
-                                    <strong>General Information Only</strong> (basic profile & your records from this hospital)
-                                </span>
-                            </label>
-                            <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-                                <input
-                                    type="radio"
-                                    name="accessLevel"
-                                    value="COMPLETE"
-                                    checked={choice === 'COMPLETE'}
-                                    onChange={() => setChoice('COMPLETE')}
-                                />
-                                <span>
-                                    <strong>Complete Information</strong> (all your records from every hospital)
-                                </span>
-                            </label>
-                        </div>
-                        <div className="flex justify-between items-center gap-3 mt-2">
-                            <button
-                                type="button"
-                                onClick={handleClosePopup}
-                                className="text-xs text-slate-500 dark:text-slate-400 hover:underline"
-                            >
-                                Decide later
-                            </button>
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={() => handleDecision(false)}
-                                    disabled={loadingDecision}
-                                    className="px-4 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
-                                >
-                                    Deny
-                                </button>
-                                <button
-                                    onClick={() => handleDecision(true)}
-                                    disabled={loadingDecision}
-                                    className="px-4 py-2 text-sm rounded-lg bg-brand-primary text-white hover:bg-brand-secondary"
-                                >
-                                    {loadingDecision ? 'Saving...' : 'Approve'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+
+            {/* Access Request Modal */}
+            <AccessRequestModal
+                isOpen={!!currentRequest}
+                onClose={() => setCurrentRequest(null)}
+                hospitalName={currentRequest?.hospitalName || ''}
+                requestId={currentRequest?.requestId || ''}
+                onApprove={handleApproveAccess}
+                onDeny={handleDenyAccess}
+            />
+
+            {/* Glass Notification */}
+            {notification && (
+                <GlassNotification
+                    title={notification.title}
+                    message={notification.message}
+                    type={notification.type}
+                    onClose={() => setNotification(null)}
+                />
             )}
         </div>
     );

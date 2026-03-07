@@ -2,36 +2,48 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Role } from '../types';
+import Loader from '../components/Loader';
 
 const LoginPage: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [role, setRole] = useState<Role>(Role.SUPER_ADMIN);
     const [showPassword, setShowPassword] = useState(false);
+    const [isLoggingIn, setIsLoggingIn] = useState(false);
     const navigate = useNavigate();
     const { login } = useAuth();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const ok = await login(role, email, password);
-        if (!ok) {
-            alert('Login failed. Check credentials.');
-            return;
-        }
-        switch (role) {
-            case Role.SUPER_ADMIN:
-                navigate('/admin/dashboard');
-                break;
-            case Role.HOSPITAL:
-                navigate('/hospital/dashboard');
-                break;
-            case Role.PATIENT:
-                navigate('/patient/dashboard');
-                break;
-            default:
-                navigate('/login');
+        setIsLoggingIn(true);
+        try {
+            const ok = await login(role, email, password);
+            if (!ok) {
+                alert('Login failed. Check credentials.');
+                setIsLoggingIn(false);
+                return;
+            }
+            switch (role) {
+                case Role.SUPER_ADMIN:
+                    navigate('/admin/dashboard');
+                    break;
+                case Role.HOSPITAL:
+                    navigate('/hospital/dashboard');
+                    break;
+                case Role.PATIENT:
+                    navigate('/patient/dashboard');
+                    break;
+                default:
+                    navigate('/login');
+            }
+        } catch (err) {
+            setIsLoggingIn(false);
         }
     };
+
+    if (isLoggingIn) {
+        return <Loader text="Logging you in..." fullScreen />;
+    }
 
     return (
         <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">

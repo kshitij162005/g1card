@@ -1,6 +1,7 @@
 import { API_URL } from '../../config/api';
 import React, { useEffect, useState } from 'react';
 import Card from '../../components/Card';
+import Loader from '../../components/Loader';
 
 interface PendingHospital {
     _id: string;
@@ -30,18 +31,23 @@ const PendingRequests: React.FC = () => {
     const [rejectReason, setRejectReason] = useState('');
     const [processing, setProcessing] = useState(false);
     const [search, setSearch] = useState('');
+    const [page, setPage] = useState(1);
+    const [pagination, setPagination] = useState({ total: 0, pages: 1, limit: 10 });
 
     useEffect(() => {
         fetchPendingHospitals();
-    }, []);
+    }, [page]);
 
     const fetchPendingHospitals = async () => {
         setLoading(true);
         try {
-            const resp = await fetch(`${API_URL}/superadmin/hospitals/pending?search=${encodeURIComponent(search)}`);
+            const resp = await fetch(`${API_URL}/superadmin/hospitals/pending?search=${encodeURIComponent(search)}&page=${page}&limit=10`);
             const data = await resp.json();
             if (data.ok) {
                 setHospitals(data.hospitals || []);
+                if (data.pagination) {
+                    setPagination(data.pagination);
+                }
             }
         } catch (err) {
             console.error('fetch pending hospitals error:', err);
@@ -111,6 +117,10 @@ const PendingRequests: React.FC = () => {
         });
     };
 
+    if (loading) {
+        return <Loader text="Loading pending requests..." fullScreen />;
+    }
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -137,7 +147,10 @@ const PendingRequests: React.FC = () => {
                         className="flex-1 px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
                     />
                     <button
-                        onClick={fetchPendingHospitals}
+                        onClick={() => {
+                            setPage(1);
+                            fetchPendingHospitals();
+                        }}
                         className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary transition-colors"
                     >
                         Search
@@ -235,6 +248,59 @@ const PendingRequests: React.FC = () => {
                             </div>
                         </Card>
                     ))}
+                </div>
+            )}
+
+            {/* Pagination Controls */}
+            {!loading && hospitals.length > 0 && pagination.pages > 1 && (
+                <div className="flex items-center justify-between pt-4">
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                        Showing {((page - 1) * pagination.limit) + 1} to {Math.min(page * pagination.limit, pagination.total)} of {pagination.total} requests
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <button
+                            disabled={page === 1}
+                            onClick={() => setPage(p => p - 1)}
+                            className="px-3 py-1 border dark:border-slate-600 rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            Previous
+                        </button>
+                        
+                        {/* Page Numbers */}
+                        {Array.from({ length: Math.min(pagination.pages, 5) }, (_, i) => {
+                            let pageNum;
+                            if (pagination.pages <= 5) {
+                                pageNum = i + 1;
+                            } else if (page <= 3) {
+                                pageNum = i + 1;
+                            } else if (page >= pagination.pages - 2) {
+                                pageNum = pagination.pages - 4 + i;
+                            } else {
+                                pageNum = page - 2 + i;
+                            }
+                            return (
+                                <button
+                                    key={pageNum}
+                                    onClick={() => setPage(pageNum)}
+                                    className={`px-3 py-1 border rounded-lg text-sm transition-colors ${
+                                        page === pageNum
+                                            ? 'bg-blue-500 text-white border-blue-500'
+                                            : 'border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                    }`}
+                                >
+                                    {pageNum}
+                                </button>
+                            );
+                        })}
+                        
+                        <button
+                            disabled={page === pagination.pages}
+                            onClick={() => setPage(p => p + 1)}
+                            className="px-3 py-1 border dark:border-slate-600 rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            Next
+                        </button>
+                    </div>
                 </div>
             )}
 

@@ -39,6 +39,8 @@ import ReportsPage from './pages/hospital/ReportsPage';
 import HospitalSettingsPage from './pages/hospital/HospitalSettingsPage';
 import AddStaffPage from './pages/hospital/AddStaffPage';
 import StaffDetailsPage from './pages/hospital/StaffDetailsPage';
+import HospitalAuditLogs from './pages/hospital/HospitalAuditLogs';
+import HospitalNotifications from './pages/hospital/HospitalNotifications';
 
 
 import PatientLayout from './layouts/PatientLayout';
@@ -106,6 +108,8 @@ const AppRoutes: React.FC = () => {
                         <Route path="staff/add" element={<AddStaffPage />} />
                         <Route path="staff/:staffId" element={<StaffDetailsPage />} />
                         <Route path="reports" element={<ReportsPage />} />
+                        <Route path="logs" element={<HospitalAuditLogs />} />
+                        <Route path="notifications" element={<HospitalNotifications />} />
                         <Route path="settings" element={<HospitalSettingsPage />} />
                     </Route>
                     <Route path="*" element={<Navigate to="/hospital/dashboard" />} />

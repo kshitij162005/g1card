@@ -24,22 +24,46 @@ const ToggleSwitch: React.FC<{ label: string; defaultChecked?: boolean; disabled
 );
 
 
-const PermissionControl: React.FC<{ hospital: string; access: string; lastAccessed: string; onRevoke?: () => void; }> = ({ hospital, access, lastAccessed, onRevoke }) => (
-    <div className="p-4 border dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-700/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-            <p className="font-semibold text-slate-800 dark:text-slate-200">{hospital}</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Last Accessed: {lastAccessed}</p>
+const PermissionControl: React.FC<{ 
+    hospital: string; 
+    accessLevel: 'GENERAL' | 'COMPLETE'; 
+    lastAccessed: string; 
+    accessId: string;
+    onRevoke?: () => void; 
+    onAccessLevelChange?: (hospitalName: string, currentLevel: 'GENERAL' | 'COMPLETE', newLevel: 'GENERAL' | 'COMPLETE') => void;
+}> = ({ hospital, accessLevel, lastAccessed, accessId, onRevoke, onAccessLevelChange }) => {
+    const [currentLevel, setCurrentLevel] = React.useState(accessLevel);
+
+    const handleChange = async (newLevel: 'GENERAL' | 'COMPLETE') => {
+        if (newLevel === currentLevel || !onAccessLevelChange) return;
+        onAccessLevelChange(hospital, currentLevel, newLevel);
+    };
+
+    // Update local state when prop changes (after successful update)
+    React.useEffect(() => {
+        setCurrentLevel(accessLevel);
+    }, [accessLevel]);
+
+    return (
+        <div className="p-4 border dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-700/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <p className="font-semibold text-slate-800 dark:text-slate-200">{hospital}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Last Accessed: {lastAccessed}</p>
+            </div>
+            <div className="flex items-center gap-4">
+                <select 
+                    value={currentLevel} 
+                    onChange={(e) => handleChange(e.target.value as 'GENERAL' | 'COMPLETE')}
+                    className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-accent focus:border-brand-accent outline-none"
+                >
+                    <option value="COMPLETE">Complete Access</option>
+                    <option value="GENERAL">Partial Access (Hospital records only)</option>
+                </select>
+                <button onClick={onRevoke} className="text-sm text-red-600 hover:underline font-semibold whitespace-nowrap">Revoke Access</button>
+            </div>
         </div>
-        <div className="flex items-center gap-4">
-             <select defaultValue={access} className="text-sm border-slate-300 dark:border-slate-600 rounded-lg focus:ring-brand-accent focus:border-brand-accent">
-                 <option>Full Access</option>
-                 <option>Limited</option>
-                 <option>Read-only</option>
-             </select>
-             <button onClick={onRevoke} className="text-sm text-red-600 hover:underline font-semibold">Revoke Access</button>
-        </div>
-    </div>
-);
+    );
+};
 
 const ActiveSession: React.FC<{ browser: string; location: string; lastActive: string; }> = ({ browser, location, lastActive }) => (
     <div className="p-3 border dark:border-slate-700 rounded-lg flex items-center justify-between">
@@ -52,9 +76,11 @@ const ActiveSession: React.FC<{ browser: string; location: string; lastActive: s
 );
 
 interface HospitalPermissionEntry {
+    accessId: string;
     hospitalId: string;
     hospitalName: string;
-    lastAccessed: string;
+    accessLevel: 'GENERAL' | 'COMPLETE';
+    lastAccessed: string | null;
 }
 
 const PatientSettings: React.FC = () => {
@@ -66,6 +92,14 @@ const PatientSettings: React.FC = () => {
     const [hospitalPermissions, setHospitalPermissions] = useState<HospitalPermissionEntry[]>([]);
     const [changingPassword, setChangingPassword] = useState(false);
     const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    const [revokeModal, setRevokeModal] = useState<{ show: boolean; accessId: string; hospitalName: string } | null>(null);
+    const [accessLevelModal, setAccessLevelModal] = useState<{ 
+        show: boolean; 
+        accessId: string; 
+        hospitalName: string; 
+        currentLevel: 'GENERAL' | 'COMPLETE';
+        newLevel: 'GENERAL' | 'COMPLETE';
+    } | null>(null);
 
     useEffect(() => {
         const fetchPatient = async () => {
@@ -81,27 +115,16 @@ const PatientSettings: React.FC = () => {
         const fetchHospitalPermissions = async () => {
             if (!user?.id) return;
             try {
-                const resp = await fetch(`${API_URL}/patients/${user.id}/records`);
+                const resp = await fetch(`${API_URL}/patients/${user.id}/hospital-accesses`);
                 const data = await resp.json();
-                if (!resp.ok || !data?.records) return;
-                const map = new Map<string, { name: string; lastAccessed: string }>();
-                (data.records as any[]).forEach((rec: any) => {
-                    const hospital = rec.hospital || {};
-                    const hospitalId = hospital._id || hospital.id;
-                    const hospitalName = hospital.name || 'Unknown Hospital';
-                    if (!hospitalId) return;
-                    const createdAt: string = rec.createdAt || rec.updatedAt || rec.date || new Date().toISOString();
-                    const existing = map.get(hospitalId);
-                    if (!existing || new Date(createdAt) > new Date(existing.lastAccessed)) {
-                        map.set(hospitalId, { name: hospitalName, lastAccessed: createdAt });
-                    }
-                });
-                const list: HospitalPermissionEntry[] = Array.from(map.entries()).map(([hospitalId, v]) => ({
-                    hospitalId,
-                    hospitalName: v.name,
-                    lastAccessed: v.lastAccessed,
+                if (!resp.ok || !data?.accesses) return;
+                const list: HospitalPermissionEntry[] = data.accesses.map((a: any) => ({
+                    accessId: a.id,
+                    hospitalId: a.hospitalId,
+                    hospitalName: a.hospitalName,
+                    accessLevel: a.accessLevel,
+                    lastAccessed: a.lastAccessed,
                 }));
-                list.sort((a, b) => new Date(b.lastAccessed).getTime() - new Date(a.lastAccessed).getTime());
                 setHospitalPermissions(list);
             } catch (err) {
                 console.warn('Could not fetch hospital permissions', err);
@@ -156,9 +179,21 @@ const PatientSettings: React.FC = () => {
         } finally { setSaving(false); }
     };
 
-    const formatDate = (iso: string) => {
+    const formatDate = (iso: string | null) => {
+        if (!iso) return 'Never';
         const d = new Date(iso);
         if (Number.isNaN(d.getTime())) return 'N/A';
+        const now = new Date();
+        const diffMs = now.getTime() - d.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+        
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+        if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+        if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+        
         return d.toLocaleDateString('en-GB', {
             day: '2-digit',
             month: 'short',
@@ -166,10 +201,58 @@ const PatientSettings: React.FC = () => {
         });
     };
 
-    const handleRevokeHospital = (hospitalId: string) => {
-        if (!window.confirm('Are you sure you want to revoke this hospital\'s access?')) return;
-        setHospitalPermissions(prev => prev.filter(h => h.hospitalId !== hospitalId));
-        // Note: actual enforcement of revocation will be implemented later on the backend.
+    const handleAccessLevelChange = async (accessId: string, hospitalName: string, currentLevel: 'GENERAL' | 'COMPLETE', newLevel: 'GENERAL' | 'COMPLETE') => {
+        // Show confirmation modal
+        setAccessLevelModal({ show: true, accessId, hospitalName, currentLevel, newLevel });
+    };
+
+    const confirmAccessLevelChange = async () => {
+        if (!accessLevelModal || !user?.id) return;
+        const { accessId, newLevel } = accessLevelModal;
+        try {
+            const resp = await fetch(`${API_URL}/patients/${user.id}/hospital-accesses/${accessId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ accessLevel: newLevel }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                alert('Failed to update access level: ' + (data?.error || data?.message || 'unknown'));
+                return;
+            }
+            // Update local state
+            setHospitalPermissions(prev => prev.map(h => 
+                h.accessId === accessId ? { ...h, accessLevel: newLevel } : h
+            ));
+            setAccessLevelModal(null);
+        } catch (err) {
+            console.error('update access level error', err);
+            alert('Error updating access level');
+        }
+    };
+
+    const handleRevokeHospital = (accessId: string, hospitalName: string) => {
+        setRevokeModal({ show: true, accessId, hospitalName });
+    };
+
+    const confirmRevokeAccess = async () => {
+        if (!revokeModal || !user?.id) return;
+        try {
+            const resp = await fetch(`${API_URL}/patients/${user.id}/hospital-accesses/${revokeModal.accessId}/revoke`, {
+                method: 'POST',
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                alert('Failed to revoke access: ' + (data?.error || data?.message || 'unknown'));
+                return;
+            }
+            // Remove from local state
+            setHospitalPermissions(prev => prev.filter(h => h.accessId !== revokeModal.accessId));
+            setRevokeModal(null);
+        } catch (err) {
+            console.error('revoke access error', err);
+            alert('Error revoking access');
+        }
     };
 
     const submitPasswordChange = async () => {
@@ -228,21 +311,24 @@ const PatientSettings: React.FC = () => {
                 </Section>
                 
                 <Section title="Hospital Permissions">
-                    <p className="text-sm text-slate-600 dark:text-slate-400">Manage which hospitals can access your data.</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Manage which hospitals can access your data and control their access level.</p>
                     {hospitalPermissions.length === 0 ? (
-                        <p className="text-sm text-slate-500">No hospitals have accessed your records yet.</p>
+                        <p className="text-sm text-slate-500">No hospitals currently have access to your records.</p>
                     ) : (
                         hospitalPermissions.map(h => (
                             <PermissionControl
-                                key={h.hospitalId}
+                                key={h.accessId}
                                 hospital={h.hospitalName}
-                                access="Full Access"
+                                accessLevel={h.accessLevel}
                                 lastAccessed={formatDate(h.lastAccessed)}
-                                onRevoke={() => handleRevokeHospital(h.hospitalId)}
+                                accessId={h.accessId}
+                                onRevoke={() => handleRevokeHospital(h.accessId, h.hospitalName)}
+                                onAccessLevelChange={(hospitalName, currentLevel, newLevel) => 
+                                    handleAccessLevelChange(h.accessId, hospitalName, currentLevel, newLevel)
+                                }
                             />
                         ))
                     )}
-                    <button className="text-sm px-4 py-2 border border-dashed border-slate-400 dark:border-slate-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300">+ Add New Hospital</button>
                 </Section>
 
                 <Section title="Security Settings">
@@ -301,108 +387,297 @@ const PatientSettings: React.FC = () => {
             </div>
         </Card>
         {showEdit && (
-            <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 dark:bg-black/60">
-                <div className="bg-white dark:bg-slate-900 rounded-lg p-6 w-full max-w-lg ring-1 ring-slate-200 dark:ring-slate-800">
-                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Edit Profile</h3>
-                    <div className="mt-4 space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label htmlFor="edit-firstName" className="block text-sm text-slate-700 dark:text-slate-300">First name</label>
-                                <input id="edit-firstName" className="mt-1 p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={form.firstName} onChange={(e)=>updateField('firstName', e.target.value)} />
-                            </div>
-                            <div>
-                                <label htmlFor="edit-lastName" className="block text-sm text-slate-700 dark:text-slate-300">Last name</label>
-                                <input id="edit-lastName" className="mt-1 p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={form.lastName} onChange={(e)=>updateField('lastName', e.target.value)} />
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label htmlFor="edit-email" className="block text-sm text-slate-700 dark:text-slate-300">Email</label>
-                                <input id="edit-email" className="mt-1 p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={form.email} onChange={(e)=>updateField('email', e.target.value)} />
-                            </div>
-                            <div>
-                                <label htmlFor="edit-phone" className="block text-sm text-slate-700 dark:text-slate-300">Phone</label>
-                                <input id="edit-phone" className="mt-1 p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={form.phone} onChange={(e)=>updateField('phone', e.target.value)} />
+            <div className="fixed inset-0 z-40 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowEdit(false)} />
+                <div className="relative w-full max-w-lg animate-in zoom-in-95 duration-200">
+                    <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden">
+                        <div className="border-b border-slate-800 px-6 py-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-lg font-semibold text-white tracking-tight">Edit Profile Information</h2>
+                                    <p className="text-sm text-slate-400 mt-1">Update your personal details</p>
+                                </div>
+                                <button onClick={() => setShowEdit(false)} className="text-slate-500 hover:text-slate-300 transition-colors p-1" aria-label="Close">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
                             </div>
                         </div>
-                        <div>
-                            <label htmlFor="edit-address" className="block text-sm text-slate-700 dark:text-slate-300">Address</label>
-                            <input id="edit-address" className="mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={form.address} onChange={(e)=>updateField('address', e.target.value)} />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label htmlFor="edit-dob" className="block text-sm text-slate-700 dark:text-slate-300">DOB</label>
-                                <input id="edit-dob" type="date" className="mt-1 p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={form.dob} onChange={(e)=>updateField('dob', e.target.value)} />
+                        <div className="px-6 py-5">
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label htmlFor="edit-firstName" className="block text-sm font-medium text-slate-300 mb-1.5">First Name</label>
+                                        <input id="edit-firstName" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.firstName} onChange={(e)=>updateField('firstName', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="edit-lastName" className="block text-sm font-medium text-slate-300 mb-1.5">Last Name</label>
+                                        <input id="edit-lastName" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.lastName} onChange={(e)=>updateField('lastName', e.target.value)} />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label htmlFor="edit-email" className="block text-sm font-medium text-slate-300 mb-1.5">Email Address</label>
+                                        <input id="edit-email" type="email" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.email} onChange={(e)=>updateField('email', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="edit-phone" className="block text-sm font-medium text-slate-300 mb-1.5">Phone Number</label>
+                                        <input id="edit-phone" type="tel" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.phone} onChange={(e)=>updateField('phone', e.target.value)} />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label htmlFor="edit-address" className="block text-sm font-medium text-slate-300 mb-1.5">Address</label>
+                                    <input id="edit-address" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.address} onChange={(e)=>updateField('address', e.target.value)} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label htmlFor="edit-dob" className="block text-sm font-medium text-slate-300 mb-1.5">Date of Birth</label>
+                                        <input id="edit-dob" type="date" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.dob} onChange={(e)=>updateField('dob', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="edit-emergencyName" className="block text-sm font-medium text-slate-300 mb-1.5">Emergency Contact Name</label>
+                                        <input id="edit-emergencyName" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.emergencyContactName} onChange={(e)=>updateField('emergencyContactName', e.target.value)} />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label htmlFor="edit-emergencyPhone" className="block text-sm font-medium text-slate-300 mb-1.5">Emergency Contact Phone</label>
+                                    <input id="edit-emergencyPhone" type="tel" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.emergencyContactPhone} onChange={(e)=>updateField('emergencyContactPhone', e.target.value)} />
+                                </div>
                             </div>
-                            <div>
-                                <label htmlFor="edit-emergencyName" className="block text-sm text-slate-700 dark:text-slate-300">Emergency Contact</label>
-                                <input id="edit-emergencyName" className="mt-1 p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={form.emergencyContactName} onChange={(e)=>updateField('emergencyContactName', e.target.value)} />
+                        </div>
+                        <div className="border-t border-slate-800 px-6 py-4 bg-slate-900/50">
+                            <div className="flex gap-3 justify-end">
+                                <button onClick={()=>setShowEdit(false)} className="px-5 py-2.5 text-sm font-medium text-slate-300 bg-transparent border border-slate-700 rounded-md hover:bg-slate-800 hover:border-slate-600 transition-colors">Cancel</button>
+                                <button onClick={saveProfile} disabled={saving} className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[100px]">{saving ? 'Saving...' : 'Save Changes'}</button>
                             </div>
                         </div>
-                        <div>
-                            <label htmlFor="edit-emergencyPhone" className="block text-sm text-slate-700 dark:text-slate-300">Emergency Phone</label>
-                            <input id="edit-emergencyPhone" className="mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100" value={form.emergencyContactPhone} onChange={(e)=>updateField('emergencyContactPhone', e.target.value)} />
-                        </div>
-                    </div>
-                    <div className="mt-4 flex justify-end gap-3">
-                        <button onClick={()=>setShowEdit(false)} className="px-4 py-2 border rounded bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200">Cancel</button>
-                        <button onClick={saveProfile} disabled={saving} className="px-4 py-2 bg-brand-primary text-white rounded">{saving ? 'Saving...' : 'Save'}</button>
                     </div>
                 </div>
             </div>
         )}
         {changingPassword && (
-            <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 dark:bg-black/60">
-                <div className="bg-white dark:bg-slate-900 rounded-lg p-6 w-full max-w-md ring-1 ring-slate-200 dark:ring-slate-800">
-                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Change Password</h3>
-                    <div className="mt-4 space-y-3">
-                        <div>
-                            <label htmlFor="currentPassword" className="block text-sm text-slate-700 dark:text-slate-300">Current password</label>
-                            <input
-                                id="currentPassword"
-                                type="password"
-                                className="mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
-                                value={passwordForm.currentPassword}
-                                onChange={(e) => updatePasswordField('currentPassword', e.target.value)}
-                            />
+            <div className="fixed inset-0 z-40 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => { setChangingPassword(false); setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' }); }} />
+                <div className="relative w-full max-w-md animate-in zoom-in-95 duration-200">
+                    <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden">
+                        <div className="border-b border-slate-800 px-6 py-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-lg font-semibold text-white tracking-tight">Change Password</h2>
+                                    <p className="text-sm text-slate-400 mt-1">Update your account password</p>
+                                </div>
+                                <button onClick={() => { setChangingPassword(false); setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' }); }} className="text-slate-500 hover:text-slate-300 transition-colors p-1" aria-label="Close">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
-                        <div>
-                            <label htmlFor="newPassword" className="block text-sm text-slate-700 dark:text-slate-300">New password</label>
-                            <input
-                                id="newPassword"
-                                type="password"
-                                className="mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
-                                value={passwordForm.newPassword}
-                                onChange={(e) => updatePasswordField('newPassword', e.target.value)}
-                            />
+                        <div className="px-6 py-5">
+                            <div className="space-y-4">
+                                <div>
+                                    <label htmlFor="currentPassword" className="block text-sm font-medium text-slate-300 mb-1.5">Current Password</label>
+                                    <input
+                                        id="currentPassword"
+                                        type="password"
+                                        className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none"
+                                        value={passwordForm.currentPassword}
+                                        onChange={(e) => updatePasswordField('currentPassword', e.target.value)}
+                                        placeholder="Enter current password"
+                                    />
+                                </div>
+                                <div>
+                                    <label htmlFor="newPassword" className="block text-sm font-medium text-slate-300 mb-1.5">New Password</label>
+                                    <input
+                                        id="newPassword"
+                                        type="password"
+                                        className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none"
+                                        value={passwordForm.newPassword}
+                                        onChange={(e) => updatePasswordField('newPassword', e.target.value)}
+                                        placeholder="Enter new password"
+                                    />
+                                </div>
+                                <div>
+                                    <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-300 mb-1.5">Confirm New Password</label>
+                                    <input
+                                        id="confirmPassword"
+                                        type="password"
+                                        className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none"
+                                        value={passwordForm.confirmPassword}
+                                        onChange={(e) => updatePasswordField('confirmPassword', e.target.value)}
+                                        placeholder="Re-enter new password"
+                                    />
+                                </div>
+                            </div>
+                            <div className="bg-slate-800/30 border border-slate-700/50 rounded-md px-4 py-3 mt-5">
+                                <div className="flex gap-3">
+                                    <svg className="w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <p className="text-xs text-slate-400 leading-relaxed">
+                                        Password must be at least 8 characters long and include uppercase, lowercase, and numbers.
+                                    </p>
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <label htmlFor="confirmPassword" className="block text-sm text-slate-700 dark:text-slate-300">Confirm new password</label>
-                            <input
-                                id="confirmPassword"
-                                type="password"
-                                className="mt-1 w-full p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
-                                value={passwordForm.confirmPassword}
-                                onChange={(e) => updatePasswordField('confirmPassword', e.target.value)}
-                            />
+                        <div className="border-t border-slate-800 px-6 py-4 bg-slate-900/50">
+                            <div className="flex gap-3 justify-end">
+                                <button
+                                    onClick={() => {
+                                        setChangingPassword(false);
+                                        setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+                                    }}
+                                    className="px-5 py-2.5 text-sm font-medium text-slate-300 bg-transparent border border-slate-700 rounded-md hover:bg-slate-800 hover:border-slate-600 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={submitPasswordChange}
+                                    className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+                                >
+                                    Update Password
+                                </button>
+                            </div>
                         </div>
                     </div>
-                    <div className="mt-4 flex justify-end gap-3">
-                        <button
-                            onClick={() => {
-                                setChangingPassword(false);
-                                setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-                            }}
-                            className="px-4 py-2 border rounded bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={submitPasswordChange}
-                            className="px-4 py-2 bg-brand-primary text-white rounded"
-                        >
-                            Update Password
-                        </button>
+                </div>
+            </div>
+        )}
+        {revokeModal?.show && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setRevokeModal(null)} />
+                <div className="relative w-full max-w-md animate-in zoom-in-95 duration-200">
+                    <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden">
+                        <div className="border-b border-slate-800 px-6 py-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-lg font-semibold text-white tracking-tight">Revoke Hospital Access</h2>
+                                    <p className="text-sm text-slate-400 mt-1">{revokeModal.hospitalName}</p>
+                                </div>
+                                <button onClick={() => setRevokeModal(null)} className="text-slate-500 hover:text-slate-300 transition-colors p-1" aria-label="Close">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div className="px-6 py-5">
+                            <div className="bg-red-900/20 border border-red-800/50 rounded-md px-4 py-3.5 mb-5">
+                                <div className="flex gap-3">
+                                    <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                    <div>
+                                        <p className="text-sm text-red-300 font-medium mb-2">
+                                            You are about to revoke access for <strong>{revokeModal.hospitalName}</strong>
+                                        </p>
+                                        <p className="text-xs text-red-400/90 mb-2">This action will immediately:</p>
+                                        <ul className="text-xs text-red-400/80 space-y-1 ml-1">
+                                            <li>• Terminate all access to your medical records</li>
+                                            <li>• Prevent updates to your health information</li>
+                                            <li>• Require a new authorization to restore access</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="bg-slate-800/30 border border-slate-700/50 rounded-md px-4 py-3">
+                                <div className="flex gap-3">
+                                    <svg className="w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <p className="text-xs text-slate-400 leading-relaxed">
+                                        This is a permanent action. The hospital can request access again, but you will need to approve it.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="border-t border-slate-800 px-6 py-4 bg-slate-900/50">
+                            <div className="flex gap-3 justify-end">
+                                <button
+                                    onClick={() => setRevokeModal(null)}
+                                    className="px-5 py-2.5 text-sm font-medium text-slate-300 bg-transparent border border-slate-700 rounded-md hover:bg-slate-800 hover:border-slate-600 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={confirmRevokeAccess}
+                                    className="px-5 py-2.5 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors"
+                                >
+                                    Revoke Access
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+        {accessLevelModal?.show && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setAccessLevelModal(null)} />
+                <div className="relative w-full max-w-md animate-in zoom-in-95 duration-200">
+                    <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden">
+                        <div className="border-b border-slate-800 px-6 py-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-lg font-semibold text-white tracking-tight">Modify Access Level</h2>
+                                    <p className="text-sm text-slate-400 mt-1">{accessLevelModal.hospitalName}</p>
+                                </div>
+                                <button onClick={() => setAccessLevelModal(null)} className="text-slate-500 hover:text-slate-300 transition-colors p-1" aria-label="Close">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div className="px-6 py-5">
+                            <p className="text-sm text-slate-300 leading-relaxed mb-5">
+                                You are about to change the access level for <span className="font-medium text-white">{accessLevelModal.hospitalName}</span>.
+                            </p>
+                            <div className="bg-slate-800/50 border border-slate-700 rounded-md p-4 mb-5">
+                                <div className="flex items-center justify-between mb-3">
+                                    <span className="text-sm text-slate-400">Current Access:</span>
+                                    <span className="text-sm font-medium text-white">{accessLevelModal.currentLevel === 'COMPLETE' ? 'Complete Access' : 'Partial Access'}</span>
+                                </div>
+                                <div className="flex items-center justify-center my-2">
+                                    <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                                    </svg>
+                                </div>
+                                <div className="flex items-center justify-between pt-3 border-t border-slate-700">
+                                    <span className="text-sm text-slate-400">New Access:</span>
+                                    <span className="text-sm font-medium text-blue-400">{accessLevelModal.newLevel === 'COMPLETE' ? 'Complete Access' : 'Partial Access'}</span>
+                                </div>
+                            </div>
+                            <div className="bg-slate-800/30 border border-slate-700/50 rounded-md px-4 py-3">
+                                <div className="flex gap-3">
+                                    <svg className="w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <p className="text-xs text-slate-400 leading-relaxed">
+                                        {accessLevelModal.newLevel === 'COMPLETE' 
+                                            ? 'Complete access grants the hospital permission to view all your medical records including lab results, imaging, and detailed treatment history.'
+                                            : 'Partial access limits the hospital to viewing only basic medical information and hospital-specific records.'}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="border-t border-slate-800 px-6 py-4 bg-slate-900/50">
+                            <div className="flex gap-3 justify-end">
+                                <button
+                                    onClick={() => setAccessLevelModal(null)}
+                                    className="px-5 py-2.5 text-sm font-medium text-slate-300 bg-transparent border border-slate-700 rounded-md hover:bg-slate-800 hover:border-slate-600 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={confirmAccessLevelChange}
+                                    className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+                                >
+                                    Confirm Change
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
