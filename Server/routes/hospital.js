@@ -1,4 +1,6 @@
 import express from 'express';
+import { logAccessRequestCreation, logRecordCreation, logPHIAccess } from '../utils/auditLogger.js';
+import { sendEventToUser } from './sse.js';
 
 const router = express.Router();
 
@@ -23,50 +25,44 @@ router.get('/:id', async (req, res) => {
 router.get('/:id/dashboard-metrics', async (req, res) => {
   try {
     const Hospital = (await import('../models/Hospital.js')).default;
-    const Patient = (await import('../models/Patient.js')).default;
-    const Staff = (await import('../models/Staff.js')).default;
+    const HospitalAccess = (await import('../models/HospitalAccess.js')).default;
     const Record = (await import('../models/Record.js')).default;
     const id = req.params.id;
     if (!id) return res.status(400).json({ error: 'Missing hospital id' });
     const hospital = await Hospital.findById(id);
     if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
 
-    // Filter by hospitals array OR legacy hospital field
-    const patientFilter = { $or: [{ hospitals: id }, { hospital: id }] };
-    const [patientsTotal, staffTotal, recordsTotal, recentPatients] = await Promise.all([
-      Patient.countDocuments(patientFilter),
-      Staff.countDocuments({ hospital: id }),
+    const [patientsApproved, patientsPending, recordsTotal, recentAccess] = await Promise.all([
+      HospitalAccess.countDocuments({ hospital: id, status: 'APPROVED' }),
+      HospitalAccess.countDocuments({ hospital: id, status: 'PENDING' }),
       Record.countDocuments({ hospital: id }),
-      Patient.find(patientFilter).lean(),
+      HospitalAccess.find({ hospital: id, status: 'APPROVED' })
+        .populate('patient', 'name firstName lastName email phone gender patientId')
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean(),
     ]);
 
-    // Sort patients by when they were linked to this hospital (using hospitalLinks), fallback to createdAt
-    const patientsWithLinkDate = recentPatients.map(p => {
-      // Find the link entry for this hospital
-      const linkEntry = (p.hospitalLinks || []).find(
-        (link) => link.hospital && link.hospital.toString() === id
-      );
-      const linkedAt = linkEntry?.linkedAt || p.createdAt;
-      return { ...p, linkedAt };
-    });
-    
-    // Sort by linkedAt descending and take top 5
-    patientsWithLinkDate.sort((a, b) => new Date(b.linkedAt).getTime() - new Date(a.linkedAt).getTime());
-    const top5Patients = patientsWithLinkDate.slice(0, 5);
+    const recentPatients = recentAccess
+      .filter(access => access.patient)
+      .map(access => {
+        const p = access.patient;
+        return {
+          id: p._id,
+          patientId: p.patientId || p._id,
+          name: p.name || `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Unknown',
+          email: p.email || '',
+          phone: p.phone || '',
+          gender: p.gender || '',
+          createdAt: access.createdAt,
+        };
+      });
 
     const metrics = {
-      patientsTotal,
-      staffTotal,
+      patientsTotal: patientsApproved,
+      patientsPending,
       recordsTotal,
-      recentPatients: top5Patients.map(p => ({
-        id: p._id,
-        patientId: p.patientId || p._id,
-        name: p.name || `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Unknown',
-        email: p.email,
-        phone: p.phone,
-        gender: p.gender,
-        createdAt: p.linkedAt, // Use linkedAt as the displayed date
-      })),
+      recentPatients,
     };
 
     return res.json({ ok: true, metrics });
@@ -193,6 +189,46 @@ router.post('/:id/patients', async (req, res) => {
       { upsert: true, new: true }
     );
 
+    // Create audit log for access request creation
+    await logAccessRequestCreation({
+      hospitalId: hospital._id,
+      hospitalName: hospital.name,
+      patientId: patient._id,
+      patientName: `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || 'Patient',
+      accessId: access._id,
+      req
+    });
+
+    // Create notification in database for patient
+    const Notification = (await import('../models/Notification.js')).default;
+    const notification = await Notification.create({
+      type: 'ACCESS_REQUEST',
+      recipient: patient._id,
+      recipientModel: 'Patient',
+      sender: hospital._id,
+      senderModel: 'Hospital',
+      title: 'New Access Request',
+      message: `${hospital.name} is requesting access to your medical records.`,
+      metadata: {
+        hospitalId: hospital._id,
+        hospitalName: hospital.name,
+        accessId: access._id
+      },
+      relatedAccess: access._id,
+      actionUrl: '/patient/notifications'
+    });
+
+    // Send real-time notification to patient via SSE
+    sendEventToUser('Patient', patient._id.toString(), {
+      type: 'NEW_ACCESS_REQUEST',
+      title: 'New Access Request',
+      message: `${hospital.name} is requesting access to your medical records.`,
+      timestamp: new Date().toISOString(),
+      hospitalName: hospital.name,
+      accessId: access._id.toString(),
+      notificationId: notification._id.toString()
+    });
+
     return res.json({
       ok: true,
       accessRequest: {
@@ -215,6 +251,7 @@ router.post('/:id/patients/:patientId/resend-access', async (req, res) => {
     const Hospital = (await import('../models/Hospital.js')).default;
     const Patient = (await import('../models/Patient.js')).default;
     const HospitalAccess = (await import('../models/HospitalAccess.js')).default;
+    const Notification = (await import('../models/Notification.js')).default;
     const id = req.params.id;
     const patientId = req.params.patientId;
     if (!id || !patientId) return res.status(400).json({ error: 'Missing hospital id or patient id' });
@@ -230,6 +267,46 @@ router.post('/:id/patients/:patientId/resend-access', async (req, res) => {
       { new: true }
     );
     if (!access) return res.status(404).json({ error: 'Access request not found to resend' });
+
+    // Create audit log for resend
+    await logAccessRequestCreation({
+      hospitalId: hospital._id,
+      hospitalName: hospital.name,
+      patientId: patient._id,
+      patientName: `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || 'Patient',
+      accessId: access._id,
+      req
+    });
+
+    // Create notification in database for patient
+    const notification = await Notification.create({
+      type: 'ACCESS_REQUEST',
+      recipient: patient._id,
+      recipientModel: 'Patient',
+      sender: hospital._id,
+      senderModel: 'Hospital',
+      title: 'New Access Request',
+      message: `${hospital.name} is requesting access to your medical records again.`,
+      metadata: {
+        hospitalId: hospital._id,
+        hospitalName: hospital.name,
+        accessId: access._id,
+        isResend: true
+      },
+      relatedAccess: access._id,
+      actionUrl: '/patient/notifications'
+    });
+
+    // Send real-time notification to patient via SSE
+    sendEventToUser('Patient', patient._id.toString(), {
+      type: 'NEW_ACCESS_REQUEST',
+      title: 'New Access Request',
+      message: `${hospital.name} is requesting access to your medical records again.`,
+      timestamp: new Date().toISOString(),
+      hospitalName: hospital.name,
+      accessId: access._id.toString(),
+      notificationId: notification._id.toString()
+    });
 
     return res.json({
       ok: true,
@@ -492,6 +569,59 @@ router.post('/:id/patients/:patientId/records', async (req, res) => {
     const rec = new Record({ hospital: hospital._id, patient: patient._id, form: formId, data: data || {}, attachments: attachments || [], createdBy });
     await rec.save();
 
+    // Get form name for audit logging
+    let formName = 'Medical Record';
+    if (formId) {
+      const formTemplate = await FormTemplate.findById(formId).lean();
+      formName = formTemplate?.name || formName;
+    }
+
+    // Get consent information for audit logging
+    const HospitalAccess = (await import('../models/HospitalAccess.js')).default;
+    const access = await HospitalAccess.findOne({ hospital: hospital._id, patient: patient._id }).lean();
+
+    // Create audit log for record creation
+    await logRecordCreation({
+      hospitalId: hospital._id,
+      hospitalName: hospital.name,
+      patientId: patient._id,
+      patientName: `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || 'Patient',
+      recordId: rec._id,
+      formName,
+      consentId: access?._id,
+      req
+    });
+
+    // Notify patient about new medical record
+    const Notification = (await import('../models/Notification.js')).default;
+    const notification = await Notification.create({
+      type: 'MEDICAL_RECORD_CREATED',
+      recipient: patient._id,
+      recipientModel: 'Patient',
+      sender: hospital._id,
+      senderModel: 'Hospital',
+      title: 'New Medical Record Added',
+      message: `${hospital.name} has added a new ${formName} to your medical records.`,
+      metadata: {
+        hospitalId: hospital._id,
+        hospitalName: hospital.name,
+        recordId: rec._id,
+        formName
+      },
+      actionUrl: '/patient/health-history'
+    });
+
+    // Send real-time notification via SSE
+    sendEventToUser('Patient', patient._id.toString(), {
+      type: 'MEDICAL_RECORD_CREATED',
+      title: 'New Medical Record Added',
+      message: `${hospital.name} has added a new ${formName} to your medical records.`,
+      timestamp: new Date().toISOString(),
+      hospitalName: hospital.name,
+      recordId: rec._id.toString(),
+      notificationId: notification._id.toString()
+    });
+
     return res.json({ ok: true, record: rec });
   } catch (err) {
     console.error('submit record error:', err);
@@ -521,6 +651,9 @@ router.get('/:id/patients/:patientId/records', async (req, res) => {
       return res.status(403).json({ error: 'Access to patient records not approved' });
     }
 
+    // Update lastAccessed timestamp
+    await HospitalAccess.findByIdAndUpdate(access._id, { lastAccessed: new Date() });
+
     const recordFilter = { patient: patient._id };
     if (access.accessLevel === 'GENERAL') {
       // Only this hospital's own records
@@ -533,6 +666,60 @@ router.get('/:id/patients/:patientId/records', async (req, res) => {
       .populate('form', 'name description fields')
       .sort({ createdAt: -1 })
       .lean();
+
+    // Create audit log for PHI access
+    await logPHIAccess({
+      hospitalId: hospital._id,
+      hospitalName: hospital.name,
+      patientId: patient._id,
+      patientName: `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || 'Patient',
+      recordId: records.length > 0 ? records[0]._id : null,
+      recordType: records.length > 0 ? (records[0].form?.name || 'Medical Records') : 'Medical Records',
+      accessLevel: access.accessLevel,
+      consentId: access._id,
+      req
+    });
+
+    // Notify patient about record access (only if there are records to view)
+    if (records.length > 0) {
+      const Notification = (await import('../models/Notification.js')).default;
+      
+      // Check if we already notified recently to avoid spam (within last 5 minutes)
+      const recentNotification = await Notification.findOne({
+        type: 'RECORDS_ACCESSED',
+        recipient: patient._id,
+        sender: hospital._id,
+        createdAt: { $gte: new Date(Date.now() - 5 * 60 * 1000) }
+      });
+
+      if (!recentNotification) {
+        const notification = await Notification.create({
+          type: 'RECORDS_ACCESSED',
+          recipient: patient._id,
+          recipientModel: 'Patient',
+          sender: hospital._id,
+          senderModel: 'Hospital',
+          title: 'Medical Records Accessed',
+          message: `${hospital.name} viewed your medical records (${access.accessLevel === 'COMPLETE' ? 'Complete Access' : 'General Access'}).`,
+          metadata: {
+            hospitalId: hospital._id,
+            hospitalName: hospital.name,
+            accessLevel: access.accessLevel,
+            recordCount: records.length
+          }
+        });
+
+        // Send real-time notification via SSE
+        sendEventToUser('Patient', patient._id.toString(), {
+          type: 'RECORDS_ACCESSED',
+          title: 'Medical Records Accessed',
+          message: `${hospital.name} viewed your medical records.`,
+          timestamp: new Date().toISOString(),
+          hospitalName: hospital.name,
+          notificationId: notification._id.toString()
+        });
+      }
+    }
 
     return res.json({ ok: true, records, accessLevel: access.accessLevel });
   } catch (err) {
@@ -561,6 +748,9 @@ router.get('/:id/patients/:patientId/summary', async (req, res) => {
     if (!access || access.status !== 'APPROVED') {
       return res.status(403).json({ error: 'Access to patient profile not approved' });
     }
+
+    // Update lastAccessed timestamp
+    await HospitalAccess.findByIdAndUpdate(access._id, { lastAccessed: new Date() });
 
     const base = {
       id: patient._id,
@@ -603,47 +793,202 @@ router.get('/:id/patients/:patientId/summary', async (req, res) => {
   }
 });
 
-// Dashboard metrics for hospital
-router.get('/:id/dashboard-metrics', async (req, res) => {
+// Request complete access upgrade (from GENERAL to COMPLETE)
+router.post('/:id/patients/:patientId/request-complete-access', async (req, res) => {
   try {
     const Hospital = (await import('../models/Hospital.js')).default;
     const Patient = (await import('../models/Patient.js')).default;
-    const Staff = (await import('../models/Staff.js')).default;
-    const Record = (await import('../models/Record.js')).default;
+    const HospitalAccess = (await import('../models/HospitalAccess.js')).default;
+    const Notification = (await import('../models/Notification.js')).default;
+
     const id = req.params.id;
+    const patientId = req.params.patientId;
+    if (!id || !patientId) return res.status(400).json({ error: 'Missing hospital id or patient id' });
+
+    const hospital = await Hospital.findById(id);
+    if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
+    const patient = await Patient.findById(patientId);
+    if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
+    const access = await HospitalAccess.findOne({ hospital: hospital._id, patient: patient._id });
+    console.log('Access found:', access ? { status: access.status, accessLevel: access.accessLevel } : 'null');
+    
+    if (!access || access.status !== 'APPROVED') {
+      console.log('Access check failed:', { hasAccess: !!access, status: access?.status });
+      return res.status(403).json({ error: 'Access to patient profile not approved' });
+    }
+
+    console.log('Current access level:', access.accessLevel);
+    if (access.accessLevel === 'COMPLETE') {
+      console.log('Already has complete access');
+      return res.status(400).json({ error: 'You already have complete access to this patient' });
+    }
+
+    // Check if there's already a pending upgrade request for the CURRENT access state
+    // Only block if there's an unread notification AND the access level hasn't changed
+    const existingNotification = await Notification.findOne({
+      type: 'ACCESS_UPGRADE_REQUEST',
+      recipient: patient._id,
+      sender: hospital._id,
+      relatedAccess: access._id,
+      isRead: false
+    });
+
+    console.log('Existing notification:', existingNotification ? 'found' : 'not found');
+    if (existingNotification) {
+      // Check if the metadata matches current state (i.e., patient hasn't changed access level since)
+      const currentAccessMatches = existingNotification.metadata?.currentAccessLevel === access.accessLevel;
+      if (currentAccessMatches) {
+        console.log('Already has pending request for current access level');
+        return res.status(400).json({ error: 'You have already requested complete access. Please wait for the patient to respond.' });
+      } else {
+        // Access level has changed since last request, mark old notification as read/obsolete
+        console.log('Access level changed since last request, marking old notification as obsolete');
+        existingNotification.isRead = true;
+        existingNotification.readAt = new Date();
+        await existingNotification.save();
+      }
+    }
+
+    console.log('Creating notification for patient:', patient._id);
+    // Create notification for patient
+    const notification = await Notification.create({
+      type: 'ACCESS_UPGRADE_REQUEST',
+      recipient: patient._id,
+      recipientModel: 'Patient',
+      sender: hospital._id,
+      senderModel: 'Hospital',
+      title: 'Complete Access Request',
+      message: `${hospital.name} has requested to upgrade their access level from Partial Access to Complete Access.`,
+      metadata: {
+        hospitalId: hospital._id,
+        hospitalName: hospital.name,
+        currentAccessLevel: access.accessLevel,
+        requestedAccessLevel: 'COMPLETE'
+      },
+      relatedAccess: access._id,
+      actionUrl: '/patient/settings'
+    });
+
+    // Send real-time notification to patient via SSE
+    sendEventToUser('Patient', patient._id.toString(), {
+      type: 'ACCESS_UPGRADE_REQUEST',
+      title: 'Complete Access Request',
+      message: `${hospital.name} has requested to upgrade their access level from Partial Access to Complete Access.`,
+      timestamp: new Date().toISOString(),
+      hospitalName: hospital.name,
+      notificationId: notification._id.toString()
+    });
+
+    return res.json({ 
+      ok: true, 
+      message: 'Complete access request sent to patient',
+      notification: notification
+    });
+  } catch (err) {
+    console.error('request complete access error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Get notification counts for hospital (lightweight endpoint for badges)
+router.get('/:id/notifications/count', async (req, res) => {
+  try {
+    const Notification = (await import('../models/Notification.js')).default;
+    const id = req.params.id;
+
     if (!id) return res.status(400).json({ error: 'Missing hospital id' });
 
-    const hospital = await Hospital.findById(id).lean();
-    if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
-
-    // Filter by hospitals array OR legacy hospital field
-    const patientFilter = { $or: [{ hospitals: id }, { hospital: id }] };
-    const [patientsTotal, recentPatients, staffTotal, recordsTotal] = await Promise.all([
-      Patient.countDocuments(patientFilter),
-      Patient.find(patientFilter).sort({ createdAt: -1 }).limit(5).select('name patientId createdAt email phone gender').lean(),
-      Staff.countDocuments({ hospital: id }),
-      Record.countDocuments({ hospital: id }),
-    ]);
+    // Count unread notifications
+    const unreadCount = await Notification.countDocuments({
+      recipient: id,
+      recipientModel: 'Hospital',
+      isRead: false
+    });
 
     return res.json({
       ok: true,
-      metrics: {
-        patientsTotal,
-        staffTotal,
-        recordsTotal,
-        recentPatients: recentPatients.map(p => ({
-          id: p._id,
-          patientId: p.patientId || p._id,
-          name: p.name || '',
-          email: p.email || '',
-          phone: p.phone || '',
-          gender: p.gender || '',
-          createdAt: p.createdAt,
-        })),
-      },
+      counts: {
+        unread: unreadCount,
+        total: unreadCount
+      }
     });
   } catch (err) {
-    console.error('dashboard metrics error:', err);
+    console.error('notification count error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Get notifications for a hospital
+router.get('/:id/notifications', async (req, res) => {
+  try {
+    const Notification = (await import('../models/Notification.js')).default;
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ error: 'Missing hospital id' });
+
+    console.log('Fetching notifications for hospital:', id);
+    
+    const notifications = await Notification.find({ 
+      recipient: id, 
+      recipientModel: 'Hospital' 
+    })
+      .populate('sender', 'firstName lastName email')
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
+
+    console.log('Found notifications for hospital:', notifications.length);
+
+    return res.json({
+      ok: true,
+      notifications: notifications.map(n => ({
+        id: n._id.toString(),
+        type: n.type,
+        title: n.title,
+        message: n.message,
+        metadata: n.metadata,
+        isRead: n.isRead,
+        readAt: n.readAt,
+        actionUrl: n.actionUrl,
+        relatedAccess: n.relatedAccess,
+        sender: n.sender,
+        createdAt: n.createdAt,
+        updatedAt: n.updatedAt,
+      }))
+    });
+  } catch (err) {
+    console.error('fetch notifications error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Mark hospital notification as read
+router.patch('/:id/notifications/:notificationId/read', async (req, res) => {
+  try {
+    const Notification = (await import('../models/Notification.js')).default;
+    const id = req.params.id;
+    const notificationId = req.params.notificationId;
+    if (!id || !notificationId) {
+      return res.status(400).json({ error: 'Missing hospital id or notification id' });
+    }
+
+    const notification = await Notification.findOne({ 
+      _id: notificationId, 
+      recipient: id,
+      recipientModel: 'Hospital'
+    });
+    
+    if (!notification) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+
+    notification.isRead = true;
+    notification.readAt = new Date();
+    await notification.save();
+
+    return res.json({ ok: true, notification });
+  } catch (err) {
+    console.error('mark notification read error:', err);
     return res.status(500).json({ error: err.message || String(err) });
   }
 });

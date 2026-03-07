@@ -264,9 +264,13 @@ router.post('/seed', async (req, res) => {
 import patientRouter from './routes/patient.js';
 import hospitalRouter from './routes/hospital.js';
 import superadminRouter from './routes/superadmin.js';
+import auditLogsRouter from './routes/auditLogs.js';
+import sseRouter from './routes/sse.js';
 
 router.use('/patients', patientRouter);
 router.use('/hospitals', hospitalRouter);
 router.use('/superadmin', superadminRouter);
+router.use('/audit-logs', auditLogsRouter);
+router.use('/sse', sseRouter);
 
 export default router;

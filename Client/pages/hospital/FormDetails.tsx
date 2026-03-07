@@ -98,8 +98,8 @@ const FormDetails: React.FC = () => {
                                 {form.active ? 'Active' : 'Inactive'}
                             </span>
                         </span>
-                        {form.updatedAt && <span>Last updated {new Date(form.updatedAt).toLocaleString()}</span>}
-                        {form.createdAt && <span>Created {new Date(form.createdAt).toLocaleDateString()}</span>}
+                        {form.updatedAt && <span>Last updated {new Date(form.updatedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}</span>}
+                        {form.createdAt && <span>Created {new Date(form.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}</span>}
                     </div>
                 </div>
                 <div className="flex flex-wrap gap-2">

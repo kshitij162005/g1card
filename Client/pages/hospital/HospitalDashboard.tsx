@@ -27,10 +27,10 @@ const HospitalDashboard: React.FC = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const [loadingMetrics, setLoadingMetrics] = useState(false);
-    const [metrics, setMetrics] = useState<{ patientsTotal: number; recordsTotal: number; staffTotal: number; recentPatients: RecentPatient[] }>({
+    const [metrics, setMetrics] = useState<{ patientsTotal: number; recordsTotal: number; patientsPending: number; recentPatients: RecentPatient[] }>({
         patientsTotal: 0,
         recordsTotal: 0,
-        staffTotal: 0,
+        patientsPending: 0,
         recentPatients: [],
     });
 
@@ -45,7 +45,7 @@ const HospitalDashboard: React.FC = () => {
                 setMetrics({
                     patientsTotal: data.metrics?.patientsTotal ?? 0,
                     recordsTotal: data.metrics?.recordsTotal ?? 0,
-                    staffTotal: data.metrics?.staffTotal ?? 0,
+                    patientsPending: data.metrics?.patientsPending ?? 0,
                     recentPatients: data.metrics?.recentPatients ?? [],
                 });
             } catch (err) {
@@ -56,11 +56,6 @@ const HospitalDashboard: React.FC = () => {
         };
         fetchMetrics();
     }, [user]);
-
-    const pendingVerifications = [
-        { type: 'Staff members awaiting approval', count: 3 },
-        { type: 'New patients pending verification', count: 5 },
-    ];
 
     // Format last activity time
     const formatLastActivity = () => {
@@ -88,10 +83,9 @@ const HospitalDashboard: React.FC = () => {
                 </div>
             </Card>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <StatCard title="Active Patients" value={metrics.patientsTotal} loading={loadingMetrics} />
                 <StatCard title="Medical Records" value={metrics.recordsTotal} loading={loadingMetrics} />
-                <StatCard title="Staff Members" value={metrics.staffTotal} loading={loadingMetrics} />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -110,7 +104,7 @@ const HospitalDashboard: React.FC = () => {
                                             <span className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Patient ID: {item.patientId}</span>
                                         </div>
                                         <div className="text-xs text-slate-500 dark:text-slate-400">
-                                            {new Date(item.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at {new Date(item.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                                            {new Date(item.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}
                                         </div>
                                     </div>
                                 </li>
@@ -119,14 +113,18 @@ const HospitalDashboard: React.FC = () => {
                     )}
                 </Card>
                  <Card title="Pending Verifications">
-                     <ul className="divide-y divide-slate-200 dark:divide-slate-700">
-                        {pendingVerifications.map(item => (
-                            <li key={item.type} className="py-3 flex justify-between items-center text-sm">
-                               <span className="text-slate-800 dark:text-slate-300">{item.type}</span>
-                               <span className="font-bold text-brand-primary bg-brand-light dark:bg-brand-secondary dark:text-white rounded-full px-2 py-1">{item.count}</span>
+                     {loadingMetrics ? (
+                        <p className="text-sm text-slate-500 dark:text-slate-400">Loading...</p>
+                     ) : metrics.patientsPending === 0 ? (
+                        <p className="text-sm text-slate-500 dark:text-slate-400">No pending verifications.</p>
+                     ) : (
+                        <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+                            <li className="py-3 flex justify-between items-center text-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors" onClick={() => navigate('/hospital/patients')}>
+                               <span className="text-slate-800 dark:text-slate-300">New patients pending verification</span>
+                               <span className="font-bold text-brand-primary bg-brand-light dark:bg-brand-secondary dark:text-white rounded-full px-2 py-1">{metrics.patientsPending}</span>
                             </li>
-                        ))}
-                    </ul>
+                        </ul>
+                     )}
                 </Card>
             </div>
             
@@ -135,7 +133,6 @@ const HospitalDashboard: React.FC = () => {
                     <button onClick={() => navigate('/hospital/patients/add')} className="px-4 py-2 bg-brand-primary text-white text-sm rounded-lg hover:bg-brand-secondary transition-transform transform hover:scale-105">+ Add Patient</button>
                     <button onClick={() => navigate('/hospital/patients')} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-transform transform hover:scale-105">View Patients</button>
                     <button onClick={() => navigate('/hospital/forms')} className="px-4 py-2 bg-emerald-600 dark:bg-emerald-700 text-white text-sm rounded-lg hover:bg-emerald-700 dark:hover:bg-emerald-800 transition-transform transform hover:scale-105">+ Add Record</button>
-                    <button onClick={() => navigate('/hospital/staff')} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-transform transform hover:scale-105">Staff Mgmt</button>
                     <button onClick={() => navigate('/hospital/reports')} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-transform transform hover:scale-105">Generate Report</button>
                     <button onClick={() => navigate('/hospital/settings')} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-transform transform hover:scale-105">Account Settings</button>
                 </div>

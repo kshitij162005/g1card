@@ -9,12 +9,16 @@ const HospitalAccessSchema = new mongoose.Schema(
     patient: { type: mongoose.Schema.Types.ObjectId, ref: 'Patient', required: true },
     status: {
       type: String,
-      enum: ['PENDING', 'APPROVED', 'DENIED'],
+      enum: ['PENDING', 'APPROVED', 'DENIED', 'REVOKED'],
       default: 'PENDING',
     },
     accessLevel: {
       type: String,
       enum: ['GENERAL', 'COMPLETE', null],
+      default: null,
+    },
+    lastAccessed: {
+      type: Date,
       default: null,
     },
   },

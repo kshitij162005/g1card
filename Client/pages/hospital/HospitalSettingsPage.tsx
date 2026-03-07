@@ -344,7 +344,7 @@ const HospitalSettingsPage: React.FC = () => {
                     {/* Account Details */}
                     <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg">
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                            <span className="font-medium">Account Created:</span> {new Date(hospital.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                            <span className="font-medium">Account Created:</span> {new Date(hospital.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', year: 'numeric', month: 'long', day: 'numeric' })}
                         </p>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
                             To request changes to your account information or to reactivate a deactivated account, please contact the system administrator.

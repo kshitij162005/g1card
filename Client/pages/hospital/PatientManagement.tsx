@@ -64,6 +64,7 @@ const PatientManagement: React.FC = () => {
     const getStatusChip = (status: any) => {
         if (status === 'APPROVED') return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
         if (status === 'DENIED') return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+        if (status === 'REVOKED') return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
         return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
     };
 
@@ -157,6 +158,8 @@ const PatientManagement: React.FC = () => {
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                             {patients.map(patient => {
                                 const isConsentPending = String(patient.status || '').toUpperCase() === 'PENDING';
+                                const isAccessRevoked = String(patient.status || '').toUpperCase() === 'REVOKED';
+                                const canInteract = !isConsentPending && !isAccessRevoked;
                                 return (
                                 <tr key={patient.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-slate-700 dark:text-slate-300">
                                     <td className="py-4 px-6 whitespace-nowrap font-mono text-sm">{(patient as any).patientId || patient.id}</td>
@@ -170,23 +173,23 @@ const PatientManagement: React.FC = () => {
                                     <td className="py-4 px-6 whitespace-nowrap text-sm font-medium space-x-2">
                                         <button
                                             onClick={() => navigate(`/hospital/patients/${patient.id}`)}
-                                            className={`px-3 py-1 text-sm font-medium rounded-md border border-transparent text-brand-accent ${isConsentPending ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-50 dark:hover:bg-slate-700/60'}`}
+                                            className={`px-3 py-1 text-sm font-medium rounded-md border border-transparent text-brand-accent ${!canInteract ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-50 dark:hover:bg-slate-700/60'}`}
                                             aria-label={`View ${patient.name}`}
-                                            disabled={isConsentPending}
+                                            disabled={!canInteract}
                                         >
                                             View
                                         </button>
 
                                         <button
                                             onClick={() => navigate(`/hospital/patients/${patient.id}/add-record`)}
-                                            className={`px-3 py-1 text-sm font-medium rounded-md bg-emerald-600 text-white ${isConsentPending ? 'opacity-50 cursor-not-allowed' : 'hover:bg-emerald-700'}`}
+                                            className={`px-3 py-1 text-sm font-medium rounded-md bg-emerald-600 text-white ${!canInteract ? 'opacity-50 cursor-not-allowed' : 'hover:bg-emerald-700'}`}
                                             aria-label={`Add record for ${patient.name}`}
-                                            disabled={isConsentPending}
+                                            disabled={!canInteract}
                                         >
                                             Add Record
                                         </button>
 
-                                        {(patient as any).status === 'DENIED' && (
+                                        {((patient as any).status === 'DENIED' || (patient as any).status === 'REVOKED') && (
                                             <button
                                                 onClick={async () => {
                                                     try {
@@ -195,7 +198,7 @@ const PatientManagement: React.FC = () => {
                                                         });
                                                         const d = await resp.json();
                                                         if (!resp.ok) throw new Error(d.error || 'Failed to resend request');
-                                                        alert('Access request resent to patient.');
+                                                        alert(`Access request resent to patient. Status: ${(patient as any).status === 'REVOKED' ? 'Patient revoked your access.' : 'Patient denied your request.'}`);
                                                         fetchPatients(searchTerm);
                                                     } catch (err) {
                                                         console.error(err);
@@ -203,8 +206,9 @@ const PatientManagement: React.FC = () => {
                                                     }
                                                 }}
                                                 className="px-3 py-1 text-xs font-medium rounded-md bg-amber-500 text-white hover:bg-amber-600"
+                                                title={(patient as any).status === 'REVOKED' ? 'Request access again (patient revoked access)' : 'Resend access request'}
                                             >
-                                                Resend Request
+                                                {(patient as any).status === 'REVOKED' ? 'Request Again' : 'Resend Request'}
                                             </button>
                                         )}
 
