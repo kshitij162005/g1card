@@ -63,8 +63,13 @@ const AuditLogs: React.FC = () => {
     const [logs, setLogs] = useState<AuditLog[]>([]);
     const [loading, setLoading] = useState(false);
     const [loadingEntities, setLoadingEntities] = useState(false);
-    const [searchTerm, setSearchTerm] = useState('');
+    const [entitySearchTerm, setEntitySearchTerm] = useState('');
+    const [logSearchTerm, setLogSearchTerm] = useState('');
     const [eventFilter, setEventFilter] = useState('');
+    const [exportRangeType, setExportRangeType] = useState<'all' | 'months' | 'years'>('all');
+    const [exportRangeValue, setExportRangeValue] = useState(6);
+    const [showExportOptions, setShowExportOptions] = useState(false);
+    const [exporting, setExporting] = useState(false);
     const [expandedLog, setExpandedLog] = useState<string | null>(null);
     const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
     const [entityPagination, setEntityPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
@@ -73,8 +78,11 @@ const AuditLogs: React.FC = () => {
     useEffect(() => {
         setSelectedEntityId('');
         setLogs([]);
-        setSearchTerm('');
+        setEntitySearchTerm('');
+        setLogSearchTerm('');
+        setShowExportOptions(false);
         setEntityPagination({ page: 1, limit: 10, total: 0, totalPages: 0 });
+        setPagination({ page: 1, limit: 10, total: 0, totalPages: 0 });
         
         if (activeTab === 'hospital') {
             fetchHospitals();
@@ -90,7 +98,7 @@ const AuditLogs: React.FC = () => {
         } else {
             fetchPatients();
         }
-    }, [entityPagination.page]);
+    }, [entityPagination.page, activeTab, entitySearchTerm]);
 
     // Fetch logs when entity is selected or filters change
     useEffect(() => {
@@ -98,13 +106,29 @@ const AuditLogs: React.FC = () => {
             fetchLogs();
         } else {
             setLogs([]);
+            setShowExportOptions(false);
         }
-    }, [selectedEntityId, activeTab, eventFilter, pagination.page]);
+    }, [selectedEntityId, activeTab, eventFilter, pagination.page, logSearchTerm]);
+
+    useEffect(() => {
+        setEntityPagination(prev => ({ ...prev, page: 1 }));
+    }, [entitySearchTerm, activeTab]);
+
+    useEffect(() => {
+        setPagination(prev => ({ ...prev, page: 1 }));
+    }, [eventFilter, logSearchTerm, selectedEntityId, activeTab]);
 
     const fetchHospitals = async () => {
         setLoadingEntities(true);
         try {
-            const resp = await fetch(`${API_URL}/superadmin/hospitals?page=${entityPagination.page}&limit=10&sortBy=updatedAt&sortOrder=desc`);
+            const params = new URLSearchParams({
+                page: entityPagination.page.toString(),
+                limit: entityPagination.limit.toString(),
+            });
+            if (entitySearchTerm.trim()) {
+                params.append('search', entitySearchTerm.trim());
+            }
+            const resp = await fetch(`${API_URL}/superadmin/hospitals?${params.toString()}`);
             const data = await resp.json();
             if (resp.ok && data.hospitals) {
                 setHospitals(data.hospitals);
@@ -122,7 +146,14 @@ const AuditLogs: React.FC = () => {
     const fetchPatients = async () => {
         setLoadingEntities(true);
         try {
-            const resp = await fetch(`${API_URL}/superadmin/patients?page=${entityPagination.page}&limit=10&sortBy=updatedAt&sortOrder=desc`);
+            const params = new URLSearchParams({
+                page: entityPagination.page.toString(),
+                limit: entityPagination.limit.toString(),
+            });
+            if (entitySearchTerm.trim()) {
+                params.append('search', entitySearchTerm.trim());
+            }
+            const resp = await fetch(`${API_URL}/superadmin/patients?${params.toString()}`);
             const data = await resp.json();
             if (resp.ok && data.patients) {
                 setPatients(data.patients);
@@ -153,6 +184,9 @@ const AuditLogs: React.FC = () => {
             
             if (eventFilter) {
                 params.append('event', eventFilter);
+            }
+            if (logSearchTerm.trim()) {
+                params.append('search', logSearchTerm.trim());
             }
 
             const resp = await fetch(`${API_URL}${endpoint}?${params}`);
@@ -223,32 +257,83 @@ const AuditLogs: React.FC = () => {
         ? hospitals.find(h => h._id === selectedEntityId)
         : patients.find(p => p._id === selectedEntityId);
 
-    const exportToCSV = () => {
-        if (logs.length === 0) return;
+    const exportToCSV = async () => {
+        if (!selectedEntityId) return;
+        setExporting(true);
 
-        const headers = ['Timestamp', 'Event', 'Actor', 'Action', 'Outcome', 'Severity', 'HIPAA Justification'];
-        const rows = logs.map(log => [
-            formatDate(log.createdAt),
-            log.event,
-            log.actor.name || log.actor.email || 'Unknown',
-            log.action.description,
-            log.action.outcome,
-            log.severity,
-            log.compliance?.hipaaJustification || 'N/A'
-        ]);
+        const endpoint = activeTab === 'hospital'
+            ? `/audit-logs/hospital/${selectedEntityId}`
+            : `/audit-logs/patient/${selectedEntityId}`;
 
-        const csvContent = [
-            headers.join(','),
-            ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-        ].join('\n');
+        const allLogs: AuditLog[] = [];
+        let currentPage = 1;
+        const exportPageSize = 200;
 
-        const blob = new Blob([csvContent], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `audit-logs-${activeTab}-${selectedEntityId}-${new Date().toISOString()}.csv`;
-        a.click();
-        window.URL.revokeObjectURL(url);
+        try {
+            // Fetch all pages that match current filters/search + export range.
+            while (true) {
+                const params = new URLSearchParams({
+                    page: currentPage.toString(),
+                    limit: exportPageSize.toString(),
+                });
+
+                if (eventFilter) params.append('event', eventFilter);
+                if (logSearchTerm.trim()) params.append('search', logSearchTerm.trim());
+                if (exportRangeType === 'months') params.append('months', String(Math.max(1, exportRangeValue)));
+                if (exportRangeType === 'years') params.append('years', String(Math.max(1, exportRangeValue)));
+
+                const resp = await fetch(`${API_URL}${endpoint}?${params.toString()}`);
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    throw new Error(data?.error || 'Failed to export logs');
+                }
+
+                const pageLogs: AuditLog[] = data.logs || [];
+                allLogs.push(...pageLogs);
+
+                if (!data.pagination?.hasMore || pageLogs.length === 0) break;
+                currentPage += 1;
+
+                // Safety cap for unexpected pagination loops.
+                if (currentPage > 500) break;
+            }
+
+            if (allLogs.length === 0) {
+                notify('No logs found for selected export range');
+                return;
+            }
+
+            const headers = ['Timestamp', 'Event', 'Actor', 'Action', 'Outcome', 'Severity', 'HIPAA Justification'];
+            const rows = allLogs.map(log => [
+                formatDate(log.createdAt),
+                log.event,
+                log.actor.name || log.actor.email || 'Unknown',
+                log.action.description,
+                log.action.outcome,
+                log.severity,
+                log.compliance?.hipaaJustification || 'N/A'
+            ]);
+
+            const csvContent = [
+                headers.join(','),
+                ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+            ].join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const rangeLabel = exportRangeType === 'all' ? 'all' : `${Math.max(1, exportRangeValue)}-${exportRangeType}`;
+            a.download = `audit-logs-${activeTab}-${selectedEntityId}-${rangeLabel}-${new Date().toISOString()}.csv`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('export logs error:', err);
+            notify('Failed to export logs');
+        } finally {
+            setExporting(false);
+        }
     };
 
     if (loading && logs.length === 0) {
@@ -296,12 +381,22 @@ const AuditLogs: React.FC = () => {
                 </button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)] gap-6">
                 {/* Entity Selection Sidebar */}
-                <Card className="lg:col-span-1">
+                <Card className="h-fit">
                     <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-4">
                         Select {activeTab === 'hospital' ? 'Hospital' : 'Patient'}
                     </h3>
+
+                    <div className="mb-4">
+                        <input
+                            type="text"
+                            value={entitySearchTerm}
+                            onChange={(e) => setEntitySearchTerm(e.target.value)}
+                            placeholder={`Search ${activeTab}s...`}
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                    </div>
                     
                     {loadingEntities ? (
                         <div className="text-center py-8">
@@ -378,7 +473,7 @@ const AuditLogs: React.FC = () => {
                 </Card>
 
                 {/* Logs Display */}
-                <Card className="lg:col-span-3">
+                <Card>
                     {!selectedEntityId ? (
                         <div className="text-center py-12">
                             <svg className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -394,45 +489,106 @@ const AuditLogs: React.FC = () => {
                     ) : (
                         <>
                             {/* Header */}
-                            <div className="mb-6">
-                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                                    <div>
-                                        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                                            {activeTab === 'hospital' 
-                                                ? (selectedEntity as Hospital)?.name
-                                                : `${(selectedEntity as Patient)?.firstName || ''} ${(selectedEntity as Patient)?.lastName || ''}`.trim() || (selectedEntity as Patient)?.username
-                                            }
-                                        </h3>
-                                        <p className="text-sm text-slate-600 dark:text-slate-400">
-                                            {pagination.total} log entries found
-                                        </p>
+                            <div className="mb-6 space-y-3">
+                                <div className="flex flex-col gap-1">
+                                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                                        {activeTab === 'hospital' 
+                                            ? (selectedEntity as Hospital)?.name
+                                            : `${(selectedEntity as Patient)?.firstName || ''} ${(selectedEntity as Patient)?.lastName || ''}`.trim() || (selectedEntity as Patient)?.username
+                                        }
+                                    </h3>
+                                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                                        {pagination.total} log entries found
+                                    </p>
+                                </div>
+
+                                <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30 p-3">
+                                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-2">
+                                        <div className="lg:col-span-7">
+                                            <label className="sr-only" htmlFor="audit-log-search">Search logs</label>
+                                            <input
+                                                id="audit-log-search"
+                                                type="text"
+                                                value={logSearchTerm}
+                                                onChange={(e) => setLogSearchTerm(e.target.value)}
+                                                placeholder="Search logs by actor, target or message"
+                                                className="w-full h-10 px-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                        </div>
+
+                                        <div className="lg:col-span-3">
+                                            <label className="sr-only" htmlFor="audit-log-event-filter">Event filter</label>
+                                            <select
+                                                id="audit-log-event-filter"
+                                                value={eventFilter}
+                                                onChange={(e) => {
+                                                    setEventFilter(e.target.value);
+                                                    setPagination(prev => ({ ...prev, page: 1 }));
+                                                }}
+                                                className="w-full h-10 px-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-sm"
+                                            >
+                                                <option value="">All events</option>
+                                                <option value="ACCESS_REQUEST_CREATED">Access Requests</option>
+                                                <option value="ACCESS_REQUEST_APPROVED">Approvals</option>
+                                                <option value="ACCESS_REQUEST_DENIED">Denials</option>
+                                                <option value="PHI_ACCESSED">PHI Access</option>
+                                                <option value="RECORD_CREATED">Record Creation</option>
+                                                <option value="ACCESS_REVOKED">Revocations</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="lg:col-span-2">
+                                            <button
+                                                onClick={() => setShowExportOptions(prev => !prev)}
+                                                disabled={!selectedEntityId}
+                                                className="w-full h-10 px-4 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                {showExportOptions ? 'Hide Export Options' : 'Export CSV'}
+                                            </button>
+                                        </div>
                                     </div>
-                                    
-                                    <div className="flex gap-2">
-                                        <select
-                                            value={eventFilter}
-                                            onChange={(e) => {
-                                                setEventFilter(e.target.value);
-                                                setPagination(prev => ({ ...prev, page: 1 }));
-                                            }}
-                                            className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-sm"
-                                        >
-                                            <option value="">All Events</option>
-                                            <option value="ACCESS_REQUEST_CREATED">Access Requests</option>
-                                            <option value="ACCESS_REQUEST_APPROVED">Approvals</option>
-                                            <option value="ACCESS_REQUEST_DENIED">Denials</option>
-                                            <option value="PHI_ACCESSED">PHI Access</option>
-                                            <option value="RECORD_CREATED">Record Creation</option>
-                                            <option value="ACCESS_REVOKED">Revocations</option>
-                                        </select>
-                                        <button
-                                            onClick={exportToCSV}
-                                            disabled={logs.length === 0}
-                                            className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            Export CSV
-                                        </button>
-                                    </div>
+
+                                    {showExportOptions && (
+                                        <div className="mt-3 border-t border-slate-200 dark:border-slate-700 pt-3">
+                                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
+                                                Export Options
+                                            </p>
+                                            <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto_auto] gap-2 items-center">
+                                                <select
+                                                    id="audit-log-export-range"
+                                                    value={exportRangeType}
+                                                    onChange={(e) => setExportRangeType(e.target.value as 'all' | 'months' | 'years')}
+                                                    className="w-full h-10 px-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-sm"
+                                                >
+                                                    <option value="all">All time</option>
+                                                    <option value="months">Last N months</option>
+                                                    <option value="years">Last N years</option>
+                                                </select>
+
+                                                {exportRangeType !== 'all' && (
+                                                    <input
+                                                        type="number"
+                                                        min={1}
+                                                        value={exportRangeValue}
+                                                        onChange={(e) => setExportRangeValue(Math.max(1, Number(e.target.value) || 1))}
+                                                        className="w-20 h-10 px-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-sm"
+                                                        aria-label={`Export ${exportRangeType} value`}
+                                                    />
+                                                )}
+
+                                                <button
+                                                    onClick={exportToCSV}
+                                                    disabled={!selectedEntityId || exporting}
+                                                    className="h-10 px-4 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    {exporting ? 'Exporting...' : 'Download CSV'}
+                                                </button>
+                                            </div>
+                                            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                                                Exports all matching logs for the selected hospital/patient.
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 

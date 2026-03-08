@@ -2,6 +2,7 @@ import { API_URL } from '../../config/api';
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from '../../components/Card';
+import Loader from '../../components/Loader';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface FormField {

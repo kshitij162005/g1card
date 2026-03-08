@@ -167,26 +167,42 @@ const HospitalAuditLogs: React.FC = () => {
                             </p>
                         </div>
                         
-                        <div className="flex gap-2">
-                            <select
-                                value={eventFilter}
-                                onChange={(e) => setEventFilter(e.target.value)}
-                                className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            >
-                                <option value="">All Activities</option>
-                                <option value="ACCESS_REQUEST_CREATED">Access Requests</option>
-                                <option value="ACCESS_REQUEST_APPROVED">Patient Approvals</option>
-                                <option value="ACCESS_REQUEST_DENIED">Patient Denials</option>
-                                <option value="PHI_ACCESSED">Record Access</option>
-                                <option value="RECORD_CREATED">Record Creation</option>
-                            </select>
-                            <button
-                                onClick={exportToCSV}
-                                disabled={logs.length === 0}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Export CSV
-                            </button>
+                        <div className="w-full md:w-auto grid grid-cols-1 xl:grid-cols-2 gap-3">
+                            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/40 p-3 min-w-[250px]">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
+                                    Filter Logs
+                                </p>
+                                <select
+                                    value={eventFilter}
+                                    onChange={(e) => setEventFilter(e.target.value)}
+                                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                >
+                                    <option value="">All Activities</option>
+                                    <option value="ACCESS_REQUEST_CREATED">Access Requests</option>
+                                    <option value="ACCESS_REQUEST_APPROVED">Patient Approvals</option>
+                                    <option value="ACCESS_REQUEST_DENIED">Patient Denials</option>
+                                    <option value="PHI_ACCESSED">Record Access</option>
+                                    <option value="RECORD_CREATED">Record Creation</option>
+                                </select>
+                            </div>
+
+                            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/40 p-3 min-w-[250px]">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
+                                    Export Data
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={exportToCSV}
+                                        disabled={logs.length === 0}
+                                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Download CSV
+                                    </button>
+                                </div>
+                                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                                    Exports the currently visible page with active filters.
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
