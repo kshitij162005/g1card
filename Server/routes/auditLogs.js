@@ -13,6 +13,9 @@ router.get('/patient/:id', async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const skip = (page - 1) * limit;
     const event = req.query.event; // Optional filter by event type
+    const search = (req.query.search || '').toString().trim();
+    const months = parseInt(req.query.months, 10);
+    const years = parseInt(req.query.years, 10);
 
     const query = {
       $or: [
@@ -21,12 +24,40 @@ router.get('/patient/:id', async (req, res) => {
       ]
     };
 
+    const filters = [query];
     if (event) {
-      query.event = event;
+      filters.push({ event });
+    }
+    if (search) {
+      filters.push({
+        $or: [
+          { event: { $regex: search, $options: 'i' } },
+          { 'action.description': { $regex: search, $options: 'i' } },
+          { 'action.reason': { $regex: search, $options: 'i' } },
+          { 'action.denialReason': { $regex: search, $options: 'i' } },
+          { 'actor.name': { $regex: search, $options: 'i' } },
+          { 'actor.email': { $regex: search, $options: 'i' } },
+          { 'target.name': { $regex: search, $options: 'i' } },
+          { 'target.identifier': { $regex: search, $options: 'i' } },
+          { 'metadata.hospitalName': { $regex: search, $options: 'i' } },
+          { 'metadata.patientName': { $regex: search, $options: 'i' } },
+        ]
+      });
+    }
+    if (!Number.isNaN(months) && months > 0) {
+      const cutoff = new Date();
+      cutoff.setMonth(cutoff.getMonth() - months);
+      filters.push({ createdAt: { $gte: cutoff } });
+    } else if (!Number.isNaN(years) && years > 0) {
+      const cutoff = new Date();
+      cutoff.setFullYear(cutoff.getFullYear() - years);
+      filters.push({ createdAt: { $gte: cutoff } });
     }
 
-    const total = await AuditLog.countDocuments(query);
-    const logs = await AuditLog.find(query)
+    const finalQuery = filters.length > 1 ? { $and: filters } : query;
+
+    const total = await AuditLog.countDocuments(finalQuery);
+    const logs = await AuditLog.find(finalQuery)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -60,6 +91,9 @@ router.get('/hospital/:id', async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const skip = (page - 1) * limit;
     const event = req.query.event; // Optional filter by event type
+    const search = (req.query.search || '').toString().trim();
+    const months = parseInt(req.query.months, 10);
+    const years = parseInt(req.query.years, 10);
 
     const query = {
       $or: [
@@ -68,12 +102,40 @@ router.get('/hospital/:id', async (req, res) => {
       ]
     };
 
+    const filters = [query];
     if (event) {
-      query.event = event;
+      filters.push({ event });
+    }
+    if (search) {
+      filters.push({
+        $or: [
+          { event: { $regex: search, $options: 'i' } },
+          { 'action.description': { $regex: search, $options: 'i' } },
+          { 'action.reason': { $regex: search, $options: 'i' } },
+          { 'action.denialReason': { $regex: search, $options: 'i' } },
+          { 'actor.name': { $regex: search, $options: 'i' } },
+          { 'actor.email': { $regex: search, $options: 'i' } },
+          { 'target.name': { $regex: search, $options: 'i' } },
+          { 'target.identifier': { $regex: search, $options: 'i' } },
+          { 'metadata.hospitalName': { $regex: search, $options: 'i' } },
+          { 'metadata.patientName': { $regex: search, $options: 'i' } },
+        ]
+      });
+    }
+    if (!Number.isNaN(months) && months > 0) {
+      const cutoff = new Date();
+      cutoff.setMonth(cutoff.getMonth() - months);
+      filters.push({ createdAt: { $gte: cutoff } });
+    } else if (!Number.isNaN(years) && years > 0) {
+      const cutoff = new Date();
+      cutoff.setFullYear(cutoff.getFullYear() - years);
+      filters.push({ createdAt: { $gte: cutoff } });
     }
 
-    const total = await AuditLog.countDocuments(query);
-    const logs = await AuditLog.find(query)
+    const finalQuery = filters.length > 1 ? { $and: filters } : query;
+
+    const total = await AuditLog.countDocuments(finalQuery);
+    const logs = await AuditLog.find(finalQuery)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)

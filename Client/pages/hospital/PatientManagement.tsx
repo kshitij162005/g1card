@@ -94,7 +94,13 @@ const PatientManagement: React.FC = () => {
                          >
                              {showFilters ? 'Hide Filters ▲' : 'Advanced Filter ▼'}
                          </button>
-                         <button className="text-sm px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors">Export CSV</button>
+                         <button
+                             type="button"
+                             className="text-sm px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+                             aria-label="Export patients list"
+                         >
+                             Download CSV
+                         </button>
                     </div>
                 </div>
 
