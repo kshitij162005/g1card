@@ -46,7 +46,7 @@ const AccessRequestModal: React.FC<AccessRequestModalProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
             {/* Backdrop */}
             <div 
-                className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-pointer"
                 onClick={onClose}
             />
 

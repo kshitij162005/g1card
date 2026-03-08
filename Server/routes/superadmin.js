@@ -292,6 +292,330 @@ router.delete('/hospitals/:id', async (req, res) => {
   }
 });
 
+// ==================== HOSPITAL UPDATE REQUEST MANAGEMENT ====================
+
+// Get all hospital update requests (with filters)
+router.get('/update-requests', async (req, res) => {
+  try {
+    const HospitalUpdateRequest = (await import('../models/HospitalUpdateRequest.js')).default;
+    const Hospital = (await import('../models/Hospital.js')).default;
+    const Superadmin = (await import('../models/Superadmin.js')).default;
+    
+    const { status, page = 1, limit = 20 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    const filter = {};
+    if (status && status !== 'ALL') {
+      filter.status = status;
+    }
+    
+    const [requests, total] = await Promise.all([
+      HospitalUpdateRequest.find(filter)
+        .populate('hospital', 'name contactEmail city state')
+        .populate('reviewedBy', 'username email')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean(),
+      HospitalUpdateRequest.countDocuments(filter)
+    ]);
+    
+    return res.json({
+      ok: true,
+      requests,
+      pagination: {
+        total,
+        pages: Math.ceil(total / parseInt(limit)),
+        page: parseInt(page),
+        limit: parseInt(limit)
+      }
+    });
+  } catch (err) {
+    console.error('fetch update requests error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Get a specific update request with full details
+router.get('/update-requests/:requestId', async (req, res) => {
+  try {
+    const HospitalUpdateRequest = (await import('../models/HospitalUpdateRequest.js')).default;
+    const Hospital = (await import('../models/Hospital.js')).default;
+    const Superadmin = (await import('../models/Superadmin.js')).default;
+    
+    const { requestId } = req.params;
+    
+    const request = await HospitalUpdateRequest.findById(requestId)
+      .populate('hospital', 'name contactEmail phone city state regNumber license')
+      .populate('reviewedBy', 'username email')
+      .lean();
+    
+    if (!request) {
+      return res.status(404).json({ error: 'Update request not found' });
+    }
+    
+    return res.json({ ok: true, request });
+  } catch (err) {
+    console.error('fetch update request details error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Approve hospital update request
+router.patch('/update-requests/:requestId/approve', async (req, res) => {
+  try {
+    const HospitalUpdateRequest = (await import('../models/HospitalUpdateRequest.js')).default;
+    const Hospital = (await import('../models/Hospital.js')).default;
+    const Notification = (await import('../models/Notification.js')).default;
+    const { sendEventToUser } = await import('./sse.js');
+    
+    const { requestId } = req.params;
+    const { adminId, remarks } = req.body;
+    
+    if (!adminId) {
+      return res.status(400).json({ error: 'Admin ID is required' });
+    }
+    
+    const updateRequest = await HospitalUpdateRequest.findById(requestId);
+    if (!updateRequest) {
+      return res.status(404).json({ error: 'Update request not found' });
+    }
+    
+    if (updateRequest.status === 'APPROVED') {
+      return res.status(400).json({ error: 'Request already approved' });
+    }
+    
+    // Apply the changes to the hospital record
+    const hospital = await Hospital.findByIdAndUpdate(
+      updateRequest.hospital,
+      { $set: updateRequest.requestedChanges },
+      { new: true }
+    ).lean();
+    
+    // Update request status
+    updateRequest.status = 'APPROVED';
+    updateRequest.reviewedBy = adminId;
+    updateRequest.reviewedAt = new Date();
+    if (remarks) {
+      updateRequest.adminRemarks = remarks;
+      updateRequest.conversation.push({
+        sender: 'ADMIN',
+        message: remarks,
+        timestamp: new Date()
+      });
+    }
+    await updateRequest.save();
+    
+    // Notify hospital
+    const notification = await Notification.create({
+      type: 'UPDATE_REQUEST_APPROVED',
+      recipient: updateRequest.hospital,
+      recipientModel: 'Hospital',
+      sender: adminId,
+      senderModel: 'Superadmin',
+      title: 'Information Update Approved',
+      message: 'Your hospital information update request has been approved and applied.',
+      metadata: {
+        updateRequestId: updateRequest._id,
+        approvedFields: Object.keys(updateRequest.requestedChanges)
+      }
+    });
+    
+    sendEventToUser('Hospital', updateRequest.hospital.toString(), {
+      type: 'UPDATE_REQUEST_APPROVED',
+      title: 'Update Approved',
+      message: 'Your information update has been approved!',
+      timestamp: new Date().toISOString(),
+      updateRequestId: updateRequest._id.toString(),
+      notificationId: notification._id.toString()
+    });
+    
+    return res.json({ ok: true, updateRequest, hospital });
+  } catch (err) {
+    console.error('approve update request error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Reject hospital update request
+router.patch('/update-requests/:requestId/reject', async (req, res) => {
+  try {
+    const HospitalUpdateRequest = (await import('../models/HospitalUpdateRequest.js')).default;
+    const Notification = (await import('../models/Notification.js')).default;
+    const { sendEventToUser } = await import('./sse.js');
+    
+    const { requestId } = req.params;
+    const { adminId, reason } = req.body;
+    
+    if (!adminId || !reason) {
+      return res.status(400).json({ error: 'Admin ID and reason are required' });
+    }
+    
+    const updateRequest = await HospitalUpdateRequest.findById(requestId);
+    if (!updateRequest) {
+      return res.status(404).json({ error: 'Update request not found' });
+    }
+    
+    updateRequest.status = 'REJECTED';
+    updateRequest.reviewedBy = adminId;
+    updateRequest.reviewedAt = new Date();
+    updateRequest.adminRemarks = reason;
+    updateRequest.conversation.push({
+      sender: 'ADMIN',
+      message: reason,
+      timestamp: new Date()
+    });
+    await updateRequest.save();
+    
+    // Notify hospital
+    const notification = await Notification.create({
+      type: 'UPDATE_REQUEST_REJECTED',
+      recipient: updateRequest.hospital,
+      recipientModel: 'Hospital',
+      sender: adminId,
+      senderModel: 'Superadmin',
+      title: 'Information Update Rejected',
+      message: `Your hospital information update request has been rejected. Reason: ${reason}`,
+      metadata: {
+        updateRequestId: updateRequest._id,
+        rejectionReason: reason
+      }
+    });
+    
+    sendEventToUser('Hospital', updateRequest.hospital.toString(), {
+      type: 'UPDATE_REQUEST_REJECTED',
+      title: 'Update Rejected',
+      message: 'Your information update was rejected.',
+      timestamp: new Date().toISOString(),
+      updateRequestId: updateRequest._id.toString(),
+      notificationId: notification._id.toString()
+    });
+    
+    return res.json({ ok: true, updateRequest });
+  } catch (err) {
+    console.error('reject update request error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Request changes on hospital update request
+router.patch('/update-requests/:requestId/request-changes', async (req, res) => {
+  try {
+    const HospitalUpdateRequest = (await import('../models/HospitalUpdateRequest.js')).default;
+    const Notification = (await import('../models/Notification.js')).default;
+    const { sendEventToUser } = await import('./sse.js');
+    
+    const { requestId } = req.params;
+    const { adminId, message } = req.body;
+    
+    if (!adminId || !message) {
+      return res.status(400).json({ error: 'Admin ID and message are required' });
+    }
+    
+    const updateRequest = await HospitalUpdateRequest.findById(requestId);
+    if (!updateRequest) {
+      return res.status(404).json({ error: 'Update request not found' });
+    }
+    
+    updateRequest.status = 'CHANGES_REQUESTED';
+    updateRequest.reviewedBy = adminId;
+    updateRequest.adminRemarks = message;
+    updateRequest.conversation.push({
+      sender: 'ADMIN',
+      message,
+      timestamp: new Date()
+    });
+    await updateRequest.save();
+    
+    // Notify hospital
+    const notification = await Notification.create({
+      type: 'UPDATE_REQUEST_CHANGES_REQUESTED',
+      recipient: updateRequest.hospital,
+      recipientModel: 'Hospital',
+      sender: adminId,
+      senderModel: 'Superadmin',
+      title: 'Changes Requested on Update',
+      message: `Admin has requested changes to your information update request: ${message}`,
+      metadata: {
+        updateRequestId: updateRequest._id,
+        adminMessage: message
+      }
+    });
+    
+    sendEventToUser('Hospital', updateRequest.hospital.toString(), {
+      type: 'UPDATE_REQUEST_CHANGES_REQUESTED',
+      title: 'Changes Requested',
+      message: 'Admin requested changes to your update.',
+      timestamp: new Date().toISOString(),
+      updateRequestId: updateRequest._id.toString(),
+      notificationId: notification._id.toString()
+    });
+    
+    return res.json({ ok: true, updateRequest });
+  } catch (err) {
+    console.error('request changes error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Add a message to update request (admin side)
+router.post('/update-requests/:requestId/message', async (req, res) => {
+  try {
+    const HospitalUpdateRequest = (await import('../models/HospitalUpdateRequest.js')).default;
+    const Notification = (await import('../models/Notification.js')).default;
+    const { sendEventToUser } = await import('./sse.js');
+    
+    const { requestId } = req.params;
+    const { adminId, message } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+    
+    const updateRequest = await HospitalUpdateRequest.findById(requestId);
+    if (!updateRequest) {
+      return res.status(404).json({ error: 'Update request not found' });
+    }
+    
+    updateRequest.conversation.push({
+      sender: 'ADMIN',
+      message,
+      timestamp: new Date()
+    });
+    await updateRequest.save();
+    
+    // Notify hospital
+    const notification = await Notification.create({
+      type: 'UPDATE_REQUEST_MESSAGE',
+      recipient: updateRequest.hospital,
+      recipientModel: 'Hospital',
+      sender: adminId,
+      senderModel: 'Superadmin',
+      title: 'New Message on Update Request',
+      message: `Admin sent a message: ${message.substring(0, 100)}...`,
+      metadata: {
+        updateRequestId: updateRequest._id
+      }
+    });
+    
+    sendEventToUser('Hospital', updateRequest.hospital.toString(), {
+      type: 'UPDATE_REQUEST_MESSAGE',
+      title: 'New Message',
+      message: 'Admin sent a message on your update request.',
+      timestamp: new Date().toISOString(),
+      updateRequestId: updateRequest._id.toString(),
+      notificationId: notification._id.toString()
+    });
+    
+    return res.json({ ok: true, updateRequest });
+  } catch (err) {
+    console.error('add admin message error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// ==================== END UPDATE REQUEST MANAGEMENT ====================
+
 // Fetch superadmin by id (safe view) - MUST be last to not conflict with other routes
 router.get('/:id', async (req, res) => {
   try {

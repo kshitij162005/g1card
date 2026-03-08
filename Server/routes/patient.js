@@ -155,18 +155,26 @@ router.get('/:id/records', async (req, res) => {
 router.get('/:id/access-requests', async (req, res) => {
   try {
     const HospitalAccess = (await import('../models/HospitalAccess.js')).default;
+    // Ensure Hospital model is registered for populate('hospital')
+    await import('../models/Hospital.js');
     const id = req.params.id;
     if (!id) return res.status(400).json({ error: 'Missing patient id' });
     const statusFilter = (req.query.status || '').toString().toUpperCase();
+    const page = Math.max(1, parseInt(req.query.page || '1', 10));
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '10', 10)));
 
     const filter = { patient: id };
-    if (statusFilter && ['PENDING', 'APPROVED', 'DENIED'].includes(statusFilter)) {
+    if (statusFilter && ['PENDING', 'APPROVED', 'DENIED', 'REVOKED'].includes(statusFilter)) {
       filter.status = statusFilter;
     }
 
+    const total = await HospitalAccess.countDocuments(filter);
+
     const requests = await HospitalAccess.find(filter)
       .populate('hospital', '_id name')
-      .sort({ createdAt: -1 })
+      .sort({ updatedAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
       .lean();
 
     return res.json({
@@ -180,6 +188,12 @@ router.get('/:id/access-requests', async (req, res) => {
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,
       })),
+      pagination: {
+        total,
+        pages: Math.max(1, Math.ceil(total / limit)),
+        page,
+        limit,
+      },
     });
   } catch (err) {
     console.error('list access requests error:', err);
@@ -217,6 +231,42 @@ router.post('/:id/access-requests/:accessId/decision', async (req, res) => {
       access.status = 'DENIED';
       access.accessLevel = null;
       await access.save();
+
+      // Create patient-facing history notification (append-only)
+      await Notification.create({
+        type: 'GENERAL',
+        recipient: id,
+        recipientModel: 'Patient',
+        sender: id,
+        senderModel: 'Patient',
+        title: 'Access Request Denied',
+        message: `You denied ${hospital?.name || 'hospital'}'s access request.`,
+        relatedAccess: access._id,
+        metadata: {
+          decision: 'DENIED',
+          hospitalId: hospital?._id,
+          hospitalName: hospital?.name,
+          previousStatus,
+          timestamp: new Date(),
+        }
+      });
+
+      // Mark request notifications as processed for this access request
+      await Notification.updateMany(
+        {
+          recipient: id,
+          recipientModel: 'Patient',
+          relatedAccess: access._id,
+          type: 'ACCESS_REQUEST',
+          isRead: false,
+        },
+        {
+          $set: {
+            isRead: true,
+            readAt: new Date(),
+          },
+        }
+      );
 
       // Create audit log for denial
       await logAccessDenial({
@@ -262,6 +312,43 @@ router.post('/:id/access-requests/:accessId/decision', async (req, res) => {
       access.status = 'APPROVED';
       access.accessLevel = level;
       await access.save();
+
+      // Create patient-facing history notification (append-only)
+      await Notification.create({
+        type: 'GENERAL',
+        recipient: id,
+        recipientModel: 'Patient',
+        sender: id,
+        senderModel: 'Patient',
+        title: previousAccessLevel ? 'Access Upgraded' : 'Access Approved',
+        message: `You granted ${hospital?.name || 'hospital'} ${level === 'COMPLETE' ? 'complete' : 'general'} access.`,
+        relatedAccess: access._id,
+        metadata: {
+          decision: 'APPROVED',
+          accessLevel: level,
+          previousAccessLevel,
+          hospitalId: hospital?._id,
+          hospitalName: hospital?.name,
+          timestamp: new Date(),
+        }
+      });
+
+      // Mark request notifications as processed for this access request
+      await Notification.updateMany(
+        {
+          recipient: id,
+          recipientModel: 'Patient',
+          relatedAccess: access._id,
+          type: 'ACCESS_REQUEST',
+          isRead: false,
+        },
+        {
+          $set: {
+            isRead: true,
+            readAt: new Date(),
+          },
+        }
+      );
 
       // Create audit log for approval
       await logAccessApproval({
@@ -365,9 +452,36 @@ router.patch('/:id', async (req, res) => {
 });
 
 // Get approved hospital accesses for a patient
+router.get('/:id/hospital-accesses/count', async (req, res) => {
+  try {
+    const HospitalAccess = (await import('../models/HospitalAccess.js')).default;
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ error: 'Missing patient id' });
+
+    const [completeAccess, partialAccess] = await Promise.all([
+      HospitalAccess.countDocuments({ patient: id, status: 'APPROVED', accessLevel: 'COMPLETE' }),
+      HospitalAccess.countDocuments({ patient: id, status: 'APPROVED', accessLevel: 'GENERAL' })
+    ]);
+
+    return res.json({
+      ok: true,
+      counts: {
+        total: completeAccess + partialAccess,
+        complete: completeAccess,
+        partial: partialAccess
+      }
+    });
+  } catch (err) {
+    console.error('hospital access count error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
 router.get('/:id/hospital-accesses', async (req, res) => {
   try {
     const HospitalAccess = (await import('../models/HospitalAccess.js')).default;
+    // Ensure Hospital model is registered for populate('hospital')
+    await import('../models/Hospital.js');
     const id = req.params.id;
     if (!id) return res.status(400).json({ error: 'Missing patient id' });
 
@@ -424,6 +538,25 @@ router.patch('/:id/hospital-accesses/:accessId', async (req, res) => {
 
     access.accessLevel = newLevel;
     await access.save();
+
+    // Create patient-facing history notification for each explicit access-level change
+    await Notification.create({
+      type: 'ACCESS_LEVEL_CHANGED',
+      recipient: id,
+      recipientModel: 'Patient',
+      sender: id,
+      senderModel: 'Patient',
+      title: 'Hospital Permission Updated',
+      message: `You changed ${hospital?.name || 'hospital'} access from ${previousLevel} to ${newLevel}.`,
+      relatedAccess: access._id,
+      metadata: {
+        hospitalId: hospital?._id,
+        hospitalName: hospital?.name,
+        previousLevel,
+        newLevel,
+        timestamp: new Date(),
+      }
+    });
 
     // Notify hospital about access level change
     if (previousLevel !== newLevel) {
@@ -500,6 +633,25 @@ router.post('/:id/hospital-accesses/:accessId/revoke', async (req, res) => {
     access.status = 'REVOKED';
     access.accessLevel = null;
     await access.save();
+
+    // Create patient-facing history notification for revoke action
+    await Notification.create({
+      type: 'GENERAL',
+      recipient: id,
+      recipientModel: 'Patient',
+      sender: id,
+      senderModel: 'Patient',
+      title: 'Hospital Access Revoked',
+      message: `You revoked ${hospital?.name || 'hospital'} access to your medical records.`,
+      relatedAccess: access._id,
+      metadata: {
+        hospitalId: hospital?._id,
+        hospitalName: hospital?.name,
+        previousAccessLevel,
+        previousStatus,
+        timestamp: new Date(),
+      }
+    });
 
     // Create audit log for revocation
     await logAccessRevocation({
@@ -598,34 +750,55 @@ router.get('/:id/notifications/count', async (req, res) => {
 router.get('/:id/notifications', async (req, res) => {
   try {
     const Notification = (await import('../models/Notification.js')).default;
+    // Ensure sender models are registered for populate('sender') with refPath senderModel
+    await Promise.all([
+      import('../models/Hospital.js'),
+      import('../models/Patient.js'),
+      import('../models/Superadmin.js'),
+    ]);
     const id = req.params.id;
     if (!id) return res.status(400).json({ error: 'Missing patient id' });
+    const page = Math.max(1, parseInt(req.query.page || '1', 10));
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '10', 10)));
+    const filter = req.query.filter || 'all'; // 'all' or 'unread'
+    const searchQuery = (req.query.search || '').toString();
 
-    console.log('Fetching notifications for patient:', id);
+    const query = { recipient: id, recipientModel: 'Patient' };
+    if (filter === 'unread') {
+      query.isRead = false;
+    }
+    if (searchQuery) {
+      query.$or = [
+        { title: { $regex: searchQuery, $options: 'i' } },
+        { message: { $regex: searchQuery, $options: 'i' } },
+      ];
+    }
+
+    const totalCount = await Notification.countDocuments({
+      recipient: id,
+      recipientModel: 'Patient',
+      ...(searchQuery ? { $or: query.$or } : {}),
+    });
+    const unreadCount = await Notification.countDocuments({
+      recipient: id,
+      recipientModel: 'Patient',
+      isRead: false,
+      ...(searchQuery ? { $or: query.$or } : {}),
+    });
+
+    const total = await Notification.countDocuments(query);
     
-    // First, let's see ALL notifications for this patient
-    const allNotifications = await Notification.find({ recipient: id }).lean();
-    console.log('ALL notifications (including read):', allNotifications.length);
-    console.log('All notifications details:', JSON.stringify(allNotifications.map(n => ({ 
-      type: n.type, 
-      isRead: n.isRead, 
-      title: n.title,
-      recipientModel: n.recipientModel 
-    })), null, 2));
-    
-    const notifications = await Notification.find({ recipient: id, recipientModel: 'Patient' })
+    const notifications = await Notification.find(query)
       .populate('sender', 'name')
       .sort({ createdAt: -1 })
-      .limit(50)
+      .skip((page - 1) * limit)
+      .limit(limit)
       .lean();
-
-    console.log('Found notifications with recipientModel=Patient:', notifications.length);
-    console.log('Notifications:', JSON.stringify(notifications.map(n => ({ type: n.type, isRead: n.isRead, title: n.title })), null, 2));
 
     return res.json({
       ok: true,
       notifications: notifications.map(n => ({
-        id: n._id,
+        id: n._id.toString(),
         type: n.type,
         title: n.title,
         message: n.message,
@@ -637,7 +810,15 @@ router.get('/:id/notifications', async (req, res) => {
         sender: n.sender,
         createdAt: n.createdAt,
         updatedAt: n.updatedAt,
-      }))
+      })),
+      pagination: {
+        total,
+        pages: Math.max(1, Math.ceil(total / limit)),
+        page,
+        limit,
+      },
+      totalCount,
+      unreadCount,
     });
   } catch (err) {
     console.error('fetch notifications error:', err);
@@ -692,6 +873,26 @@ router.post('/:id/notifications/:notificationId/upgrade-decision', async (req, r
       };
       await notification.save();
 
+      // Add immutable patient-side history event instead of only mutating request notification
+      await Notification.create({
+        type: 'GENERAL',
+        recipient: id,
+        recipientModel: 'Patient',
+        sender: id,
+        senderModel: 'Patient',
+        title: 'Upgrade Request Approved',
+        message: `You approved complete access for ${hospital?.name || 'hospital'}.`,
+        relatedAccess: access._id,
+        metadata: {
+          decision: 'APPROVED',
+          hospitalId: hospital?._id,
+          hospitalName: hospital?.name,
+          previousAccessLevel,
+          newAccessLevel: 'COMPLETE',
+          timestamp: new Date(),
+        }
+      });
+
       // Create audit log for upgrade approval
       await logAccessApproval({
         patientId: id,
@@ -734,6 +935,25 @@ router.post('/:id/notifications/:notificationId/upgrade-decision', async (req, r
         decisionTimestamp: new Date()
       };
       await notification.save();
+
+      // Add immutable patient-side history event instead of only mutating request notification
+      await Notification.create({
+        type: 'GENERAL',
+        recipient: id,
+        recipientModel: 'Patient',
+        sender: id,
+        senderModel: 'Patient',
+        title: 'Upgrade Request Denied',
+        message: `You denied complete access upgrade for ${hospital?.name || 'hospital'}.`,
+        relatedAccess: access._id,
+        metadata: {
+          decision: 'DENIED',
+          hospitalId: hospital?._id,
+          hospitalName: hospital?.name,
+          previousAccessLevel,
+          timestamp: new Date(),
+        }
+      });
 
       // Create audit log for upgrade denial
       await logAccessDenial({

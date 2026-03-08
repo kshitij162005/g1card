@@ -123,16 +123,16 @@ const AddEditMedicalRecord: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user) return alert('Not authenticated');
+        if (!user) return notify('Not authenticated');
         setSubmitting(true);
         try {
             const payload = { formId: selectedFormId === 'custom' ? null : selectedFormId, data, attachments, createdBy: user.id };
             const resp = await fetch(`${API_URL}/hospitals/${user.id}/patients/${patientId}/records`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const d = await resp.json();
             if (!resp.ok) throw new Error(d.error || 'Failed to submit record');
-            alert('Record submitted');
+            notify('Record submitted');
             navigate(`/hospital/patients/${patientId}`);
-        } catch (err) { console.error('submit record', err); alert('Error submitting'); }
+        } catch (err) { console.error('submit record', err); notify('Error submitting'); }
         finally { setSubmitting(false); }
     };
 
@@ -145,14 +145,14 @@ const AddEditMedicalRecord: React.FC = () => {
             <div className="space-y-6">
                 <div className="flex justify-between items-center">
                     <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200">Add New Medical Record</h2>
-                    <button onClick={() => navigate(-1)} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">&larr; Back</button>
+                    <button type="button" onClick={() => navigate(-1)} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">&larr; Back</button>
                 </div>
                 <Card>
                     <div className="space-y-4">
                         <p className="text-slate-700 dark:text-slate-300">There are no active form templates for this hospital. Please create or activate a form template first to submit structured records.</p>
                         <div className="flex gap-2">
-                            <button onClick={() => navigate('/hospital/forms/create')} className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary transition-colors">Create Form Template</button>
-                            <button onClick={() => navigate('/hospital/forms')} className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">Manage Forms</button>
+                            <button type="button" onClick={() => navigate('/hospital/forms/create')} className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary transition-colors">Create Form Template</button>
+                            <button type="button" onClick={() => navigate('/hospital/forms')} className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">Manage Forms</button>
                         </div>
                     </div>
                 </Card>
@@ -168,7 +168,7 @@ const AddEditMedicalRecord: React.FC = () => {
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200">Add New Medical Record</h2>
-                <button onClick={() => navigate(-1)} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">&larr; Back to Patient Record</button>
+                <button type="button" onClick={() => navigate(-1)} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">&larr; Back to Patient Record</button>
             </div>
             <Card>
                 <form onSubmit={handleSubmit} className="space-y-6">

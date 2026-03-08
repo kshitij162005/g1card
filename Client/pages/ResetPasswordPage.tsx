@@ -25,10 +25,10 @@ const ResetPasswordPage: React.FC = () => {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (password !== confirmPassword) {
-            alert("Passwords do not match.");
+            notify("Passwords do not match.");
             return;
         }
-        alert("Password has been updated successfully.");
+        notify("Password has been updated successfully.");
         navigate('/login');
     };
 

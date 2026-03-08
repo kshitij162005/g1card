@@ -72,7 +72,7 @@ const PatientDashboard: React.FC = () => {
     const updateField = (k: string, v: string) => setForm(prev => ({ ...prev, [k]: v }));
 
     const saveHealthSummary = async () => {
-        if (!user?.id) return alert('User not identified');
+        if (!user?.id) return notify('User not identified');
         setSaving(true);
         try {
             const body: any = {};
@@ -88,12 +88,12 @@ const PatientDashboard: React.FC = () => {
                 body: JSON.stringify(body),
             });
             const data = await resp.json();
-            if (!resp.ok) return alert('Save failed: ' + (data?.error || data?.message || 'unknown'));
+            if (!resp.ok) return notify('Save failed: ' + (data?.error || data?.message || 'unknown'));
             setPatient(data.patient as DetailedPatient);
             setShowModal(false);
         } catch (err) {
             console.error('save health summary error', err);
-            alert('Error saving health details');
+            notify('Error saving health details');
         } finally {
             setSaving(false);
         }
@@ -208,10 +208,10 @@ const PatientDashboard: React.FC = () => {
             });
             const data = await resp.json();
             if (!resp.ok) {
-                alert(data?.error || data?.message || 'Failed to process request');
+                notify(data?.error || data?.message || 'Failed to process request');
                 return;
             }
-            alert(data.message);
+            notify(data.message);
             // Remove this notification from pending list
             setPendingNotifications(prev => prev.filter(n => n.id !== notification.id));
             // If no more pending, close modal
@@ -220,7 +220,7 @@ const PatientDashboard: React.FC = () => {
             }
         } catch (err) {
             console.error('upgrade decision error', err);
-            alert('Error processing request');
+            notify('Error processing request');
         } finally {
             setProcessingRequest(false);
         }
@@ -236,7 +236,7 @@ const PatientDashboard: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <div>
+            <div className="rounded-2xl bg-gradient-to-r from-sky-50 to-cyan-50 dark:from-slate-800 dark:to-slate-800 border border-slate-200/80 dark:border-slate-700 p-5">
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Welcome Back, {user?.name}!</h2>
                 <p className="text-sm text-slate-600 dark:text-slate-300">Last Access: {relativeTime(user?.lastLogin || patient?.lastUpdated)}</p>
             </div>
@@ -265,7 +265,7 @@ const PatientDashboard: React.FC = () => {
                     <Card title="Quick Actions">
                         <div className="flex flex-wrap gap-4">
                             <button onClick={() => navigate('/patient/health-history')} className="px-4 py-2 bg-brand-primary text-white text-sm rounded-md hover:bg-brand-secondary">View Full Medical History</button>
-                            <button onClick={() => alert('Preparing your records for download...')} className="px-4 py-2 bg-gray-200 text-gray-800 text-sm rounded-md hover:bg-gray-300">Download Records</button>
+                            <button onClick={() => notify('Preparing your records for download...')} className="px-4 py-2 bg-gray-200 text-gray-800 text-sm rounded-md hover:bg-gray-300">Download Records</button>
                             <button onClick={() => navigate('/patient/settings')} className="px-4 py-2 bg-gray-200 text-gray-800 text-sm rounded-md hover:bg-gray-300">Manage Permissions</button>
                             <button onClick={() => navigate('/patient/settings')} className="px-4 py-2 bg-gray-200 text-gray-800 text-sm rounded-md hover:bg-gray-300">Edit Profile</button>
                         </div>

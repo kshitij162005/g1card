@@ -66,15 +66,15 @@ const PendingRequests: React.FC = () => {
             });
             const data = await resp.json();
             if (data.ok) {
-                alert('Hospital approved successfully!');
+                notify('Hospital approved successfully!');
                 setSelectedHospital(null);
                 fetchPendingHospitals();
             } else {
-                alert('Failed to approve: ' + (data.error || 'Unknown error'));
+                notify('Failed to approve: ' + (data.error || 'Unknown error'));
             }
         } catch (err) {
             console.error('approve error:', err);
-            alert('Error approving hospital');
+            notify('Error approving hospital');
         } finally {
             setProcessing(false);
         }
@@ -91,17 +91,17 @@ const PendingRequests: React.FC = () => {
             });
             const data = await resp.json();
             if (data.ok) {
-                alert('Hospital registration rejected');
+                notify('Hospital registration rejected');
                 setShowRejectModal(false);
                 setSelectedHospital(null);
                 setRejectReason('');
                 fetchPendingHospitals();
             } else {
-                alert('Failed to reject: ' + (data.error || 'Unknown error'));
+                notify('Failed to reject: ' + (data.error || 'Unknown error'));
             }
         } catch (err) {
             console.error('reject error:', err);
-            alert('Error rejecting hospital');
+            notify('Error rejecting hospital');
         } finally {
             setProcessing(false);
         }

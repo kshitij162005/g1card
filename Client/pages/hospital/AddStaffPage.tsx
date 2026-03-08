@@ -16,7 +16,7 @@ const AddStaffPage: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user) return alert('Not authenticated');
+        if (!user) return notify('Not authenticated');
         setLoading(true);
         try {
             const resp = await fetch(`${API_URL}/hospitals/${user.id}/staff`, {
@@ -25,11 +25,11 @@ const AddStaffPage: React.FC = () => {
             });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Failed to add staff');
-            alert('New staff member added successfully! ID: ' + (data.staff?.staffId || ''));
+            notify('New staff member added successfully! ID: ' + (data.staff?.staffId || ''));
             navigate('/hospital/staff');
         } catch (err: any) {
             console.error(err);
-            alert('Error: ' + (err.message || String(err)));
+            notify('Error: ' + (err.message || String(err)));
         } finally { setLoading(false); }
     };
 
@@ -37,7 +37,7 @@ const AddStaffPage: React.FC = () => {
         <div className="space-y-6">
              <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold text-gray-800">Add New Staff Member</h2>
-                <button onClick={() => navigate(-1)} className="px-4 py-2 bg-gray-200 text-gray-800 text-sm rounded-md hover:bg-gray-300">
+                <button type="button" onClick={() => navigate(-1)} className="px-4 py-2 bg-gray-200 text-gray-800 text-sm rounded-md hover:bg-gray-300">
                     &larr; Back
                 </button>
             </div>

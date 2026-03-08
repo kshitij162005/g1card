@@ -15,19 +15,54 @@
 body {
   font-family: 'Inter', sans-serif;
   background-color: #f1f5f9; /* slate-100 */
+  color: #0f172a;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 .dark body {
   background-color: #0f172a; /* slate-900 */
+  color: #e2e8f0;
 }
 
 .dark ::-webkit-calendar-picker-indicator {
   filter: invert(1);
 }
 
-/* Smooth transitions for all elements */
-* {
-  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out, border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+/* Keep motion subtle and scoped to interactive elements */
+button,
+a,
+input,
+select,
+textarea,
+summary,
+[role='button'] {
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+/* Ensure interactive controls consistently show pointer cursor */
+button:not(:disabled),
+a[href],
+a,
+[role='link'],
+[aria-label],
+[role='button']:not([aria-disabled='true']),
+input[type='button']:not(:disabled),
+input[type='submit']:not(:disabled),
+input[type='reset']:not(:disabled),
+label[for],
+summary,
+select:not(:disabled) {
+  cursor: pointer;
+}
+
+/* Fallback for interactive UI elements styled via hover classes */
+[class*='hover:bg-'],
+[class*='hover:text-'],
+[class*='hover:border-'] {
+  cursor: pointer;
 }
 
 /* Custom animations for loader */
@@ -55,4 +90,125 @@ body {
 
 .animate-spin-slow {
   animation: spin-slow 3s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Admin section visual system */
+.admin-shell {
+  --admin-surface: #ffffff;
+  --admin-muted: #64748b;
+  --admin-border: #cbd5e1;
+}
+
+.dark .admin-shell {
+  --admin-surface: #1e293b;
+  --admin-muted: #94a3b8;
+  --admin-border: #334155;
+}
+
+.admin-shell h1,
+.admin-shell h2 {
+  letter-spacing: -0.01em;
+}
+
+.admin-shell input,
+.admin-shell select,
+.admin-shell textarea {
+  border-radius: 0.75rem;
+  border-color: var(--admin-border);
+}
+
+.admin-shell table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+}
+
+.admin-shell table thead tr {
+  background: color-mix(in srgb, var(--admin-surface) 90%, #1d4ed8 10%);
+}
+
+.admin-shell table thead th {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+}
+
+.admin-shell table tbody tr {
+  border-bottom: 1px solid var(--admin-border);
+}
+
+/* Patient + hospital shells */
+.patient-shell,
+.hospital-shell {
+  --role-surface: #ffffff;
+  --role-border: #cbd5e1;
+}
+
+.dark .patient-shell,
+.dark .hospital-shell {
+  --role-surface: #1e293b;
+  --role-border: #334155;
+}
+
+.patient-shell .bg-white,
+.hospital-shell .bg-white {
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.05);
+}
+
+.patient-shell input,
+.patient-shell select,
+.patient-shell textarea,
+.hospital-shell input,
+.hospital-shell select,
+.hospital-shell textarea {
+  border-radius: 0.75rem;
+  border-color: var(--role-border);
+}
+
+.patient-shell table thead tr,
+.hospital-shell table thead tr {
+  background: color-mix(in srgb, var(--role-surface) 90%, #1d4ed8 10%);
+}
+
+.patient-shell .text-brand-primary,
+.hospital-shell .text-brand-primary {
+  color: #2563eb;
+}
+
+.patient-shell .bg-brand-primary,
+.hospital-shell .bg-brand-primary {
+  background-color: #2563eb;
+}
+
+.patient-shell .hover\:bg-brand-secondary:hover,
+.hospital-shell .hover\:bg-brand-secondary:hover {
+  background-color: #1d4ed8;
+}
+
+/* Remove playful hover scaling so controls feel stable and production-ready */
+.hover\:scale-105:hover,
+.hover\:scale-110:hover {
+  transform: none !important;
+}
+
+/* Ensure dropdown text is readable in dark mode across pages */
+.dark select,
+.dark option,
+.dark optgroup {
+  color: #e2e8f0;
+}
+
+.dark option,
+.dark optgroup {
+  background-color: #0f172a;
 }

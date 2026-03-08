@@ -32,7 +32,7 @@ const OtpPage: React.FC = () => {
     
     const handleVerify = () => {
         // Mock verification logic
-        alert(`Verifying OTP: ${otp.join("")}`);
+        notify(`Verifying OTP: ${otp.join("")}`);
         navigate('/admin/dashboard'); // Or appropriate dashboard
     };
 

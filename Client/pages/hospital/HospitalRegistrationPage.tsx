@@ -32,11 +32,11 @@ const HospitalRegistrationPage: React.FC = () => {
         const { hospitalName, regNumber, address, city, state, pin, license, email, phone, website, adminName, adminEmail, adminPhone, designation, password, confirmPassword } = form;
 
         if (!email || !password || !hospitalName) {
-            alert('Hospital name, contact email and password are required');
+            notify('Hospital name, contact email and password are required');
             return;
         }
         if (password !== confirmPassword) {
-            alert('Passwords do not match');
+            notify('Passwords do not match');
             return;
         }
 
@@ -50,14 +50,14 @@ const HospitalRegistrationPage: React.FC = () => {
             });
             const data = await resp.json();
             if (!resp.ok) {
-                alert('Registration failed: ' + (data?.error || data?.message || 'unknown'));
+                notify('Registration failed: ' + (data?.error || data?.message || 'unknown'));
                 return;
             }
             // Show success message with pending verification info
             setRegistrationComplete(true);
         } catch (err) {
             console.error('hospital signup error', err);
-            alert('Registration error');
+            notify('Registration error');
         }
     };
 

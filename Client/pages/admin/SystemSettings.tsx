@@ -18,9 +18,14 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
 );
 
 const SystemSettings: React.FC = () => {
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        notify('System settings saved');
+    };
+
     return (
         <Card title="System Settings & Configuration">
-            <form className="space-y-8 divide-y divide-slate-200 dark:divide-slate-700">
+            <form onSubmit={handleSubmit} className="space-y-8 divide-y divide-slate-200 dark:divide-slate-700">
                 <Section title="General Settings">
                    <SettingInput label="System Name" id="system-name" value="G1CARD" />
                    <SettingInput label="Support Email" id="support-email" type="email" value="kotechakshitij@gmail.com" />

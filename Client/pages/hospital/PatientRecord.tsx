@@ -22,23 +22,59 @@ const RecordCard: React.FC<{
     isPinned: boolean; 
     humanize: (value: string) => string; 
     formatFieldType: (type?: string) => string;
-}> = ({ record, isPinned, humanize, formatFieldType }) => {
+    hospitalId: string;
+    patientId: string;
+}> = ({ record, isPinned, humanize, formatFieldType, hospitalId, patientId }) => {
     const [isExpanded, setIsExpanded] = useState(false);
-    const dataEntries = Object.entries(record.data || {});
-    const fieldCount = dataEntries.length;
+    const [fullRecord, setFullRecord] = useState<any>(null);
+    const [loadingDetails, setLoadingDetails] = useState(false);
+    const dataEntries = Object.entries(fullRecord?.data || record.data || {});
+    const fieldCount = record.form?.fields?.length || dataEntries.length;
+    
+    const handleToggleExpand = async () => {
+        const willExpand = !isExpanded;
+        setIsExpanded(willExpand);
+        
+        // If expanding and we don't have full data yet, fetch it
+        if (willExpand && !fullRecord && !record.data) {
+            setLoadingDetails(true);
+            try {
+                const resp = await fetch(`${API_URL}/hospitals/${hospitalId}/patients/${patientId}/records/${record._id}`);
+                const data = await resp.json();
+                if (resp.ok && data.record) {
+                    setFullRecord(data.record);
+                } else {
+                    console.error('Failed to fetch record details:', data.error);
+                }
+            } catch (err) {
+                console.error('Error fetching record details:', err);
+            } finally {
+                setLoadingDetails(false);
+            }
+        }
+    };
     
     return (
         <Card className={`border ${isPinned ? 'border-brand-primary/80 shadow-md' : 'border-slate-200 dark:border-slate-700'}`}>
             <div 
                 className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 cursor-pointer"
-                onClick={() => setIsExpanded(!isExpanded)}
+                onClick={handleToggleExpand}
+                role="button"
+                tabIndex={0}
+                aria-expanded={isExpanded}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleToggleExpand();
+                    }
+                }}
             >
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <button className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
+                    <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors" aria-hidden="true">
                         <svg className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
-                    </button>
+                    </span>
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                             <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">
@@ -59,31 +95,47 @@ const RecordCard: React.FC<{
             
             {isExpanded && (
                 <div className="mt-3 pt-3 border-t dark:border-slate-700 space-y-2">
-                    {record.form?.description && (
-                        <p className="text-xs text-slate-500 dark:text-slate-400 italic mb-2">{record.form.description}</p>
-                    )}
-                    {dataEntries.map(([key, value]) => {
-                        const meta = record.form?.fields?.find((f: any) => f.key === key);
-                        const label = meta?.label || humanize(key);
-                        const displayValue = Array.isArray(value) ? value.join(', ') : String(value);
-                        return (
-                            <div key={key} className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4 py-1.5 px-2 bg-slate-50 dark:bg-slate-800/60 rounded text-sm">
-                                <span className="font-medium text-slate-600 dark:text-slate-300 sm:w-40 flex-shrink-0">{label}:</span>
-                                <span className="text-slate-700 dark:text-slate-200 break-words flex-1">{displayValue || '—'}</span>
-                            </div>
-                        );
-                    })}
-                    {record.attachments && record.attachments.length > 0 && (
-                        <div className="pt-2 border-t dark:border-slate-700">
-                            <p className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Attachments:</p>
-                            <div className="flex flex-wrap gap-1">
-                                {record.attachments.map((att: any, attIdx: number) => (
-                                    <span key={attIdx} className="text-xs px-2 py-0.5 bg-slate-200 dark:bg-slate-700 rounded">
-                                        {att.name || `File ${attIdx + 1}`}
-                                    </span>
-                                ))}
-                            </div>
+                    {loadingDetails ? (
+                        <div className="py-4 text-center">
+                            <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-brand-primary"></div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Loading record details...</p>
                         </div>
+                    ) : (
+                        <>
+                            {(fullRecord?.form?.description || record.form?.description) && (
+                                <p className="text-xs text-slate-500 dark:text-slate-400 italic mb-2">
+                                    {fullRecord?.form?.description || record.form?.description}
+                                </p>
+                            )}
+                            {dataEntries.length === 0 ? (
+                                <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-2">No data available for this record.</p>
+                            ) : (
+                                dataEntries.map(([key, value]) => {
+                                    const formFields = fullRecord?.form?.fields || record.form?.fields || [];
+                                    const meta = formFields.find((f: any) => f.key === key);
+                                    const label = meta?.label || humanize(key);
+                                    const displayValue = Array.isArray(value) ? value.join(', ') : String(value);
+                                    return (
+                                        <div key={key} className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4 py-1.5 px-2 bg-slate-50 dark:bg-slate-800/60 rounded text-sm">
+                                            <span className="font-medium text-slate-600 dark:text-slate-300 sm:w-40 flex-shrink-0">{label}:</span>
+                                            <span className="text-slate-700 dark:text-slate-200 break-words flex-1">{displayValue || '—'}</span>
+                                        </div>
+                                    );
+                                })
+                            )}
+                            {(fullRecord?.attachments || record.attachments)?.length > 0 && (
+                                <div className="pt-2 border-t dark:border-slate-700">
+                                    <p className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Attachments:</p>
+                                    <div className="flex flex-wrap gap-1">
+                                        {(fullRecord?.attachments || record.attachments).map((att: any, attIdx: number) => (
+                                            <span key={attIdx} className="text-xs px-2 py-0.5 bg-slate-200 dark:bg-slate-700 rounded">
+                                                {att.name || `File ${attIdx + 1}`}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
             )}
@@ -158,7 +210,12 @@ const PatientRecord: React.FC = () => {
     }, [patientId, user]);
 
     useEffect(() => {
-        if (!patientId || !user) return;
+        // Only fetch records when the 'records' tab is active and records haven't been loaded yet
+        if (!patientId || !user || activeTab !== 'records') return;
+        
+        // Skip if records are already loaded
+        if (records.length > 0) return;
+        
         (async () => {
             setLoadingRecords(true);
             try {
@@ -180,7 +237,7 @@ const PatientRecord: React.FC = () => {
                 setLoadingRecords(false);
             }
         })();
-    }, [patientId, user]);
+    }, [patientId, user, activeTab, records.length]);
 
     const pinnedRecords = useMemo(() => {
         if (!user) return [];
@@ -262,13 +319,13 @@ const PatientRecord: React.FC = () => {
             });
             const data = await resp.json();
             if (!resp.ok) {
-                alert(data.error || 'Failed to request complete access');
+                notify(data.error || 'Failed to request complete access');
             } else {
-                alert('Complete access request sent to patient. They will be notified to approve your request.');
+                notify('Complete access request sent to patient. They will be notified to approve your request.');
             }
         } catch (err) {
             console.error('request complete access error:', err);
-            alert('Failed to send request');
+            notify('Failed to send request');
         } finally {
             setRequestingAccess(false);
         }
@@ -285,7 +342,6 @@ const PatientRecord: React.FC = () => {
                 </div>
                 <div className="flex gap-2">
                     <button onClick={() => navigate(-1)} className="px-4 py-2 bg-slate-200 text-slate-800 text-sm rounded-lg hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600">&larr; Back</button>
-                    <button className="px-4 py-2 bg-slate-200 text-slate-800 text-sm rounded-lg hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600">Edit Profile</button>
                     <button onClick={handleAddRecord} className="px-4 py-2 bg-brand-primary text-white text-sm rounded-lg hover:bg-brand-secondary">Add Record</button>
                 </div>
             </div>
@@ -462,7 +518,15 @@ const PatientRecord: React.FC = () => {
                                         <div className="h-px flex-1 bg-brand-primary/30"></div>
                                     </div>
                                     {paginatedPinnedRecords.map((record, idx) => (
-                                        <RecordCard key={record._id || idx} record={record} isPinned={true} humanize={humanize} formatFieldType={formatFieldType} />
+                                        <RecordCard 
+                                            key={record._id || idx} 
+                                            record={record} 
+                                            isPinned={true} 
+                                            humanize={humanize} 
+                                            formatFieldType={formatFieldType}
+                                            hospitalId={user?.id || ''}
+                                            patientId={patientId || ''}
+                                        />
                                     ))}
                                     {/* Pagination for pinned records */}
                                     {pinnedTotalPages > 1 && (
@@ -498,7 +562,15 @@ const PatientRecord: React.FC = () => {
                                         <div className="h-px flex-1 bg-slate-300 dark:bg-slate-600"></div>
                                     </div>
                                     {paginatedOtherRecords.map((record, idx) => (
-                                        <RecordCard key={record._id || idx} record={record} isPinned={false} humanize={humanize} formatFieldType={formatFieldType} />
+                                        <RecordCard 
+                                            key={record._id || idx} 
+                                            record={record} 
+                                            isPinned={false} 
+                                            humanize={humanize} 
+                                            formatFieldType={formatFieldType}
+                                            hospitalId={user?.id || ''}
+                                            patientId={patientId || ''}
+                                        />
                                     ))}
                                     {/* Pagination for other records */}
                                     {otherTotalPages > 1 && (

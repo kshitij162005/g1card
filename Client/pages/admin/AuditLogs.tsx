@@ -453,9 +453,12 @@ const AuditLogs: React.FC = () => {
                                             key={log._id}
                                             className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden"
                                         >
-                                            <div
-                                                className="p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                                            <button
+                                                type="button"
+                                                className="w-full text-left p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                                                 onClick={() => setExpandedLog(expandedLog === log._id ? null : log._id)}
+                                                aria-expanded={expandedLog === log._id}
+                                                aria-label={`Toggle details for ${log.event.replace(/_/g, ' ')}`}
                                             >
                                                 <div className="flex items-start justify-between gap-4">
                                                     <div className="flex-1 min-w-0">
@@ -500,7 +503,7 @@ const AuditLogs: React.FC = () => {
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                                     </svg>
                                                 </div>
-                                            </div>
+                                            </button>
 
                                             {/* Expanded Details */}
                                             {expandedLog === log._id && (

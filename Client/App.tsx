@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Role } from './types';
@@ -21,13 +21,13 @@ import HospitalDetails from './pages/admin/HospitalDetails';
 import UserManagement from './pages/admin/UserManagement';
 import SystemSettings from './pages/admin/SystemSettings';
 import AuditLogs from './pages/admin/AuditLogs';
+import HospitalUpdateRequestsAdmin from './pages/admin/HospitalUpdateRequests';
 import AddHospitalPage from './pages/admin/AddHospitalPage';
 import PendingRequests from './pages/admin/PendingRequests';
 
 import HospitalLayout from './layouts/HospitalLayout';
 import HospitalDashboard from './pages/hospital/HospitalDashboard';
 import HospitalPatientManagement from './pages/hospital/PatientManagement';
-import HospitalStaffManagement from './pages/hospital/StaffManagement';
 import PatientRecord from './pages/hospital/PatientRecord';
 import AddEditMedicalRecord from './pages/hospital/AddEditMedicalRecord';
 import FormTemplatesList from './pages/hospital/FormTemplatesList';
@@ -37,8 +37,6 @@ import AddPatientPage from './pages/hospital/AddPatientPage';
 import EditPatientPage from './pages/hospital/EditPatientPage';
 import ReportsPage from './pages/hospital/ReportsPage';
 import HospitalSettingsPage from './pages/hospital/HospitalSettingsPage';
-import AddStaffPage from './pages/hospital/AddStaffPage';
-import StaffDetailsPage from './pages/hospital/StaffDetailsPage';
 import HospitalAuditLogs from './pages/hospital/HospitalAuditLogs';
 import HospitalNotifications from './pages/hospital/HospitalNotifications';
 
@@ -47,7 +45,9 @@ import PatientLayout from './layouts/PatientLayout';
 import PatientDashboard from './pages/patient/PatientDashboard';
 import HealthHistory from './pages/patient/HealthHistory';
 import PatientSettings from './pages/patient/PatientSettings';
-import PatientNotifications from './pages/patient/PatientNotifications';
+import PatientNotifications from './pages/patient/PatientNotifications.tsx';
+import AppNotificationCenter from './components/AppNotificationCenter';
+import { installAlertNotificationBridge } from './utils/notifications';
 
 
 const AppRoutes: React.FC = () => {
@@ -83,6 +83,7 @@ const AppRoutes: React.FC = () => {
                         <Route path="hospitals/add" element={<AddHospitalPage />} />
                         <Route path="hospitals/:id" element={<HospitalDetails />} />
                         <Route path="users" element={<UserManagement />} />
+                        <Route path="update-requests" element={<HospitalUpdateRequestsAdmin />} />
                         <Route path="settings" element={<SystemSettings />} />
                         <Route path="logs" element={<AuditLogs />} />
                     </Route>
@@ -104,9 +105,6 @@ const AppRoutes: React.FC = () => {
                         <Route path="forms/create" element={<CreateForm />} />
                         <Route path="forms/:formId/edit" element={<CreateForm />} />
                         <Route path="forms/:formId" element={<FormDetails />} />
-                        <Route path="staff" element={<HospitalStaffManagement />} />
-                        <Route path="staff/add" element={<AddStaffPage />} />
-                        <Route path="staff/:staffId" element={<StaffDetailsPage />} />
                         <Route path="reports" element={<ReportsPage />} />
                         <Route path="logs" element={<HospitalAuditLogs />} />
                         <Route path="notifications" element={<HospitalNotifications />} />
@@ -135,10 +133,15 @@ const AppRoutes: React.FC = () => {
 
 
 const App: React.FC = () => {
+    useEffect(() => {
+        installAlertNotificationBridge();
+    }, []);
+
   return (
     <AuthProvider>
         <HashRouter>
             <AppRoutes/>
+                        <AppNotificationCenter />
         </HashRouter>
     </AuthProvider>
   );

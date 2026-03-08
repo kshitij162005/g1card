@@ -41,7 +41,6 @@ const DeleteModal: React.FC<DeleteModalProps> = ({ isOpen, onClose, onConfirm, h
                         <ul className="space-y-2 ml-7">
                             <li className="text-sm text-red-700 dark:text-red-300">• All hospital data will be permanently deleted</li>
                             <li className="text-sm text-red-700 dark:text-red-300">• All patient records will be removed</li>
-                            <li className="text-sm text-red-700 dark:text-red-300">• All staff members will lose access</li>
                             <li className="text-sm text-red-700 dark:text-red-300">• All medical records will be deleted</li>
                             <li className="text-sm text-red-700 dark:text-red-300">• Hospital cannot be recovered after deletion</li>
                         </ul>
@@ -128,11 +127,11 @@ const HospitalManagement: React.FC = () => {
             const resp = await fetch(`${API_URL}/superadmin/hospitals/${deleteModal.hospitalId}`, { method: 'DELETE' });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Failed');
-            alert('Hospital deleted successfully');
+            notify('Hospital deleted successfully');
             fetchHospitals();
         } catch (err) {
             console.error('delete hospital error:', err);
-            alert('Error deleting hospital');
+            notify('Error deleting hospital');
         }
     };
     

@@ -5,17 +5,32 @@ import Card from '../../components/Card';
 const ReportsPage: React.FC = () => {
     return (
         <Card title="Generate Reports">
-            <div className="p-4 text-center">
-                <h3 className="text-lg font-semibold text-gray-700">Reporting Feature</h3>
-                <p className="mt-2 text-gray-500">This feature is under construction. You will be able to generate and download various reports soon.</p>
-                <div className="mt-6 space-y-4">
-                    <div className="p-4 border rounded-md bg-gray-50">
-                        <p className="font-semibold">Patient Demographics Report</p>
-                        <button className="mt-2 text-sm px-4 py-2 bg-gray-300 text-gray-600 rounded-md cursor-not-allowed">Generate</button>
+            <div className="space-y-5">
+                <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-5">
+                    <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Reporting Feature</h3>
+                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+                        Reports are being finalized. You will be able to generate, download, and schedule reports from this page soon.
+                    </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4">
+                    <div className="p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900/30 flex items-center justify-between">
+                        <div>
+                            <p className="font-semibold text-slate-800 dark:text-slate-100">Patient Demographics Report</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Age, gender and registration distribution.</p>
+                        </div>
+                        <button type="button" className="text-sm px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 rounded-md cursor-not-allowed" disabled>
+                            Generate
+                        </button>
                     </div>
-                    <div className="p-4 border rounded-md bg-gray-50">
-                        <p className="font-semibold">Patient Activity Log</p>
-                        <button className="mt-2 text-sm px-4 py-2 bg-gray-300 text-gray-600 rounded-md cursor-not-allowed">Generate</button>
+                    <div className="p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900/30 flex items-center justify-between">
+                        <div>
+                            <p className="font-semibold text-slate-800 dark:text-slate-100">Patient Activity Log</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Access events and timeline insights.</p>
+                        </div>
+                        <button type="button" className="text-sm px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 rounded-md cursor-not-allowed" disabled>
+                            Generate
+                        </button>
                     </div>
                 </div>
             </div>

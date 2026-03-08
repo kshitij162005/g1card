@@ -15,17 +15,17 @@ const AddPatientPage: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user) return alert('Not authenticated');
+        if (!user) return notify('Not authenticated');
         setLoading(true);
         try {
             const resp = await fetch(`${API_URL}/hospitals/${user.id}/patients`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: form.email, password: form.password }) });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Failed to send access request');
-            alert('Access request sent to patient. Status: ' + (data.accessRequest?.status || 'PENDING'));
+            notify('Access request sent to patient. Status: ' + (data.accessRequest?.status || 'PENDING'));
             navigate('/hospital/patients');
         } catch (err: any) {
             console.error(err);
-            alert('Error: ' + (err.message || String(err)));
+            notify('Error: ' + (err.message || String(err)));
         } finally { setLoading(false); }
     };
 
@@ -33,7 +33,7 @@ const AddPatientPage: React.FC = () => {
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold text-gray-800 dark:text-slate-100">Add New Patient</h2>
-                <button onClick={() => navigate(-1)} className="px-4 py-2 bg-gray-200 dark:bg-slate-700 text-gray-800 dark:text-slate-100 text-sm rounded-md hover:bg-gray-300 dark:hover:bg-slate-600">
+                <button type="button" onClick={() => navigate(-1)} className="px-4 py-2 bg-gray-200 dark:bg-slate-700 text-gray-800 dark:text-slate-100 text-sm rounded-md hover:bg-gray-300 dark:hover:bg-slate-600">
                     &larr; Back
                 </button>
             </div>
