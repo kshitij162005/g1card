@@ -80,9 +80,9 @@ const HospitalDashboard: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <Card>
+            <Card className="bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-slate-800 dark:to-slate-800">
                 <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200">Welcome, {user?.name || 'Hospital'}</h2>
-                <div className="flex space-x-6 text-sm text-slate-500 dark:text-slate-400 mt-2">
+                <div className="flex flex-wrap gap-4 text-sm text-slate-500 dark:text-slate-400 mt-2">
                     <span>Verification Status: <span className="text-status-green font-semibold">✓ Approved</span></span>
                     <span>Last Activity: {formatLastActivity()}</span>
                 </div>
@@ -135,11 +135,11 @@ const HospitalDashboard: React.FC = () => {
             
             <Card title="Quick Actions">
                 <div className="flex flex-wrap gap-3">
-                    <button onClick={() => navigate('/hospital/patients/add')} className="px-4 py-2 bg-brand-primary text-white text-sm rounded-lg hover:bg-brand-secondary transition-transform transform hover:scale-105">+ Add Patient</button>
-                    <button onClick={() => navigate('/hospital/patients')} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-transform transform hover:scale-105">View Patients</button>
-                    <button onClick={() => navigate('/hospital/forms')} className="px-4 py-2 bg-emerald-600 dark:bg-emerald-700 text-white text-sm rounded-lg hover:bg-emerald-700 dark:hover:bg-emerald-800 transition-transform transform hover:scale-105">+ Add Record</button>
-                    <button onClick={() => navigate('/hospital/reports')} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-transform transform hover:scale-105">Generate Report</button>
-                    <button onClick={() => navigate('/hospital/settings')} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-transform transform hover:scale-105">Account Settings</button>
+                    <button onClick={() => navigate('/hospital/patients/add')} className="px-4 py-2.5 bg-brand-primary text-white text-sm rounded-lg hover:bg-brand-secondary transition-all shadow-sm hover:shadow-md">+ Add Patient</button>
+                    <button onClick={() => navigate('/hospital/patients')} className="px-4 py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-all">View Patients</button>
+                    <button onClick={() => navigate('/hospital/forms')} className="px-4 py-2.5 bg-emerald-600 dark:bg-emerald-700 text-white text-sm rounded-lg hover:bg-emerald-700 dark:hover:bg-emerald-800 transition-all shadow-sm hover:shadow-md">+ Add Record</button>
+                    <button onClick={() => navigate('/hospital/reports')} className="px-4 py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-all">Generate Report</button>
+                    <button onClick={() => navigate('/hospital/settings')} className="px-4 py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-all">Account Settings</button>
                 </div>
             </Card>
         </div>

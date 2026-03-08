@@ -34,6 +34,18 @@
         document.documentElement.classList.remove('dark')
       }
     </script>
+    <script>
+      // Provide a stable global notify binding before modules execute.
+      window.notify = window.notify || function(message) {
+        const text = typeof message === 'string' ? message : String(message ?? '');
+        window.dispatchEvent(new CustomEvent('g1card:notify', {
+          detail: { title: 'Notice', message: text, type: 'info' }
+        }));
+      };
+      var notify = function(message) {
+        return window.notify(message);
+      };
+    </script>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
 </body>

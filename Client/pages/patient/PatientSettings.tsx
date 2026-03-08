@@ -1,5 +1,6 @@
 import { API_URL } from '../../config/api';
 import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Card from '../../components/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import { DetailedPatient, Role } from '../../types';
@@ -24,56 +25,7 @@ const ToggleSwitch: React.FC<{ label: string; defaultChecked?: boolean; disabled
 );
 
 
-const PermissionControl: React.FC<{ 
-    hospital: string; 
-    accessLevel: 'GENERAL' | 'COMPLETE'; 
-    lastAccessed: string; 
-    accessId: string;
-    onRevoke?: () => void; 
-    onAccessLevelChange?: (hospitalName: string, currentLevel: 'GENERAL' | 'COMPLETE', newLevel: 'GENERAL' | 'COMPLETE') => void;
-}> = ({ hospital, accessLevel, lastAccessed, accessId, onRevoke, onAccessLevelChange }) => {
-    const [currentLevel, setCurrentLevel] = React.useState(accessLevel);
-
-    const handleChange = async (newLevel: 'GENERAL' | 'COMPLETE') => {
-        if (newLevel === currentLevel || !onAccessLevelChange) return;
-        onAccessLevelChange(hospital, currentLevel, newLevel);
-    };
-
-    // Update local state when prop changes (after successful update)
-    React.useEffect(() => {
-        setCurrentLevel(accessLevel);
-    }, [accessLevel]);
-
-    return (
-        <div className="p-4 border dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-700/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-                <p className="font-semibold text-slate-800 dark:text-slate-200">{hospital}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Last Accessed: {lastAccessed}</p>
-            </div>
-            <div className="flex items-center gap-4">
-                <select 
-                    value={currentLevel} 
-                    onChange={(e) => handleChange(e.target.value as 'GENERAL' | 'COMPLETE')}
-                    className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-accent focus:border-brand-accent outline-none"
-                >
-                    <option value="COMPLETE">Complete Access</option>
-                    <option value="GENERAL">Partial Access (Hospital records only)</option>
-                </select>
-                <button onClick={onRevoke} className="text-sm text-red-600 hover:underline font-semibold whitespace-nowrap">Revoke Access</button>
-            </div>
-        </div>
-    );
-};
-
-const ActiveSession: React.FC<{ browser: string; location: string; lastActive: string; }> = ({ browser, location, lastActive }) => (
-    <div className="p-3 border dark:border-slate-700 rounded-lg flex items-center justify-between">
-        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>{browser}</strong> - {location}</p>
-        <div className="flex items-center gap-4">
-            <p className="text-xs text-slate-500 dark:text-slate-400">Last active: {lastActive}</p>
-            <button className="text-sm text-red-600 hover:underline">Sign Out</button>
-        </div>
-    </div>
-);
+const ACCESS_PAGE_SIZE = 5;
 
 interface HospitalPermissionEntry {
     accessId: string;
@@ -83,13 +35,29 @@ interface HospitalPermissionEntry {
     lastAccessed: string | null;
 }
 
+interface HospitalAccessCounts {
+    total: number;
+    complete: number;
+    partial: number;
+}
+
 const PatientSettings: React.FC = () => {
     const { user } = useAuth();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [patient, setPatient] = useState<DetailedPatient | null>(null);
     const [showEdit, setShowEdit] = useState(false);
     const [saving, setSaving] = useState(false);
     const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', dob: '', address: '', emergencyContactName: '', emergencyContactPhone: '' });
     const [hospitalPermissions, setHospitalPermissions] = useState<HospitalPermissionEntry[]>([]);
+    const [permissionSearch, setPermissionSearch] = useState('');
+    const [permissionPage, setPermissionPage] = useState(1);
+    const [showPermissionsManager, setShowPermissionsManager] = useState(false);
+    const [permissionsLoading, setPermissionsLoading] = useState(false);
+    const [permissionsError, setPermissionsError] = useState<string | null>(null);
+    const [permissionsRefreshKey, setPermissionsRefreshKey] = useState(0);
+    const [accessCounts, setAccessCounts] = useState<HospitalAccessCounts>({ total: 0, complete: 0, partial: 0 });
+    const [countsLoading, setCountsLoading] = useState(false);
+    const [countsError, setCountsError] = useState<string | null>(null);
     const [changingPassword, setChangingPassword] = useState(false);
     const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
     const [revokeModal, setRevokeModal] = useState<{ show: boolean; accessId: string; hospitalName: string } | null>(null);
@@ -112,12 +80,50 @@ const PatientSettings: React.FC = () => {
                 console.warn('Could not fetch patient details', err);
             }
         };
-        const fetchHospitalPermissions = async () => {
+        const fetchHospitalAccessCounts = async () => {
             if (!user?.id) return;
+            setCountsLoading(true);
+            setCountsError(null);
+            try {
+                const resp = await fetch(`${API_URL}/patients/${user.id}/hospital-accesses/count`);
+                const data = await resp.json();
+                if (!resp.ok || !data?.counts) {
+                    throw new Error(data?.error || 'Unable to load access counts');
+                }
+                setAccessCounts({
+                    total: data.counts.total || 0,
+                    complete: data.counts.complete || 0,
+                    partial: data.counts.partial || 0,
+                });
+            } catch (err) {
+                console.warn('Could not fetch hospital access counts', err);
+                setCountsError('Unable to load access counts right now.');
+            } finally {
+                setCountsLoading(false);
+            }
+        };
+        fetchPatient();
+        fetchHospitalAccessCounts();
+    }, [user?.id]);
+
+    useEffect(() => {
+        const tab = searchParams.get('tab');
+        if (tab === 'manage-access') {
+            setShowPermissionsManager(true);
+        }
+    }, [searchParams]);
+
+    useEffect(() => {
+        const fetchHospitalPermissions = async () => {
+            if (!showPermissionsManager || !user?.id) return;
+            setPermissionsLoading(true);
+            setPermissionsError(null);
             try {
                 const resp = await fetch(`${API_URL}/patients/${user.id}/hospital-accesses`);
                 const data = await resp.json();
-                if (!resp.ok || !data?.accesses) return;
+                if (!resp.ok || !data?.accesses) {
+                    throw new Error(data?.error || 'Unable to load hospital permissions');
+                }
                 const list: HospitalPermissionEntry[] = data.accesses.map((a: any) => ({
                     accessId: a.id,
                     hospitalId: a.hospitalId,
@@ -126,13 +132,17 @@ const PatientSettings: React.FC = () => {
                     lastAccessed: a.lastAccessed,
                 }));
                 setHospitalPermissions(list);
+                const complete = list.filter((entry) => entry.accessLevel === 'COMPLETE').length;
+                setAccessCounts({ total: list.length, complete, partial: list.length - complete });
             } catch (err) {
                 console.warn('Could not fetch hospital permissions', err);
+                setPermissionsError('Unable to load hospital permissions. Please try again.');
+            } finally {
+                setPermissionsLoading(false);
             }
         };
-        fetchPatient();
         fetchHospitalPermissions();
-    }, [user?.id]);
+    }, [showPermissionsManager, user?.id, permissionsRefreshKey]);
 
     const openEdit = () => {
         setForm({
@@ -153,7 +163,7 @@ const PatientSettings: React.FC = () => {
     const updatePasswordField = (k: string, v: string) => setPasswordForm(prev => ({ ...prev, [k]: v }));
 
     const saveProfile = async () => {
-        if (!user?.id) return alert('Not signed in');
+        if (!user?.id) return notify('Not signed in');
         setSaving(true);
         try {
             const body: any = {
@@ -170,12 +180,12 @@ const PatientSettings: React.FC = () => {
                 method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
             });
             const data = await resp.json();
-            if (!resp.ok) return alert('Save failed: ' + (data?.error || data?.message || 'unknown'));
+            if (!resp.ok) return notify('Save failed: ' + (data?.error || data?.message || 'unknown'));
             setPatient(data.patient as DetailedPatient);
             setShowEdit(false);
         } catch (err) {
             console.error('save profile error', err);
-            alert('Error saving profile');
+            notify('Error saving profile');
         } finally { setSaving(false); }
     };
 
@@ -217,22 +227,60 @@ const PatientSettings: React.FC = () => {
             });
             const data = await resp.json();
             if (!resp.ok) {
-                alert('Failed to update access level: ' + (data?.error || data?.message || 'unknown'));
+                notify('Failed to update access level: ' + (data?.error || data?.message || 'unknown'));
                 return;
             }
             // Update local state
             setHospitalPermissions(prev => prev.map(h => 
                 h.accessId === accessId ? { ...h, accessLevel: newLevel } : h
             ));
+            setAccessCounts(prev => {
+                if (accessLevelModal.currentLevel === newLevel) return prev;
+                if (newLevel === 'COMPLETE') {
+                    return { ...prev, complete: prev.complete + 1, partial: Math.max(0, prev.partial - 1) };
+                }
+                return { ...prev, complete: Math.max(0, prev.complete - 1), partial: prev.partial + 1 };
+            });
             setAccessLevelModal(null);
         } catch (err) {
             console.error('update access level error', err);
-            alert('Error updating access level');
+            notify('Error updating access level');
         }
     };
 
     const handleRevokeHospital = (accessId: string, hospitalName: string) => {
         setRevokeModal({ show: true, accessId, hospitalName });
+    };
+
+    const filteredPermissions = hospitalPermissions.filter((entry) =>
+        entry.hospitalName.toLowerCase().includes(permissionSearch.trim().toLowerCase())
+    );
+
+    const permissionPages = Math.max(1, Math.ceil(filteredPermissions.length / ACCESS_PAGE_SIZE));
+    const paginatedPermissions = filteredPermissions.slice(
+        (permissionPage - 1) * ACCESS_PAGE_SIZE,
+        permissionPage * ACCESS_PAGE_SIZE
+    );
+    const completeAccessCount = accessCounts.complete;
+    const partialAccessCount = accessCounts.partial;
+
+    useEffect(() => {
+        setPermissionPage(1);
+    }, [permissionSearch, hospitalPermissions.length]);
+
+    useEffect(() => {
+        if (permissionPage > permissionPages) {
+            setPermissionPage(permissionPages);
+        }
+    }, [permissionPage, permissionPages]);
+
+    const closePermissionsManager = () => {
+        setShowPermissionsManager(false);
+        if (searchParams.get('tab') === 'manage-access') {
+            const next = new URLSearchParams(searchParams);
+            next.delete('tab');
+            setSearchParams(next, { replace: true });
+        }
     };
 
     const confirmRevokeAccess = async () => {
@@ -243,29 +291,40 @@ const PatientSettings: React.FC = () => {
             });
             const data = await resp.json();
             if (!resp.ok) {
-                alert('Failed to revoke access: ' + (data?.error || data?.message || 'unknown'));
+                notify('Failed to revoke access: ' + (data?.error || data?.message || 'unknown'));
                 return;
             }
             // Remove from local state
             setHospitalPermissions(prev => prev.filter(h => h.accessId !== revokeModal.accessId));
+            setAccessCounts(prev => {
+                const revoked = hospitalPermissions.find(h => h.accessId === revokeModal.accessId);
+                if (!revoked) {
+                    return { ...prev, total: Math.max(0, prev.total - 1) };
+                }
+                return {
+                    total: Math.max(0, prev.total - 1),
+                    complete: revoked.accessLevel === 'COMPLETE' ? Math.max(0, prev.complete - 1) : prev.complete,
+                    partial: revoked.accessLevel === 'GENERAL' ? Math.max(0, prev.partial - 1) : prev.partial,
+                };
+            });
             setRevokeModal(null);
         } catch (err) {
             console.error('revoke access error', err);
-            alert('Error revoking access');
+            notify('Error revoking access');
         }
     };
 
     const submitPasswordChange = async () => {
         if (!user?.email) {
-            alert('Unable to identify user email for password change');
+            notify('Unable to identify user email for password change');
             return;
         }
         if (!passwordForm.currentPassword || !passwordForm.newPassword) {
-            alert('Please fill all password fields');
+            notify('Please fill all password fields');
             return;
         }
         if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-            alert('New passwords do not match');
+            notify('New passwords do not match');
             return;
         }
         try {
@@ -281,15 +340,15 @@ const PatientSettings: React.FC = () => {
             });
             const data = await resp.json();
             if (!resp.ok) {
-                alert(data?.error || data?.message || 'Unable to change password');
+                notify(data?.error || data?.message || 'Unable to change password');
                 return;
             }
-            alert('Password updated successfully');
+            notify('Password updated successfully');
             setChangingPassword(false);
             setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
         } catch (err) {
             console.error('change password error', err);
-            alert('Error while changing password');
+            notify('Error while changing password');
         }
     };
 
@@ -312,23 +371,34 @@ const PatientSettings: React.FC = () => {
                 
                 <Section title="Hospital Permissions">
                     <p className="text-sm text-slate-600 dark:text-slate-400">Manage which hospitals can access your data and control their access level.</p>
-                    {hospitalPermissions.length === 0 ? (
-                        <p className="text-sm text-slate-500">No hospitals currently have access to your records.</p>
-                    ) : (
-                        hospitalPermissions.map(h => (
-                            <PermissionControl
-                                key={h.accessId}
-                                hospital={h.hospitalName}
-                                accessLevel={h.accessLevel}
-                                lastAccessed={formatDate(h.lastAccessed)}
-                                accessId={h.accessId}
-                                onRevoke={() => handleRevokeHospital(h.accessId, h.hospitalName)}
-                                onAccessLevelChange={(hospitalName, currentLevel, newLevel) => 
-                                    handleAccessLevelChange(h.accessId, hospitalName, currentLevel, newLevel)
-                                }
-                            />
-                        ))
-                    )}
+                    <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="rounded-lg bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 p-3">
+                                <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Connected</p>
+                                <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100 mt-1">{countsLoading ? '...' : accessCounts.total}</p>
+                            </div>
+                            <div className="rounded-lg bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 p-3">
+                                <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Complete Access</p>
+                                <p className="text-2xl font-semibold text-emerald-700 dark:text-emerald-300 mt-1">{completeAccessCount}</p>
+                            </div>
+                            <div className="rounded-lg bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 p-3">
+                                <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Partial Access</p>
+                                <p className="text-2xl font-semibold text-amber-700 dark:text-amber-300 mt-1">{partialAccessCount}</p>
+                            </div>
+                        </div>
+                        <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowPermissionsManager(true)}
+                                className="px-4 py-2 rounded-lg bg-brand-primary text-white text-sm font-medium hover:bg-brand-secondary transition-colors"
+                            >
+                                Manage Hospital Access
+                            </button>
+                        </div>
+                        {countsError && (
+                            <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">{countsError}</p>
+                        )}
+                    </div>
                 </Section>
 
                 <Section title="Security Settings">
@@ -344,12 +414,6 @@ const PatientSettings: React.FC = () => {
                    <ToggleSwitch label="Two-Factor Authentication" disabled comingSoon />
                 </Section>
                 
-                <Section title="Active Sessions">
-                    <ActiveSession browser="Web Browser (Chrome)" location="Mumbai, IN" lastActive="2 hours ago" />
-                    <ActiveSession browser="Mobile (iPhone)" location="Mumbai, IN" lastActive="1 day ago" />
-                    <button className="w-full mt-2 px-4 py-2 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-900/30 border text-red-700 dark:text-red-400 text-sm rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40">Sign Out All Sessions</button>
-                </Section>
-
                 <Section title="Privacy & Data">
                      <div className="space-y-3">
                         <ToggleSwitch label="Allow hospitals to update my records" defaultChecked />
@@ -388,7 +452,7 @@ const PatientSettings: React.FC = () => {
         </Card>
         {showEdit && (
             <div className="fixed inset-0 z-40 flex items-center justify-center p-4 animate-in fade-in duration-200">
-                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowEdit(false)} />
+                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-pointer" onClick={() => setShowEdit(false)} />
                 <div className="relative w-full max-w-lg animate-in zoom-in-95 duration-200">
                     <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden">
                         <div className="border-b border-slate-800 px-6 py-4">
@@ -458,7 +522,7 @@ const PatientSettings: React.FC = () => {
         )}
         {changingPassword && (
             <div className="fixed inset-0 z-40 flex items-center justify-center p-4 animate-in fade-in duration-200">
-                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => { setChangingPassword(false); setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' }); }} />
+                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-pointer" onClick={() => { setChangingPassword(false); setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' }); }} />
                 <div className="relative w-full max-w-md animate-in zoom-in-95 duration-200">
                     <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden">
                         <div className="border-b border-slate-800 px-6 py-4">
@@ -544,9 +608,141 @@ const PatientSettings: React.FC = () => {
                 </div>
             </div>
         )}
+        {showPermissionsManager && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-pointer" onClick={closePermissionsManager} />
+                <div className="relative w-full max-w-5xl animate-in zoom-in-95 duration-200">
+                    <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden">
+                        <div className="border-b border-slate-800 px-6 py-4">
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <h2 className="text-lg font-semibold text-white tracking-tight">Hospital Access Manager</h2>
+                                    <p className="text-sm text-slate-400 mt-1">Search, review and control hospital permissions.</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={closePermissionsManager}
+                                    className="text-slate-500 hover:text-slate-300 transition-colors p-1"
+                                    aria-label="Close"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div className="mt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                                <input
+                                    type="text"
+                                    value={permissionSearch}
+                                    onChange={(e) => setPermissionSearch(e.target.value)}
+                                    placeholder="Search hospital"
+                                    className="w-full md:w-80 px-3 py-2 text-sm border border-slate-700 rounded-lg bg-slate-800 text-slate-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                />
+                                <p className="text-sm text-slate-400">{filteredPermissions.length} result{filteredPermissions.length === 1 ? '' : 's'}</p>
+                            </div>
+                        </div>
+                        <div className="p-6">
+                            {permissionsLoading ? (
+                                <p className="text-sm text-slate-400">Loading hospital permissions...</p>
+                            ) : permissionsError ? (
+                                <div className="space-y-3">
+                                    <p className="text-sm text-red-300">{permissionsError}</p>
+                                    <button
+                                        type="button"
+                                        onClick={() => setPermissionsRefreshKey((key) => key + 1)}
+                                        className="px-4 py-2 rounded-md border border-slate-600 text-slate-200 hover:bg-slate-800 transition-colors"
+                                    >
+                                        Retry
+                                    </button>
+                                </div>
+                            ) : hospitalPermissions.length === 0 ? (
+                                <p className="text-sm text-slate-400">No hospitals currently have access to your records.</p>
+                            ) : filteredPermissions.length === 0 ? (
+                                <p className="text-sm text-slate-400">No hospitals match your search.</p>
+                            ) : (
+                                <div className="rounded-xl border border-slate-700 overflow-hidden">
+                                    <div className="overflow-x-auto max-h-[22rem] overflow-y-auto">
+                                        <table className="min-w-full text-sm">
+                                            <thead className="bg-slate-800/70 sticky top-0">
+                                                <tr>
+                                                    <th className="px-4 py-3 text-left font-semibold text-slate-300">Hospital</th>
+                                                    <th className="px-4 py-3 text-left font-semibold text-slate-300">Access</th>
+                                                    <th className="px-4 py-3 text-left font-semibold text-slate-300">Last Accessed</th>
+                                                    <th className="px-4 py-3 text-right font-semibold text-slate-300">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-700 bg-slate-900/30">
+                                                {paginatedPermissions.map((h) => {
+                                                    const nextLevel: 'GENERAL' | 'COMPLETE' = h.accessLevel === 'COMPLETE' ? 'GENERAL' : 'COMPLETE';
+                                                    return (
+                                                        <tr key={h.accessId}>
+                                                            <td className="px-4 py-3 font-medium text-slate-100">{h.hospitalName}</td>
+                                                            <td className="px-4 py-3">
+                                                                <span className={`inline-flex px-2 py-1 rounded-md text-xs font-semibold ${h.accessLevel === 'COMPLETE' ? 'bg-emerald-900/30 text-emerald-300' : 'bg-amber-900/30 text-amber-300'}`}>
+                                                                    {h.accessLevel === 'COMPLETE' ? 'Complete' : 'Partial'}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-slate-300">{formatDate(h.lastAccessed)}</td>
+                                                            <td className="px-4 py-3">
+                                                                <div className="flex justify-end gap-2">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleAccessLevelChange(h.accessId, h.hospitalName, h.accessLevel, nextLevel)}
+                                                                        className="px-3 py-1.5 rounded-md border border-slate-600 text-slate-200 hover:bg-slate-800 transition-colors"
+                                                                    >
+                                                                        Switch to {nextLevel === 'COMPLETE' ? 'Complete' : 'Partial'}
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleRevokeHospital(h.accessId, h.hospitalName)}
+                                                                        className="px-3 py-1.5 rounded-md border border-red-800 text-red-300 hover:bg-red-900/20 transition-colors"
+                                                                    >
+                                                                        Revoke
+                                                                    </button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    {permissionPages > 1 && (
+                                        <div className="flex items-center justify-between px-4 py-3 border-t border-slate-700 bg-slate-800/40">
+                                            <p className="text-xs text-slate-300">
+                                                Showing {(permissionPage - 1) * ACCESS_PAGE_SIZE + 1}-{Math.min(permissionPage * ACCESS_PAGE_SIZE, filteredPermissions.length)} of {filteredPermissions.length}
+                                            </p>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    disabled={permissionPage === 1}
+                                                    onClick={() => setPermissionPage((p) => Math.max(1, p - 1))}
+                                                    className="px-3 py-1.5 rounded-md border border-slate-600 text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    Prev
+                                                </button>
+                                                <span className="text-xs text-slate-300">{permissionPage}/{permissionPages}</span>
+                                                <button
+                                                    type="button"
+                                                    disabled={permissionPage === permissionPages}
+                                                    onClick={() => setPermissionPage((p) => Math.min(permissionPages, p + 1))}
+                                                    className="px-3 py-1.5 rounded-md border border-slate-600 text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    Next
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
         {revokeModal?.show && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setRevokeModal(null)} />
+                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-pointer" onClick={() => setRevokeModal(null)} />
                 <div className="relative w-full max-w-md animate-in zoom-in-95 duration-200">
                     <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden">
                         <div className="border-b border-slate-800 px-6 py-4">
@@ -614,7 +810,7 @@ const PatientSettings: React.FC = () => {
         )}
         {accessLevelModal?.show && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setAccessLevelModal(null)} />
+                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-pointer" onClick={() => setAccessLevelModal(null)} />
                 <div className="relative w-full max-w-md animate-in zoom-in-95 duration-200">
                     <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden">
                         <div className="border-b border-slate-800 px-6 py-4">

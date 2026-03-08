@@ -39,11 +39,11 @@ const FormTemplatesList: React.FC = () => {
             const resp = await fetch(`${API_URL}/hospitals/${user.id}/forms/${templateId}`, { method: 'DELETE' });
             const d = await resp.json();
             if (!resp.ok) throw new Error(d.error || 'Failed');
-            alert('Form template deleted successfully');
+            notify('Form template deleted successfully');
             await fetchTemplates();
         } catch (err) {
             console.error('delete form', err);
-            alert('Error deleting form template');
+            notify('Error deleting form template');
         }
     };
 
@@ -61,15 +61,17 @@ const FormTemplatesList: React.FC = () => {
             await fetchTemplates();
         } catch (err) {
             console.error('toggle form status', err);
-            alert('Unable to update form status');
+            notify('Unable to update form status');
         }
     };
 
     const statusBadge = (active?: boolean) => (
-        <span className={`px-2 py-1 text-xs rounded-full font-medium ${active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200'}`}>
+        <span className={`px-2.5 py-1 text-xs rounded-full font-medium ${active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200'}`}>
             {active ? 'Active' : 'Inactive'}
         </span>
     );
+
+    const actionButtonBase = 'inline-flex items-center justify-center whitespace-nowrap text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors';
 
     if (loading && templates.length === 0) {
         return <Loader text="Loading form templates..." fullScreen />;
@@ -78,9 +80,11 @@ const FormTemplatesList: React.FC = () => {
     return (
         <Card title="Form Templates">
             <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                    <p className="text-sm text-slate-600 dark:text-slate-400">Create and manage hospital-specific form templates used when adding medical records.</p>
-                    <button onClick={() => navigate('/hospital/forms/create')} className="px-5 py-2.5 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary transition-colors shadow-sm hover:shadow-md">+ Create Form</button>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm text-slate-600 dark:text-slate-400 max-w-2xl">Create and manage hospital-specific form templates used when adding medical records.</p>
+                    <button onClick={() => navigate('/hospital/forms/create')} className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
+                        + Create Form
+                    </button>
                 </div>
 
                 {loading && <p className="text-sm">Loading...</p>}
@@ -91,7 +95,7 @@ const FormTemplatesList: React.FC = () => {
 
                 {!loading && templates.length > 0 && (
                     <div className="overflow-x-auto">
-                        <table className="min-w-full">
+                        <table className="min-w-[980px] w-full">
                             <thead className="bg-slate-50 dark:bg-slate-700">
                                 <tr>
                                     <th className="py-3 px-6 text-left text-xs font-medium text-slate-500 dark:text-slate-300 uppercase">Name</th>
@@ -111,14 +115,39 @@ const FormTemplatesList: React.FC = () => {
                                         </td>
                                         <td className="py-4 px-6">{statusBadge(t.active)}</td>
                                         <td className="py-4 px-6 text-slate-700 dark:text-slate-300">{(t.fields || []).length} fields</td>
-                                        <td className="py-4 px-6 space-x-2">
-                                            <button onClick={() => navigate(`/hospital/forms/${t._id}`)} className="text-sm px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">View</button>
-                                            <button onClick={() => navigate(`/hospital/forms/${t._id}/edit`)} className="text-sm px-3 py-1.5 border border-blue-300 dark:border-blue-700 rounded-md text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors">Edit</button>
-                                            <button onClick={() => navigate(`/hospital/forms/create?clone=${t._id}`)} className="text-sm px-3 py-1.5 border border-purple-300 dark:border-purple-700 rounded-md text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-colors">Clone</button>
-                                            <button onClick={() => toggleFormStatus(t)} className={`text-sm px-3 py-1.5 border rounded-md transition-colors ${t.active ? 'border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40' : 'border-emerald-300 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'}`}>
-                                                {t.active ? 'Deactivate' : 'Activate'}
-                                            </button>
-                                            <button onClick={() => deleteForm(t._id, t.name)} className="text-sm px-3 py-1.5 border border-rose-300 dark:border-rose-700 rounded-md text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors">Delete</button>
+                                        <td className="py-4 px-6">
+                                            <div className="flex items-center gap-2 whitespace-nowrap">
+                                                <button
+                                                    onClick={() => navigate(`/hospital/forms/${t._id}`)}
+                                                    className={`${actionButtonBase} border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700`}
+                                                >
+                                                    View
+                                                </button>
+                                                <button
+                                                    onClick={() => navigate(`/hospital/forms/${t._id}/edit`)}
+                                                    className={`${actionButtonBase} border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40`}
+                                                >
+                                                    Edit
+                                                </button>
+                                                <button
+                                                    onClick={() => navigate(`/hospital/forms/create?clone=${t._id}`)}
+                                                    className={`${actionButtonBase} border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/40`}
+                                                >
+                                                    Clone
+                                                </button>
+                                                <button
+                                                    onClick={() => toggleFormStatus(t)}
+                                                    className={`${actionButtonBase} ${t.active ? 'border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40' : 'border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'}`}
+                                                >
+                                                    {t.active ? 'Deactivate' : 'Activate'}
+                                                </button>
+                                                <button
+                                                    onClick={() => deleteForm(t._id, t.name)}
+                                                    className={`${actionButtonBase} border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40`}
+                                                >
+                                                    Delete
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}  

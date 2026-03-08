@@ -162,11 +162,10 @@ const HospitalDetails: React.FC = () => {
             title: 'Activate Hospital',
             message: `Are you sure you want to activate "${hospital.name}"?`,
             consequences: [
-                'Hospital staff will regain full access to the system',
+                'Hospital account will regain full access to the system',
                 'They can add and manage patients',
                 'They can create and edit medical records',
                 'All form templates will become accessible',
-                'Staff management features will be enabled',
                 'Dashboard and reporting features will be restored'
             ],
             confirmText: 'Activate Hospital',
@@ -182,13 +181,13 @@ const HospitalDetails: React.FC = () => {
             title: 'Suspend Hospital',
             message: `Are you sure you want to suspend "${hospital.name}"?`,
             consequences: [
-                'Hospital staff will lose access to most features',
+                'Hospital account will lose access to most features',
                 'They will see an "Account Inactive" blocking screen',
-                'Cannot add new patients or staff members',
+                'Cannot add new patients',
                 'Cannot create or edit medical records',
                 'Existing data will be preserved but inaccessible',
                 'Only account settings page will be accessible',
-                `Affects ${hospital.patientCount || 0} patients and ${hospital.staffCount || 0} staff members`
+                `Affects ${hospital.patientCount || 0} patients`
             ],
             confirmText: 'Suspend Hospital',
             confirmColor: 'yellow',
@@ -206,11 +205,11 @@ const HospitalDetails: React.FC = () => {
             });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Failed');
-            alert(`Hospital ${hospital.active ? 'suspended' : 'activated'} successfully`);
+            notify(`Hospital ${hospital.active ? 'suspended' : 'activated'} successfully`);
             fetchHospital();
         } catch (err) {
             console.error('toggle active status error:', err);
-            alert('Error updating status');
+            notify('Error updating status');
         }
     };
 
@@ -224,7 +223,6 @@ const HospitalDetails: React.FC = () => {
                 '⚠️ THIS ACTION CANNOT BE UNDONE',
                 `All hospital data will be permanently deleted`,
                 `${hospital.patientCount || 0} patient records will be removed`,
-                `${hospital.staffCount || 0} staff members will lose access`,
                 `${hospital.recordsCount || 0} medical records will be deleted`,
                 'All form templates will be removed',
                 'Hospital cannot be recovered after deletion',
@@ -242,11 +240,11 @@ const HospitalDetails: React.FC = () => {
             const resp = await fetch(`${API_URL}/superadmin/hospitals/${id}`, { method: 'DELETE' });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Failed');
-            alert('Hospital deleted successfully');
+            notify('Hospital deleted successfully');
             navigate('/admin/hospitals');
         } catch (err) {
             console.error('delete hospital error:', err);
-            alert('Error deleting hospital');
+            notify('Error deleting hospital');
         }
     };
 

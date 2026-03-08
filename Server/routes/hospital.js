@@ -96,64 +96,235 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
-function generateUniqueId(prefix = 'X') {
-  // short unique id using time + random
-  const t = Date.now().toString(36);
-  const r = Math.random().toString(36).substring(2, 6);
-  return `${prefix}${t}${r}`.toUpperCase();
-}
+// ==================== HOSPITAL UPDATE REQUEST WORKFLOW ====================
 
-// Create staff member for hospital
-router.post('/:id/staff', async (req, res) => {
+// Submit hospital information update request
+router.post('/:id/update-request', async (req, res) => {
   try {
     const Hospital = (await import('../models/Hospital.js')).default;
-    const Staff = (await import('../models/Staff.js')).default;
+    const HospitalUpdateRequest = (await import('../models/HospitalUpdateRequest.js')).default;
+    const Notification = (await import('../models/Notification.js')).default;
+    const Superadmin = (await import('../models/Superadmin.js')).default;
+    
     const id = req.params.id;
     if (!id) return res.status(400).json({ error: 'Missing hospital id' });
-    const hospital = await Hospital.findById(id);
+    
+    const hospital = await Hospital.findById(id).lean();
     if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
-    const { name, email, role, phone } = req.body;
-    if (!name || !email) return res.status(400).json({ error: 'name and email required' });
-
-    // generate staffId and ensure uniqueness (best effort)
-    let staffId = generateUniqueId('S');
-    while (await Staff.findOne({ staffId })) {
-      staffId = generateUniqueId('S');
+    
+    // Check if there's already a pending request
+    const existingPending = await HospitalUpdateRequest.findOne({ 
+      hospital: id, 
+      status: { $in: ['PENDING', 'CHANGES_REQUESTED'] } 
+    });
+    
+    if (existingPending && existingPending.status === 'PENDING') {
+      return res.status(400).json({ error: 'You already have a pending update request. Please wait for admin review.' });
     }
-
-    const doc = new Staff({ staffId, hospital: hospital._id, name, email, role, phone });
-    await doc.save();
-    return res.json({ ok: true, staff: { id: doc._id, staffId: doc.staffId, name: doc.name, email: doc.email, role: doc.role, status: doc.status } });
+    
+    const { changes, message } = req.body;
+    if (!changes || Object.keys(changes).length === 0) {
+      return res.status(400).json({ error: 'No changes provided' });
+    }
+    
+    // Validate allowed fields
+    const allowedFields = ['name', 'username', 'regNumber', 'license', 'address', 'city', 'state', 'pin', 
+                          'contactEmail', 'phone', 'website', 'adminName', 'adminEmail', 
+                          'adminPhone', 'designation'];
+    
+    const requestedChanges = {};
+    const originalData = {};
+    
+    for (const field of Object.keys(changes)) {
+      if (allowedFields.includes(field)) {
+        requestedChanges[field] = changes[field];
+        originalData[field] = hospital[field];
+      }
+    }
+    
+    if (Object.keys(requestedChanges).length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+    
+    // If updating an existing CHANGES_REQUESTED request, update it
+    let updateRequest;
+    if (existingPending && existingPending.status === 'CHANGES_REQUESTED') {
+      updateRequest = await HospitalUpdateRequest.findByIdAndUpdate(
+        existingPending._id,
+        {
+          requestedChanges,
+          originalData,
+          status: 'PENDING',
+          resubmittedAt: new Date(),
+          $push: message ? {
+            conversation: {
+              sender: 'HOSPITAL',
+              message: message || 'Updated information as requested',
+              timestamp: new Date()
+            }
+          } : {}
+        },
+        { new: true }
+      );
+    } else {
+      // Create new request
+      updateRequest = await HospitalUpdateRequest.create({
+        hospital: id,
+        requestedChanges,
+        originalData,
+        status: 'PENDING',
+        conversation: message ? [{
+          sender: 'HOSPITAL',
+          message,
+          timestamp: new Date()
+        }] : []
+      });
+    }
+    
+    // Notify all superadmins
+    const superadmins = await Superadmin.find({}).lean();
+    for (const admin of superadmins) {
+      const notification = await Notification.create({
+        type: 'HOSPITAL_UPDATE_REQUEST',
+        recipient: admin._id,
+        recipientModel: 'Superadmin',
+        sender: id,
+        senderModel: 'Hospital',
+        title: 'Hospital Information Update Request',
+        message: `${hospital.name} has submitted a request to update their information.`,
+        metadata: {
+          updateRequestId: updateRequest._id,
+          hospitalId: id,
+          hospitalName: hospital.name,
+          fieldsToUpdate: Object.keys(requestedChanges)
+        }
+      });
+      
+      sendEventToUser('Superadmin', admin._id.toString(), {
+        type: 'HOSPITAL_UPDATE_REQUEST',
+        title: 'New Update Request',
+        message: `${hospital.name} wants to update their information.`,
+        timestamp: new Date().toISOString(),
+        updateRequestId: updateRequest._id.toString(),
+        notificationId: notification._id.toString()
+      });
+    }
+    
+    return res.json({ ok: true, updateRequest });
   } catch (err) {
-    console.error('create staff error:', err);
+    console.error('create update request error:', err);
     return res.status(500).json({ error: err.message || String(err) });
   }
 });
 
-// List staff for a hospital with pagination and global search
-router.get('/:id/staff', async (req, res) => {
+// Get pending update request for hospital
+router.get('/:id/update-request/pending', async (req, res) => {
   try {
-    const Staff = (await import('../models/Staff.js')).default;
+    const HospitalUpdateRequest = (await import('../models/HospitalUpdateRequest.js')).default;
+    
     const id = req.params.id;
-    const q = (req.query.q || '').toString().trim();
-    const page = Math.max(1, parseInt(req.query.page || '1'));
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '10')));
-    const filter = { hospital: id };
-    if (q) {
-      filter.$or = [
-        { name: { $regex: q, $options: 'i' } },
-        { email: { $regex: q, $options: 'i' } },
-        { staffId: { $regex: q, $options: 'i' } },
-      ];
-    }
-    const total = await Staff.countDocuments(filter);
-    const docs = await Staff.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean();
-    return res.json({ ok: true, total, page, limit, staff: docs });
+    if (!id) return res.status(400).json({ error: 'Missing hospital id' });
+    
+    const updateRequest = await HospitalUpdateRequest.findOne({
+      hospital: id,
+      status: { $in: ['PENDING', 'CHANGES_REQUESTED'] }
+    })
+    .populate('reviewedBy', 'username email')
+    .sort({ createdAt: -1 })
+    .lean();
+    
+    return res.json({ ok: true, updateRequest });
   } catch (err) {
-    console.error('list staff error:', err);
+    console.error('fetch pending update request error:', err);
     return res.status(500).json({ error: err.message || String(err) });
   }
 });
+
+// Get all update requests for hospital (history)
+router.get('/:id/update-requests', async (req, res) => {
+  try {
+    const HospitalUpdateRequest = (await import('../models/HospitalUpdateRequest.js')).default;
+    
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ error: 'Missing hospital id' });
+    
+    const requests = await HospitalUpdateRequest.find({ hospital: id })
+      .populate('reviewedBy', 'username email')
+      .sort({ createdAt: -1 })
+      .lean();
+    
+    return res.json({ ok: true, requests });
+  } catch (err) {
+    console.error('fetch update requests error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Add a message to the update request conversation
+router.post('/:id/update-request/:requestId/message', async (req, res) => {
+  try {
+    const HospitalUpdateRequest = (await import('../models/HospitalUpdateRequest.js')).default;
+    const Notification = (await import('../models/Notification.js')).default;
+    const Superadmin = (await import('../models/Superadmin.js')).default;
+    
+    const { id, requestId } = req.params;
+    const { message } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+    
+    const updateRequest = await HospitalUpdateRequest.findOne({
+      _id: requestId,
+      hospital: id
+    });
+    
+    if (!updateRequest) {
+      return res.status(404).json({ error: 'Update request not found' });
+    }
+    
+    updateRequest.conversation.push({
+      sender: 'HOSPITAL',
+      message,
+      timestamp: new Date()
+    });
+    
+    await updateRequest.save();
+    
+    // Notify admin if request is under review
+    if (updateRequest.reviewedBy) {
+      const notification = await Notification.create({
+        type: 'UPDATE_REQUEST_MESSAGE',
+        recipient: updateRequest.reviewedBy,
+        recipientModel: 'Superadmin',
+        sender: id,
+        senderModel: 'Hospital',
+        title: 'New Message on Update Request',
+        message: `Hospital has sent a new message regarding their update request.`,
+        metadata: {
+          updateRequestId: updateRequest._id,
+          messagePreview: message.substring(0, 100)
+        }
+      });
+      
+      sendEventToUser('Superadmin', updateRequest.reviewedBy.toString(), {
+        type: 'UPDATE_REQUEST_MESSAGE',
+        title: 'New Message',
+        message: 'Hospital sent a message on update request.',
+        timestamp: new Date().toISOString(),
+        updateRequestId: updateRequest._id.toString(),
+        notificationId: notification._id.toString()
+      });
+    }
+    
+    return res.json({ ok: true, updateRequest });
+  } catch (err) {
+    console.error('add message error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// ==================== END HOSPITAL UPDATE REQUEST WORKFLOW ====================
 
 // Create a consent-based access request for an existing patient
 // Expected body: { email, password }
@@ -665,6 +836,7 @@ router.get('/:id/patients/:patientId/records', async (req, res) => {
       .populate('hospital', '_id name')
       .populate('form', 'name description fields')
       .sort({ createdAt: -1 })
+      .select('-data -attachments') // Exclude data and attachments for lightweight response
       .lean();
 
     // Create audit log for PHI access
@@ -1007,6 +1179,52 @@ router.get('/:id/notifications', async (req, res) => {
     });
   } catch (err) {
     console.error('fetch notifications error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Get single record details (lazy loaded)
+router.get('/:id/patients/:patientId/records/:recordId', async (req, res) => {
+  try {
+    const Record = (await import('../models/Record.js')).default;
+    const Hospital = (await import('../models/Hospital.js')).default;
+    const Patient = (await import('../models/Patient.js')).default;
+    const HospitalAccess = (await import('../models/HospitalAccess.js')).default;
+    
+    const { id, patientId, recordId } = req.params;
+    if (!id || !patientId || !recordId) {
+      return res.status(400).json({ error: 'Missing required parameters' });
+    }
+
+    const hospital = await Hospital.findById(id);
+    if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
+    
+    const patient = await Patient.findById(patientId);
+    if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
+    // Check consent access
+    const access = await HospitalAccess.findOne({ hospital: hospital._id, patient: patient._id }).lean();
+    if (!access || access.status !== 'APPROVED') {
+      return res.status(403).json({ error: 'Access to patient records not approved' });
+    }
+
+    const record = await Record.findById(recordId)
+      .populate('hospital', '_id name')
+      .populate('form', 'name description fields')
+      .lean();
+
+    if (!record) {
+      return res.status(404).json({ error: 'Record not found' });
+    }
+
+    // Verify access to this specific record
+    if (access.accessLevel === 'GENERAL' && record.hospital._id.toString() !== hospital._id.toString()) {
+      return res.status(403).json({ error: 'You only have access to your own hospital records' });
+    }
+
+    return res.json({ ok: true, record });
+  } catch (err) {
+    console.error('fetch record details error:', err);
     return res.status(500).json({ error: err.message || String(err) });
   }
 });

@@ -218,7 +218,7 @@ const HealthHistory: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                     <button 
-                        onClick={() => alert('Preparing a zip file with all your records.')} 
+                        onClick={() => notify('Preparing a zip file with all your records.')} 
                         className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary text-sm font-medium shadow-sm hover:shadow transition-all"
                     >
                         Download All
@@ -242,9 +242,12 @@ const HealthHistory: React.FC = () => {
                 <div className="space-y-4">
                     {hospitals.map((hospitalGroup) => (
                         <Card key={hospitalGroup.hospitalId}>
-                            <div 
-                                className="flex items-center justify-between cursor-pointer p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-lg transition-colors"
+                            <button
+                                type="button"
+                                className="w-full text-left flex items-center justify-between cursor-pointer p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-lg transition-colors"
                                 onClick={() => toggleHospital(hospitalGroup.hospitalId)}
+                                aria-expanded={expandedHospitals.has(hospitalGroup.hospitalId)}
+                                aria-label={`Toggle records for ${hospitalGroup.hospitalName}`}
                             >
                                 <div className="flex items-center gap-4">
                                     <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
@@ -278,7 +281,7 @@ const HealthHistory: React.FC = () => {
                                 >
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                 </svg>
-                            </div>
+                            </button>
 
                             {expandedHospitals.has(hospitalGroup.hospitalId) && (
                                 <div className="px-4 pb-4 space-y-3">
@@ -311,9 +314,12 @@ const HealthHistory: React.FC = () => {
                                                         key={record._id}
                                                         className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden hover:border-brand-primary dark:hover:border-brand-primary transition-colors"
                                                     >
-                                                        <div 
-                                                            className="flex items-center justify-between p-4 cursor-pointer bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                                        <button
+                                                            type="button"
+                                                            className="w-full text-left flex items-center justify-between p-4 cursor-pointer bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800"
                                                             onClick={() => toggleRecord(record._id)}
+                                                            aria-expanded={expandedRecords.has(record._id)}
+                                                            aria-label={`Toggle record ${record.form?.name || 'Medical Record'}`}
                                                         >
                                                             <div className="flex-1">
                                                                 <div className="flex items-center gap-3">
@@ -340,7 +346,7 @@ const HealthHistory: React.FC = () => {
                                                             >
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                                             </svg>
-                                                        </div>
+                                                        </button>
 
                                                         {expandedRecords.has(record._id) && (
                                                             <div className="border-t border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900">

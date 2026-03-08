@@ -122,9 +122,9 @@ const StaffManagement: React.FC = () => {
                                             if (!confirm(`Are you sure you want to remove ${s.name} from hospital records?`)) return;
                                             try {
                                                 // best-effort: call backend to remove staff (endpoint not implemented yet)
-                                                alert('Removed from hospital records (simulated)');
+                                                notify('Removed from hospital records (simulated)');
                                                 fetchStaff(searchTerm);
-                                            } catch (err) { console.error(err); alert('Error removing staff'); }
+                                            } catch (err) { console.error(err); notify('Error removing staff'); }
                                         }} className="px-3 py-1 text-sm font-medium rounded-md bg-rose-600 text-white hover:bg-rose-700">Remove</button>
                                     </td>
                                 </tr>

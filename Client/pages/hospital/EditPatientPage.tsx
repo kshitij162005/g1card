@@ -9,7 +9,7 @@ const EditPatientPage: React.FC = () => {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        alert(`Patient ${patientId} details updated successfully!`);
+        notify(`Patient ${patientId} details updated successfully!`);
         navigate(`/hospital/patients/${patientId}`);
     };
 
@@ -25,7 +25,7 @@ const EditPatientPage: React.FC = () => {
         <div className="space-y-6">
              <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold text-gray-800">Edit Patient - {patientId}</h2>
-                <button onClick={() => navigate(-1)} className="px-4 py-2 bg-gray-200 text-gray-800 text-sm rounded-md hover:bg-gray-300">
+                <button type="button" onClick={() => navigate(-1)} className="px-4 py-2 bg-gray-200 text-gray-800 text-sm rounded-md hover:bg-gray-300">
                     &larr; Back
                 </button>
             </div>

@@ -32,7 +32,7 @@ const HospitalOtpPage: React.FC = () => {
     
     const handleVerify = () => {
         // Mock verification logic
-        alert(`Verifying OTP: ${otp.join("")}. Redirecting to login.`);
+        notify(`Verifying OTP: ${otp.join("")}. Redirecting to login.`);
         navigate('/login'); // Redirect to login, they can login once approved by admin
     };
 

@@ -203,11 +203,11 @@ const PatientManagement: React.FC = () => {
                                                         });
                                                         const d = await resp.json();
                                                         if (!resp.ok) throw new Error(d.error || 'Failed to resend request');
-                                                        alert(`Access request resent to patient. Status: ${(patient as any).status === 'REVOKED' ? 'Patient revoked your access.' : 'Patient denied your request.'}`);
+                                                        notify(`Access request resent to patient. Status: ${(patient as any).status === 'REVOKED' ? 'Patient revoked your access.' : 'Patient denied your request.'}`);
                                                         fetchPatients(searchTerm);
                                                     } catch (err) {
                                                         console.error(err);
-                                                        alert('Error resending access request');
+                                                        notify('Error resending access request');
                                                     }
                                                 }}
                                                 className="px-3 py-1 text-xs font-medium rounded-md bg-amber-500 text-white hover:bg-amber-600"
@@ -224,9 +224,9 @@ const PatientManagement: React.FC = () => {
                                                     const resp = await fetch(`${API_URL}/hospitals/${user?.id}/patients/${patient.id}`, { method: 'DELETE' });
                                                     const d = await resp.json();
                                                     if (!resp.ok) throw new Error(d.error || 'Failed to remove patient');
-                                                    alert('Patient unlinked from hospital records');
+                                                    notify('Patient unlinked from hospital records');
                                                     fetchPatients(searchTerm);
-                                                } catch (err) { console.error(err); alert('Error removing patient'); }
+                                                } catch (err) { console.error(err); notify('Error removing patient'); }
                                             }}
                                             className="px-3 py-1 text-sm font-medium rounded-md bg-rose-600 text-white hover:bg-rose-700"
                                             aria-label={`Remove ${patient.name}`}

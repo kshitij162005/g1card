@@ -136,7 +136,7 @@ const CreateForm: React.FC = () => {
                 }
             } catch (err) {
                 console.error('load form template', err);
-                if (isEditing) alert('Failed to load form. Please retry.');
+                if (isEditing) notify('Failed to load form. Please retry.');
             } finally {
                 setLoadingTemplate(false);
             }
@@ -146,16 +146,16 @@ const CreateForm: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user) return alert('Not authenticated');
-        if (!name.trim()) return alert('Form name required');
+        if (!user) return notify('Not authenticated');
+        if (!name.trim()) return notify('Form name required');
         for (const f of fields) {
-            if (!f.label.trim()) return alert('Every field must have a label');
+            if (!f.label.trim()) return notify('Every field must have a label');
         }
         
         // Validate select fields have at least one option
         for (const f of fields) {
             if (f.type === 'select' && (!f.options || f.options.length === 0 || f.options.every(opt => !opt.trim()))) {
-                return alert(`Field "${f.label}" is a select field but has no valid options. Please add at least one option.`);
+                return notify(`Field "${f.label}" is a select field but has no valid options. Please add at least one option.`);
             }
         }
 
@@ -165,11 +165,11 @@ const CreateForm: React.FC = () => {
             const checkData = await checkResp.json();
             if (!checkResp.ok) throw new Error(checkData.error || 'Failed to check name');
             if (checkData.exists) {
-                return alert('A form template with this name already exists. Please choose a different name.');
+                return notify('A form template with this name already exists. Please choose a different name.');
             }
         } catch (err) {
             console.error('check form name', err);
-            return alert('Error checking form name. Please try again.');
+            return notify('Error checking form name. Please try again.');
         }
         
         // Filter out empty options before submitting
@@ -191,9 +191,9 @@ const CreateForm: React.FC = () => {
             const resp = await fetch(endpoint, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const d = await resp.json();
             if (!resp.ok) throw new Error(d.error || 'Failed to create');
-            alert(isEditing ? 'Form template updated' : 'Form template created');
+            notify(isEditing ? 'Form template updated' : 'Form template created');
             navigate('/hospital/forms');
-        } catch (err) { console.error('create form', err); alert('Error creating form'); }
+        } catch (err) { console.error('create form', err); notify('Error creating form'); }
     };
 
     const pageTitle = isEditing ? 'Edit Form Template' : 'Create Form Template';
@@ -202,8 +202,17 @@ const CreateForm: React.FC = () => {
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200">{pageTitle}</h2>
-                <button onClick={() => navigate('/hospital/forms')} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">&larr; Back</button>
+                <div>
+                    <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200">{pageTitle}</h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Define fields once and reuse this template for faster, consistent records.</p>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => navigate('/hospital/forms')}
+                    className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600"
+                >
+                    &larr; Back
+                </button>
             </div>
             <Card>
                 <form onSubmit={handleSubmit} className="space-y-6">
@@ -230,7 +239,7 @@ const CreateForm: React.FC = () => {
                     <div className="space-y-4">
                         <div className="flex justify-between items-center">
                             <h4 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Form Fields</h4>
-                            <button type="button" onClick={addField} className="px-4 py-2 bg-brand-primary text-white text-sm rounded-lg hover:bg-brand-secondary transition-all flex items-center gap-2">
+                            <button type="button" onClick={addField} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
                                 <span>+</span> Add Field
                             </button>
                         </div>
@@ -242,7 +251,17 @@ const CreateForm: React.FC = () => {
                             </div>
                         ) : (
                         fields.map((f, idx) => (
-                            <div key={f.id} className="p-5 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-800/50 shadow-sm">
+                            <div key={f.id} className="p-5 border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-900/40 shadow-sm">
+                                <div className="flex items-center justify-between mb-4">
+                                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Field {idx + 1}</p>
+                                    <button
+                                        type="button"
+                                        onClick={() => removeField(idx)}
+                                        className="px-3 py-1.5 text-sm border border-rose-300 dark:border-rose-700 rounded-md text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors"
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                     <div>
                                         <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Field Label *</label>
@@ -269,7 +288,7 @@ const CreateForm: React.FC = () => {
                                         </select>
                                     </div>
                                 </div>
-                                <div className="flex flex-wrap items-center gap-4 pt-3 border-t border-slate-200 dark:border-slate-700">
+                                <div className="flex flex-wrap items-start gap-4 pt-3 border-t border-slate-200 dark:border-slate-700">
                                     <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
                                         <input 
                                             type="checkbox" 
@@ -335,15 +354,6 @@ const CreateForm: React.FC = () => {
                                             </div>
                                         </div>
                                     )}
-                                    <div className="ml-auto">
-                                        <button 
-                                            type="button" 
-                                            onClick={() => removeField(idx)} 
-                                            className="px-3 py-1.5 text-sm border border-rose-300 dark:border-rose-700 rounded-md text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors"
-                                        >
-                                            Remove
-                                        </button>
-                                    </div>
                                 </div>
                             </div>
                         )))}
@@ -359,7 +369,7 @@ const CreateForm: React.FC = () => {
                         </button>
                         <button 
                             type="submit" 
-                            className="px-6 py-2.5 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary transition-colors shadow-sm hover:shadow-md disabled:opacity-50"
+                            className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
                             disabled={loadingTemplate}
                         >
                             {submitLabel}

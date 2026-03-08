@@ -19,7 +19,7 @@ const LoginPage: React.FC = () => {
         try {
             const ok = await login(role, email, password);
             if (!ok) {
-                alert('Login failed. Check credentials.');
+                notify('Login failed. Check credentials.');
                 setIsLoggingIn(false);
                 return;
             }

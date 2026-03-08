@@ -72,7 +72,7 @@ const FormDetails: React.FC = () => {
             setForm(prev => prev ? { ...prev, active: !prev.active } : prev);
         } catch (err) {
             console.error('toggle form', err);
-            alert('Unable to update form status');
+            notify('Unable to update form status');
         } finally {
             setUpdatingStatus(false);
         }

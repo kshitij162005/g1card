@@ -33,7 +33,7 @@ const PatientOtpPage: React.FC = () => {
     
     const handleVerify = () => {
         // Mock verification logic
-        alert(`Verifying OTP: ${otp.join("")}. Account created successfully! Please login.`);
+        notify(`Verifying OTP: ${otp.join("")}. Account created successfully! Please login.`);
         navigate('/login');
     };
 

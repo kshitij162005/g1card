@@ -13,6 +13,14 @@ const notificationSchema = new mongoose.Schema({
       'ACCESS_LEVEL_CHANGED',
       'MEDICAL_RECORD_CREATED',
       'RECORDS_ACCESSED',
+      'HOSPITAL_UPDATE_REQUEST',
+      'HOSPITAL_UPDATE_APPROVED',
+      'HOSPITAL_UPDATE_REJECTED',
+      'HOSPITAL_UPDATE_CHANGES_REQUESTED',
+      'UPDATE_REQUEST_APPROVED',
+      'UPDATE_REQUEST_REJECTED',
+      'UPDATE_REQUEST_CHANGES_REQUESTED',
+      'UPDATE_REQUEST_MESSAGE',
       'GENERAL'
     ]
   },
@@ -24,7 +32,7 @@ const notificationSchema = new mongoose.Schema({
   recipientModel: {
     type: String,
     required: true,
-    enum: ['Patient', 'Hospital']
+    enum: ['Patient', 'Hospital', 'Superadmin']
   },
   sender: {
     type: mongoose.Schema.Types.ObjectId,
@@ -32,7 +40,7 @@ const notificationSchema = new mongoose.Schema({
   },
   senderModel: {
     type: String,
-    enum: ['Patient', 'Hospital']
+    enum: ['Patient', 'Hospital', 'Superadmin']
   },
   title: {
     type: String,

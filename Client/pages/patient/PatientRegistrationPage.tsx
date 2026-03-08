@@ -55,11 +55,11 @@ const PatientRegistrationPage: React.FC = () => {
 
         const { email, password, confirmPassword, firstName, lastName, dob, gender, phone, address, emergencyContactName, emergencyContactPhone } = form;
         if (!email || !password) {
-            alert('Email and password required');
+            notify('Email and password required');
             return;
         }
         if (password !== confirmPassword) {
-            alert('Passwords do not match');
+            notify('Passwords do not match');
             return;
         }
 
@@ -93,15 +93,15 @@ const PatientRegistrationPage: React.FC = () => {
             });
             const data = await resp.json();
             if (!resp.ok) {
-                alert('Registration failed: ' + (data?.error || data?.message || 'unknown'));
+                notify('Registration failed: ' + (data?.error || data?.message || 'unknown'));
                 return;
             }
             // After registration go to login (OTP removed)
-            alert('Registration successful — please login');
+            notify('Registration successful — please login');
             navigate('/login');
         } catch (err) {
             console.error('patient signup error', err);
-            alert('Registration error');
+            notify('Registration error');
         }
     };
 

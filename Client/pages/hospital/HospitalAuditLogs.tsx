@@ -171,7 +171,7 @@ const HospitalAuditLogs: React.FC = () => {
                             <select
                                 value={eventFilter}
                                 onChange={(e) => setEventFilter(e.target.value)}
-                                className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-sm"
+                                className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             >
                                 <option value="">All Activities</option>
                                 <option value="ACCESS_REQUEST_CREATED">Access Requests</option>
@@ -183,7 +183,7 @@ const HospitalAuditLogs: React.FC = () => {
                             <button
                                 onClick={exportToCSV}
                                 disabled={logs.length === 0}
-                                className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 Export CSV
                             </button>
