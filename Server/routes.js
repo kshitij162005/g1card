@@ -1,6 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import { mongoose } from './db.js';
+import { getAiReadiness } from './utils/aiClient.js';
 
 const router = express.Router();
 
@@ -42,6 +43,11 @@ router.get('/', (req, res) => {
 // Echo endpoint
 router.post('/echo', (req, res) => {
   res.json({ received: req.body });
+});
+
+// AI readiness endpoint (future role-specific AI features)
+router.get('/ai/readiness', (req, res) => {
+  return res.json({ ok: true, readiness: getAiReadiness() });
 });
 
 // Auth: signup for patient

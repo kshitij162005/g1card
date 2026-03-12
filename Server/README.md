@@ -31,3 +31,27 @@ cp server/.env.example server/.env
 ```
 
 Then edit `server/.env` to change the port or host.
+
+AI Integration (Mistral)
+------------------------
+
+The backend is now wired for role-based AI keys via environment variables:
+
+- `MISTRAL_API_KEY_PATIENT` (future patient AI use)
+- `MISTRAL_API_KEY_HOSPITAL` (active: patient record AI summary)
+- `MISTRAL_API_KEY_ADMIN` (future admin AI use)
+- `MISTRAL_MODEL` (default: `mistral-large-latest`)
+- `MISTRAL_API_URL` (default: `https://api.mistral.ai/v1/chat/completions`)
+
+Readiness check:
+
+- `GET /api/ai/readiness`
+
+Hospital AI summary endpoint:
+
+- `POST /api/hospitals/:id/patients/:patientId/ai-summary`
+
+Notes:
+
+- Do not commit real API keys.
+- Hospital summary respects access level rules (`GENERAL` vs `COMPLETE`).

@@ -18,7 +18,14 @@ const hospitalNavItems = [
     { to: '/hospital/logs', label: 'Audit Logs' }
 ];
 
-const HospitalHeader: React.FC<{ isActive: boolean; notificationCount?: number; onOpenNotifications?: () => void; onOpenNav?: () => void }> = ({ isActive, notificationCount = 0, onOpenNotifications, onOpenNav }) => {
+const HospitalHeader: React.FC<{
+    isActive: boolean;
+    notificationCount?: number;
+    onOpenNotifications?: () => void;
+    onOpenNav?: () => void;
+    onToggleDesktopNav?: () => void;
+    isDesktopNavCollapsed?: boolean;
+}> = ({ isActive, notificationCount = 0, onOpenNotifications, onOpenNav, onToggleDesktopNav, isDesktopNavCollapsed = false }) => {
     const { user, logout } = useAuth();
     const location = useLocation();
     const navigate = useNavigate();
@@ -44,6 +51,23 @@ const HospitalHeader: React.FC<{ isActive: boolean; notificationCount?: number; 
                         >
                             <svg className="w-5 h-5 text-slate-700 dark:text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                            </svg>
+                        </button>
+                    )}
+                    {isActive && onToggleDesktopNav && (
+                        <button
+                            type="button"
+                            className="hidden lg:inline-flex p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            onClick={onToggleDesktopNav}
+                            aria-label={isDesktopNavCollapsed ? 'Show left panel' : 'Hide left panel'}
+                            title={isDesktopNavCollapsed ? 'Show left panel' : 'Hide left panel'}
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                {isDesktopNavCollapsed ? (
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                ) : (
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                )}
                             </svg>
                         </button>
                     )}
@@ -151,6 +175,7 @@ const HospitalLayout: React.FC = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const [showMobileNav, setShowMobileNav] = useState(false);
+    const [isDesktopNavCollapsed, setIsDesktopNavCollapsed] = useState<boolean>(() => localStorage.getItem('g1card:hospital:navCollapsed') === '1');
     const [hospitalStatus, setHospitalStatus] = useState<HospitalStatus>('approved');
     const [rejectionReason, setRejectionReason] = useState<string>('');
     const [loading, setLoading] = useState(true);
@@ -244,6 +269,14 @@ const HospitalLayout: React.FC = () => {
         // Reset notification count when opening notifications page
         setNotificationCount(0);
         navigate('/hospital/notifications');
+    };
+
+    const toggleDesktopNav = () => {
+        setIsDesktopNavCollapsed(prev => {
+            const next = !prev;
+            localStorage.setItem('g1card:hospital:navCollapsed', next ? '1' : '0');
+            return next;
+        });
     };
 
     const navLinkClasses = ({ isActive }: { isActive: boolean }): string =>
@@ -401,12 +434,12 @@ const HospitalLayout: React.FC = () => {
     return (
         <div className="hospital-shell min-h-screen bg-gradient-to-b from-slate-50 via-slate-100 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-900">
             <div className="flex min-h-screen">
-                <aside className="hidden lg:flex w-60 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 flex-col">
-                    <div className="mb-5 px-2">
+                <aside className={`hidden lg:flex sticky top-0 h-screen overflow-y-auto border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex-col transition-[width,padding,border-color,box-shadow] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${isDesktopNavCollapsed ? 'w-0 px-0 py-0 overflow-hidden border-r-0 shadow-none' : 'w-60 p-4 shadow-sm'}`}>
+                    <div className={`mb-5 px-2 transition-all duration-300 ${isDesktopNavCollapsed ? 'opacity-0 -translate-x-2' : 'opacity-100 translate-x-0'}`}>
                         <h1 className="text-2xl font-bold text-blue-600 dark:text-blue-400 tracking-wide">G1CARD HOSPITAL</h1>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Clinical Operations</p>
                     </div>
-                    <nav className="flex-1 space-y-2">{renderNavItems()}</nav>
+                    <nav className={`flex-1 space-y-2 transition-all duration-300 ${isDesktopNavCollapsed ? 'opacity-0 -translate-x-2' : 'opacity-100 translate-x-0'}`}>{renderNavItems()}</nav>
                 </aside>
 
                 <div className="flex-1 min-w-0">
@@ -415,6 +448,8 @@ const HospitalLayout: React.FC = () => {
                         notificationCount={notificationCount}
                         onOpenNotifications={handleOpenNotifications}
                         onOpenNav={() => setShowMobileNav(true)}
+                        onToggleDesktopNav={toggleDesktopNav}
+                        isDesktopNavCollapsed={isDesktopNavCollapsed}
                     />
                     <main className="max-w-[1400px] mx-auto w-full p-4 md:p-6">
                         <Outlet />

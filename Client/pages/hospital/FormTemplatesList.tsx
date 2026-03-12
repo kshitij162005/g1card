@@ -5,21 +5,26 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import Loader from '../../components/Loader';
 
-interface Template { _id: string; name: string; description?: string; fields?: any[]; active?: boolean; updatedAt?: string; createdAt?: string; }
+interface Template { _id: string; name: string; description?: string; fields?: any[]; active?: boolean; hasBeenPublished?: boolean; updatedAt?: string; createdAt?: string; }
 
 const FormTemplatesList: React.FC = () => {
     const { user } = useAuth();
     const [templates, setTemplates] = useState<Template[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string>('');
     const [page, setPage] = useState(1);
     const [pagination, setPagination] = useState({ total: 0, pages: 1, limit: 10 });
     const navigate = useNavigate();
 
-    useEffect(() => { fetchTemplates(); }, [page]);
+    useEffect(() => {
+        if (!user?.id) return;
+        fetchTemplates();
+    }, [page, user?.id]);
 
-    const fetchTemplates = async () => {
-        if (!user) return;
+    const fetchTemplates = async (attempt = 0) => {
+        if (!user?.id) return;
         setLoading(true);
+        setLoadError('');
         try {
             const resp = await fetch(`${API_URL}/hospitals/${user.id}/forms?page=${page}&limit=10`);
             const d = await resp.json();
@@ -28,7 +33,14 @@ const FormTemplatesList: React.FC = () => {
             if (d.pagination) {
                 setPagination(d.pagination);
             }
-        } catch (err) { console.error('fetch templates', err); }
+        } catch (err) {
+            console.error('fetch templates', err);
+            if (attempt < 1) {
+                // One quick retry avoids false empty-state flashes during transient startup races.
+                return fetchTemplates(attempt + 1);
+            }
+            setLoadError((err as Error)?.message || 'Unable to load templates');
+        }
         finally { setLoading(false); }
     };
 
@@ -49,6 +61,11 @@ const FormTemplatesList: React.FC = () => {
 
     const toggleFormStatus = async (template: Template) => {
         if (!user) return;
+        if (template.active === false) {
+            notify("Can't be activated as it is in draft and yet to be published");
+            navigate(`/hospital/forms/${template._id}/edit`);
+            return;
+        }
         try {
             const nextStatus = !template.active;
             const resp = await fetch(`${API_URL}/hospitals/${user.id}/forms/${template._id}`, {
@@ -61,7 +78,7 @@ const FormTemplatesList: React.FC = () => {
             await fetchTemplates();
         } catch (err) {
             console.error('toggle form status', err);
-            notify('Unable to update form status');
+            notify((err as Error)?.message || 'Unable to update form status');
         }
     };
 
@@ -70,6 +87,15 @@ const FormTemplatesList: React.FC = () => {
             {active ? 'Active' : 'Inactive'}
         </span>
     );
+
+    const draftBadge = (template: Template) => {
+        if (template.active) return null;
+        return (
+            <span className="ml-2 px-2 py-0.5 text-[11px] rounded-full font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
+                Draft
+            </span>
+        );
+    };
 
     const actionButtonBase = 'inline-flex items-center justify-center whitespace-nowrap text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors';
 
@@ -89,11 +115,20 @@ const FormTemplatesList: React.FC = () => {
 
                 {loading && <p className="text-sm">Loading...</p>}
 
-                {!loading && templates.length === 0 && (
+                {!loading && loadError && (
+                    <div className="p-6 border rounded-lg text-slate-700 dark:text-slate-300 flex items-center justify-between gap-3">
+                        <span>{loadError}</span>
+                        <button onClick={() => fetchTemplates()} className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-sm hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                            Retry
+                        </button>
+                    </div>
+                )}
+
+                {!loading && !loadError && templates.length === 0 && (
                     <div className="p-6 border rounded-lg text-slate-700 dark:text-slate-300">No form templates found. Create one to enable structured record creation for patients.</div>
                 )}
 
-                {!loading && templates.length > 0 && (
+                {!loading && !loadError && templates.length > 0 && (
                     <div className="overflow-x-auto">
                         <table className="min-w-[980px] w-full">
                             <thead className="bg-slate-50 dark:bg-slate-700">
@@ -106,10 +141,17 @@ const FormTemplatesList: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                                 {templates.map(t => (
-                                    <tr key={t._id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                                    <tr
+                                        key={t._id}
+                                        className="hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer"
+                                        onClick={() => navigate(`/hospital/forms/${t._id}`)}
+                                    >
                                         <td className="py-4 px-6">
                                             <div className="flex flex-col">
-                                                <span className="font-medium">{t.name}</span>
+                                                <span className="font-medium inline-flex items-center">
+                                                    {t.name}
+                                                    {draftBadge(t)}
+                                                </span>
                                                 {t.description && <span className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t.description}</span>}
                                             </div>
                                         </td>
@@ -118,31 +160,31 @@ const FormTemplatesList: React.FC = () => {
                                         <td className="py-4 px-6">
                                             <div className="flex items-center gap-2 whitespace-nowrap">
                                                 <button
-                                                    onClick={() => navigate(`/hospital/forms/${t._id}`)}
+                                                    onClick={(e) => { e.stopPropagation(); navigate(`/hospital/forms/${t._id}`); }}
                                                     className={`${actionButtonBase} border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700`}
                                                 >
                                                     View
                                                 </button>
                                                 <button
-                                                    onClick={() => navigate(`/hospital/forms/${t._id}/edit`)}
+                                                    onClick={(e) => { e.stopPropagation(); navigate(`/hospital/forms/${t._id}/edit`); }}
                                                     className={`${actionButtonBase} border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40`}
                                                 >
                                                     Edit
                                                 </button>
                                                 <button
-                                                    onClick={() => navigate(`/hospital/forms/create?clone=${t._id}`)}
+                                                    onClick={(e) => { e.stopPropagation(); navigate(`/hospital/forms/create?clone=${t._id}`); }}
                                                     className={`${actionButtonBase} border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/40`}
                                                 >
                                                     Clone
                                                 </button>
                                                 <button
-                                                    onClick={() => toggleFormStatus(t)}
+                                                    onClick={(e) => { e.stopPropagation(); toggleFormStatus(t); }}
                                                     className={`${actionButtonBase} ${t.active ? 'border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40' : 'border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'}`}
                                                 >
                                                     {t.active ? 'Deactivate' : 'Activate'}
                                                 </button>
                                                 <button
-                                                    onClick={() => deleteForm(t._id, t.name)}
+                                                    onClick={(e) => { e.stopPropagation(); deleteForm(t._id, t.name); }}
                                                     className={`${actionButtonBase} border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40`}
                                                 >
                                                     Delete

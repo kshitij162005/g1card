@@ -7,6 +7,17 @@ import { DetailedPatient } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import Loader from '../../components/Loader';
 
+interface AiSummaryPayload {
+    overview: string;
+    bulletPoints: string[];
+    criticalAlerts: string[];
+    ongoingTreatments: string[];
+    surgeries: string[];
+    allergies: string[];
+    medications: string[];
+    timeline: string[];
+}
+
 const Section: React.FC<{ title: string; onAdd?: () => void; children: React.ReactNode; }> = ({ title, onAdd, children }) => (
     <Card>
         <div className="flex justify-between items-center mb-4 pb-2 border-b dark:border-slate-700">
@@ -157,6 +168,10 @@ const PatientRecord: React.FC = () => {
     const [accessError, setAccessError] = useState<string | null>(null);
     const [accessLevel, setAccessLevel] = useState<'GENERAL' | 'COMPLETE' | null>(null);
     const [requestingAccess, setRequestingAccess] = useState(false);
+    const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+    const [aiSummaryError, setAiSummaryError] = useState<string | null>(null);
+    const [aiSummary, setAiSummary] = useState<AiSummaryPayload | null>(null);
+    const [aiSummaryMeta, setAiSummaryMeta] = useState<{ generatedAt: string; recordCount: number; accessLevel: string } | null>(null);
     const RECORDS_PER_PAGE = 10;
 
     useEffect(() => {
@@ -331,6 +346,29 @@ const PatientRecord: React.FC = () => {
         }
     };
 
+    const handleGenerateAiSummary = async () => {
+        if (!user?.id || !patientId) return;
+        setAiSummaryLoading(true);
+        setAiSummaryError(null);
+        try {
+            const resp = await fetch(`${API_URL}/hospitals/${user.id}/patients/${patientId}/ai-summary`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                throw new Error(data?.error || 'Failed to generate AI summary');
+            }
+            setAiSummary(data.summary || null);
+            setAiSummaryMeta(data.meta || null);
+        } catch (err: any) {
+            console.error('generate ai summary error:', err);
+            setAiSummaryError(err?.message || 'Unable to generate AI summary right now');
+        } finally {
+            setAiSummaryLoading(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
@@ -501,8 +539,76 @@ const PatientRecord: React.FC = () => {
                 <div className="space-y-4">
                     <div className="flex justify-between items-center">
                         <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Hospital Records</h3>
-                        <button onClick={handleAddRecord} className="px-4 py-2 text-sm bg-brand-primary text-white rounded-lg hover:bg-brand-secondary">+ Add Record</button>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={handleGenerateAiSummary}
+                                disabled={aiSummaryLoading}
+                                className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {aiSummaryLoading ? 'Analyzing Records...' : 'AI Medical Summary'}
+                            </button>
+                            <button onClick={handleAddRecord} className="px-4 py-2 text-sm bg-brand-primary text-white rounded-lg hover:bg-brand-secondary">+ Add Record</button>
+                        </div>
                     </div>
+
+                    {(aiSummaryLoading || aiSummaryError || aiSummary) && (
+                        <Card>
+                            <div className="space-y-3">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                    <h4 className="text-base font-semibold text-slate-800 dark:text-slate-100">AI Patient History Summary</h4>
+                                    {aiSummaryMeta?.generatedAt && (
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                                            Generated: {new Date(aiSummaryMeta.generatedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                                        </p>
+                                    )}
+                                </div>
+
+                                {aiSummaryLoading && (
+                                    <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+                                        Reading patient profile and records...
+                                    </div>
+                                )}
+
+                                {aiSummaryError && (
+                                    <div className="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-lg px-3 py-2">
+                                        {aiSummaryError}
+                                    </div>
+                                )}
+
+                                {aiSummary && (
+                                    <>
+                                        <p className="text-sm text-slate-700 dark:text-slate-300">
+                                            {aiSummary.overview}
+                                        </p>
+
+                                        {aiSummary.criticalAlerts.length > 0 && (
+                                            <div>
+                                                <p className="text-xs font-semibold uppercase tracking-wide text-red-600 dark:text-red-400 mb-1">Critical Alerts</p>
+                                                <ul className="list-disc list-inside text-sm text-red-700 dark:text-red-300 space-y-1">
+                                                    {aiSummary.criticalAlerts.map((item, idx) => <li key={`critical-${idx}`}>{item}</li>)}
+                                                </ul>
+                                            </div>
+                                        )}
+
+                                        {aiSummary.bulletPoints.length > 0 && (
+                                            <div>
+                                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1">Medical Nutshell</p>
+                                                <ul className="list-disc list-inside text-sm text-slate-700 dark:text-slate-300 space-y-1">
+                                                    {aiSummary.bulletPoints.map((item, idx) => <li key={`summary-${idx}`}>{item}</li>)}
+                                                </ul>
+                                            </div>
+                                        )}
+
+                                        <p className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/30 rounded px-2 py-1">
+                                            Safety note: Validate AI output against full records before treatment decisions.
+                                        </p>
+                                    </>
+                                )}
+                            </div>
+                        </Card>
+                    )}
+
                     {loadingRecords ? (
                         <Card><p className="text-sm text-slate-500 dark:text-slate-400">Loading records...</p></Card>
                     ) : allRecordsOrdered.length === 0 ? (
