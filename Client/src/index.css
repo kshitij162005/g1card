@@ -212,3 +212,64 @@ select:not(:disabled) {
 .dark optgroup {
   background-color: #0f172a;
 }
+
+:root {
+  --scrollbar-track: #e2e8f0;
+  --scrollbar-thumb: #94a3b8;
+  --scrollbar-thumb-hover: #64748b;
+}
+
+.dark {
+  --scrollbar-track: #1e293b;
+  --scrollbar-thumb: #334155;
+  --scrollbar-thumb-hover: #475569;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Dark, integrated scrollbar for form builder panels */
+.builder-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #334155 #1e293b;
+}
+
+.builder-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.builder-scrollbar::-webkit-scrollbar-track {
+  background: #1e293b;
+  border-radius: 999px;
+}
+
+.builder-scrollbar::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 999px;
+  border: 2px solid #1e293b;
+}
+
+.builder-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}

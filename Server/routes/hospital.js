@@ -1,8 +1,59 @@
 import express from 'express';
 import { logAccessRequestCreation, logRecordCreation, logPHIAccess } from '../utils/auditLogger.js';
 import { sendEventToUser } from './sse.js';
+import { callRoleModel } from '../utils/aiClient.js';
 
 const router = express.Router();
+
+function extractJsonBlock(text) {
+  if (!text || typeof text !== 'string') return null;
+
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) return fenced[1].trim();
+
+  const first = text.indexOf('{');
+  const last = text.lastIndexOf('}');
+  if (first >= 0 && last > first) {
+    return text.slice(first, last + 1);
+  }
+  return null;
+}
+
+function normalizeAiSummary(rawText) {
+  const fallback = {
+    overview: 'AI summary generated. Please review full records for clinical decisions.',
+    bulletPoints: rawText
+      .split('\n')
+      .map(line => line.replace(/^[-*\d.\s]+/, '').trim())
+      .filter(Boolean)
+      .slice(0, 20),
+    criticalAlerts: [],
+    ongoingTreatments: [],
+    surgeries: [],
+    allergies: [],
+    medications: [],
+    timeline: [],
+  };
+
+  try {
+    const jsonText = extractJsonBlock(rawText);
+    if (!jsonText) return fallback;
+    const parsed = JSON.parse(jsonText);
+    const arrayOrEmpty = value => (Array.isArray(value) ? value.filter(Boolean).map(String) : []);
+    return {
+      overview: String(parsed.overview || fallback.overview),
+      bulletPoints: arrayOrEmpty(parsed.bulletPoints),
+      criticalAlerts: arrayOrEmpty(parsed.criticalAlerts),
+      ongoingTreatments: arrayOrEmpty(parsed.ongoingTreatments),
+      surgeries: arrayOrEmpty(parsed.surgeries),
+      allergies: arrayOrEmpty(parsed.allergies),
+      medications: arrayOrEmpty(parsed.medications),
+      timeline: arrayOrEmpty(parsed.timeline),
+    };
+  } catch (err) {
+    return fallback;
+  }
+}
 
 // Placeholder: fetch hospital by id (safe view)
 router.get('/:id', async (req, res) => {
@@ -594,6 +645,132 @@ router.delete('/:id/patients/:patientId', async (req, res) => {
 });
 
 // Create a form template for a hospital
+const ALLOWED_FIELD_TYPES = new Set([
+  'text',
+  'textarea',
+  'number',
+  'date',
+  'time',
+  'select',
+  'radio',
+  'checkbox',
+  'file',
+  'email',
+  'tel',
+  'section',
+  'pagebreak',
+]);
+
+const slugifyFieldKey = (value = '') =>
+  String(value)
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'field';
+
+const normalizeFormFields = (incomingFields) => {
+  if (!Array.isArray(incomingFields) || incomingFields.length === 0) {
+    throw new Error('At least one field is required');
+  }
+
+  const seen = new Set();
+  return incomingFields.map((field, idx) => {
+    const label = String(field?.label || '').trim();
+    const rawType = String(field?.type || 'text').trim().toLowerCase();
+    const normalizedType = ALLOWED_FIELD_TYPES.has(rawType) ? rawType : 'text';
+    const type = normalizedType === 'pagebreak' ? 'pageBreak' : normalizedType;
+
+    if (!label && type !== 'pageBreak') throw new Error(`Field ${idx + 1} label is required`);
+
+    let keyBase = slugifyFieldKey(field?.key || label || `field_${idx + 1}`);
+    let key = keyBase;
+    let count = 1;
+    while (seen.has(key)) {
+      key = `${keyBase}_${count++}`;
+    }
+    seen.add(key);
+
+    const options = Array.isArray(field?.options)
+      ? field.options.map(opt => String(opt || '').trim()).filter(Boolean)
+      : [];
+
+    const allowMultiple = Boolean(field?.allowMultiple || field?.multiSelect);
+
+    const minLength = field?.validation?.minLength;
+    const maxLength = field?.validation?.maxLength;
+
+    const validation = {
+      min: String(field?.validation?.min || '').trim(),
+      max: String(field?.validation?.max || '').trim(),
+      minLength: Number.isFinite(Number(minLength)) ? Number(minLength) : undefined,
+      maxLength: Number.isFinite(Number(maxLength)) ? Number(maxLength) : undefined,
+      pattern: String(field?.validation?.pattern || '').trim(),
+      customError: String(field?.validation?.customError || '').trim(),
+    };
+
+    if (type === 'select' || type === 'radio' || type === 'checkbox') {
+      if (options.length === 0) {
+        throw new Error(`Field "${label}" requires at least one option`);
+      }
+    }
+
+    if (validation.minLength !== undefined && validation.minLength < 0) {
+      throw new Error(`Field "${label}" has invalid minLength`);
+    }
+    if (validation.maxLength !== undefined && validation.maxLength < 0) {
+      throw new Error(`Field "${label}" has invalid maxLength`);
+    }
+    if (
+      validation.minLength !== undefined &&
+      validation.maxLength !== undefined &&
+      validation.minLength > validation.maxLength
+    ) {
+      throw new Error(`Field "${label}" has minLength greater than maxLength`);
+    }
+
+    return {
+      id: String(field?.id || `f${Date.now()}_${idx}`),
+      label: label || 'Page Break',
+      key,
+      type,
+      required: Boolean(field?.required),
+      description: String(field?.description || '').trim(),
+      placeholder: String(field?.placeholder || '').trim(),
+      options,
+      multiSelect: allowMultiple,
+      allowMultiple,
+      defaultValue: field?.defaultValue ?? '',
+      fileSettings: {
+        allowedTypes: Array.isArray(field?.fileSettings?.allowedTypes)
+          ? field.fileSettings.allowedTypes.map(t => String(t || '').trim()).filter(Boolean)
+          : [],
+        maxFileSizeMB: Number.isFinite(Number(field?.fileSettings?.maxFileSizeMB))
+          ? Math.max(1, Number(field.fileSettings.maxFileSizeMB))
+          : 10,
+        maxFiles: Number.isFinite(Number(field?.fileSettings?.maxFiles))
+          ? Math.max(1, Number(field.fileSettings.maxFiles))
+          : 1,
+      },
+      validation,
+    };
+  });
+};
+
+const normalizeTheme = (theme = {}) => ({
+  primaryColor: String(theme.primaryColor || '#6366f1').trim() || '#6366f1',
+  backgroundColor: String(theme.backgroundColor || '#0f172a').trim() || '#0f172a',
+  cardColor: String(theme.cardColor || '#1e293b').trim() || '#1e293b',
+  fontFamily: String(theme.fontFamily || 'Sora').trim() || 'Sora',
+});
+
+const normalizeSubmissionSettings = (settings = {}) => ({
+  successMessage:
+    String(settings.successMessage || 'Thanks! Your response has been recorded.').trim() ||
+    'Thanks! Your response has been recorded.',
+  redirectUrl: String(settings.redirectUrl || '').trim(),
+  sendEmailNotification: Boolean(settings.sendEmailNotification),
+});
+
 router.post('/:id/forms', async (req, res) => {
   try {
     const FormTemplate = (await import('../models/FormTemplate.js')).default;
@@ -603,14 +780,32 @@ router.post('/:id/forms', async (req, res) => {
     const hospital = await Hospital.findById(id);
     if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
 
-    const { name, description, fields, createdBy } = req.body || {};
+    const { name, description, fields, createdBy, theme, submissionSettings, active } = req.body || {};
     if (!name || !Array.isArray(fields)) return res.status(400).json({ error: 'name and fields (array) are required' });
 
-    const doc = new FormTemplate({ hospital: hospital._id, name, description, fields, createdBy, active: true });
+    const normalizedFields = normalizeFormFields(fields);
+
+    const initialActive = typeof active === 'boolean' ? active : true;
+
+    const doc = new FormTemplate({
+      hospital: hospital._id,
+      name: String(name).trim(),
+      description: String(description || '').trim(),
+      fields: normalizedFields,
+      theme: normalizeTheme(theme),
+      submissionSettings: normalizeSubmissionSettings(submissionSettings),
+      createdBy,
+      active: initialActive,
+      hasBeenPublished: initialActive,
+    });
     await doc.save();
     return res.json({ ok: true, form: doc });
   } catch (err) {
     console.error('create form template error:', err);
+    const msg = err?.message || String(err);
+    if (msg.includes('Field') || msg.includes('At least one field')) {
+      return res.status(400).json({ error: msg });
+    }
     return res.status(500).json({ error: err.message || String(err) });
   }
 });
@@ -671,12 +866,37 @@ router.patch('/:id/forms/:formId', async (req, res) => {
     const formId = req.params.formId;
     if (!id || !formId) return res.status(400).json({ error: 'Missing hospital id or form id' });
 
-    const allowed = ['name', 'description', 'fields', 'active'];
+    const allowed = ['name', 'description', 'fields', 'active', 'theme', 'submissionSettings', 'hasBeenPublished'];
     const updates = {};
     for (const key of Object.keys(req.body || {})) {
       if (allowed.includes(key)) updates[key] = req.body[key];
     }
     if (!Object.keys(updates).length) return res.status(400).json({ error: 'No valid fields to update' });
+
+    const current = await FormTemplate.findOne({ _id: formId, hospital: id }).lean();
+    if (!current) return res.status(404).json({ error: 'Form not found' });
+
+    const isActivating = updates.active === true;
+    const hasPublishIntent = req.body?.publishIntent === true;
+
+    if (isActivating) {
+      // Backend-oriented guard: activation is allowed only through explicit publish intent.
+      if (!hasPublishIntent) {
+        return res.status(400).json({ error: 'Cannot activate draft form. Publish it first from editor.' });
+      }
+      updates.hasBeenPublished = true;
+    }
+
+    // Preserve publish lifecycle for older forms when status is toggled.
+    if (updates.active === false && current.active === true && updates.hasBeenPublished === undefined) {
+      updates.hasBeenPublished = true;
+    }
+
+    if (updates.name !== undefined) updates.name = String(updates.name || '').trim();
+    if (updates.description !== undefined) updates.description = String(updates.description || '').trim();
+    if (updates.fields !== undefined) updates.fields = normalizeFormFields(updates.fields);
+    if (updates.theme !== undefined) updates.theme = normalizeTheme(updates.theme);
+    if (updates.submissionSettings !== undefined) updates.submissionSettings = normalizeSubmissionSettings(updates.submissionSettings);
 
     const form = await FormTemplate.findOneAndUpdate(
       { _id: formId, hospital: id },
@@ -687,6 +907,10 @@ router.patch('/:id/forms/:formId', async (req, res) => {
     return res.json({ ok: true, form });
   } catch (err) {
     console.error('update form template error:', err);
+    const msg = err?.message || String(err);
+    if (msg.includes('Field') || msg.includes('At least one field')) {
+      return res.status(400).json({ error: msg });
+    }
     return res.status(500).json({ error: err.message || String(err) });
   }
 });
@@ -733,8 +957,10 @@ router.post('/:id/patients/:patientId/records', async (req, res) => {
     const { formId, data, attachments, createdBy } = req.body || {};
     // formId optional (freeform), but if provided validate
     if (formId) {
-      const form = await FormTemplate.findOne({ _id: formId, hospital: id }).lean();
-      if (!form) return res.status(400).json({ error: 'Form template not found for this hospital' });
+      const form = await FormTemplate.findOne({ _id: formId, hospital: id, active: { $ne: false } }).lean();
+      if (!form) {
+        return res.status(400).json({ error: 'Form template is inactive or not found for this hospital' });
+      }
     }
 
     const rec = new Record({ hospital: hospital._id, patient: patient._id, form: formId, data: data || {}, attachments: attachments || [], createdBy });
@@ -962,6 +1188,124 @@ router.get('/:id/patients/:patientId/summary', async (req, res) => {
   } catch (err) {
     console.error('fetch patient summary error:', err);
     return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Generate AI medical nutshell summary for a patient (hospital view)
+router.post('/:id/patients/:patientId/ai-summary', async (req, res) => {
+  try {
+    const Hospital = (await import('../models/Hospital.js')).default;
+    const Patient = (await import('../models/Patient.js')).default;
+    const HospitalAccess = (await import('../models/HospitalAccess.js')).default;
+    const Record = (await import('../models/Record.js')).default;
+
+    const id = req.params.id;
+    const patientId = req.params.patientId;
+    if (!id || !patientId) return res.status(400).json({ error: 'Missing hospital id or patient id' });
+
+    const hospital = await Hospital.findById(id);
+    if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
+    const patient = await Patient.findById(patientId).lean();
+    if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
+    const access = await HospitalAccess.findOne({ hospital: hospital._id, patient: patientId }).lean();
+    if (!access || access.status !== 'APPROVED') {
+      return res.status(403).json({ error: 'Access to patient profile not approved' });
+    }
+
+    await HospitalAccess.findByIdAndUpdate(access._id, { lastAccessed: new Date() });
+
+    const recordFilter = { patient: patient._id };
+    if (access.accessLevel === 'GENERAL') {
+      recordFilter.hospital = hospital._id;
+    }
+
+    const records = await Record.find(recordFilter)
+      .populate('hospital', '_id name')
+      .populate('form', 'name description fields')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const safePatientData = {
+      id: patient._id,
+      name: patient.name || `${patient.firstName || ''} ${patient.lastName || ''}`.trim(),
+      age: patient.age,
+      gender: patient.gender,
+      dob: patient.dob,
+      bloodGroup: patient.bloodGroup,
+      allergies: patient.allergies || [],
+      chronicConditions: patient.conditions || [],
+      surgeries: patient.surgeries || [],
+      medications: patient.medications || [],
+      immunizations: patient.immunizationRecords || patient.immunizations || [],
+      familyHistory: patient.familyHistory || '',
+      smoking: patient.smoking || '',
+      height: patient.height,
+      weight: patient.weight,
+      bmi: patient.bmi,
+    };
+
+    const safeRecordData = records.map(record => ({
+      recordId: record._id,
+      timestamp: record.createdAt,
+      hospital: record.hospital?.name || 'Unknown hospital',
+      formName: record.form?.name || 'Medical Record',
+      formDescription: record.form?.description || '',
+      data: record.data || {},
+      attachments: (record.attachments || []).map(att => ({
+        name: att?.name || '',
+        type: att?.type || att?.mimeType || '',
+      })),
+    }));
+
+    const aiInput = {
+      hospitalName: hospital.name,
+      accessLevel: access.accessLevel,
+      patient: safePatientData,
+      records: safeRecordData,
+    };
+
+    const systemPrompt = [
+      'You are a clinical summarization assistant for hospital staff.',
+      'Use ONLY the provided data. Do not invent facts.',
+      'This output may influence real clinical decisions, so include every material detail that appears in the data.',
+      'Prioritize allergies, current medications, surgeries/procedures, chronic conditions, and active treatments.',
+      'When data is missing, explicitly state "Not documented".',
+      'Return strict JSON only with keys:',
+      'overview, bulletPoints, criticalAlerts, ongoingTreatments, surgeries, allergies, medications, timeline',
+      'Each list key must be an array of short strings.',
+    ].join(' ');
+
+    const userPrompt = `Summarize this patient medical history as a concise but complete nutshell. Input JSON:\n${JSON.stringify(aiInput)}`;
+
+    const aiRaw = await callRoleModel({
+      role: 'hospital',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.05,
+      maxTokens: 2200,
+    });
+
+    const summary = normalizeAiSummary(aiRaw);
+
+    return res.json({
+      ok: true,
+      summary,
+      meta: {
+        generatedAt: new Date().toISOString(),
+        recordCount: records.length,
+        accessLevel: access.accessLevel,
+      },
+    });
+  } catch (err) {
+    console.error('generate ai summary error:', err);
+    const message = err?.message || String(err);
+    if (message.includes('MISTRAL_API_KEY_HOSPITAL')) {
+      return res.status(503).json({ error: 'Hospital AI is not configured on server yet' });
+    }
+    return res.status(500).json({ error: message });
   }
 });
 

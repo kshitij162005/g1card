@@ -4,7 +4,55 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Card from '../../components/Card';
 import { useAuth } from '../../contexts/AuthContext';
 
-type FieldDef = { id?: string; label: string; key: string; type: string; required?: boolean; options?: string[] };
+type FieldValidation = {
+    min?: string;
+    max?: string;
+    minLength?: number;
+    maxLength?: number;
+    pattern?: string;
+};
+
+type FieldDef = {
+    id?: string;
+    label: string;
+    key: string;
+    type: string;
+    required?: boolean;
+    options?: string[];
+    description?: string;
+    placeholder?: string;
+    allowMultiple?: boolean;
+    defaultValue?: any;
+    validation?: FieldValidation;
+};
+
+const isChoiceType = (type: string) => type === 'select' || type === 'radio' || type === 'checkbox';
+const OTHER_OPTION_VALUE = 'Other';
+
+const withOtherOption = (options?: string[]) => {
+    const base = Array.isArray(options) ? options.filter(Boolean) : [];
+    return base.includes(OTHER_OPTION_VALUE) ? base : [...base, OTHER_OPTION_VALUE];
+};
+
+const getFieldValidationProps = (field: FieldDef) => {
+    const validation = field.validation || {};
+    const common: Record<string, any> = {};
+
+    if (validation.minLength !== undefined) common.minLength = validation.minLength;
+    if (validation.maxLength !== undefined) common.maxLength = validation.maxLength;
+    if (validation.pattern) common.pattern = validation.pattern;
+
+    if (field.type === 'number') {
+        if (validation.min !== undefined && validation.min !== '') common.min = validation.min;
+        if (validation.max !== undefined && validation.max !== '') common.max = validation.max;
+    }
+    if (field.type === 'date' || field.type === 'time') {
+        if (validation.min) common.min = validation.min;
+        if (validation.max) common.max = validation.max;
+    }
+
+    return common;
+};
 
 const AddEditMedicalRecord: React.FC = () => {
     const { patientId } = useParams<{ patientId: string }>();
@@ -92,7 +140,11 @@ const AddEditMedicalRecord: React.FC = () => {
             if (previousFormId && previousFormId !== selectedFormId) {
                 const init: Record<string, any> = {};
                 newFields.forEach((f: FieldDef) => { 
-                    init[f.key] = ''; 
+                    if (f.type === 'checkbox') {
+                        init[f.key] = Array.isArray(f.defaultValue) ? f.defaultValue : [];
+                    } else {
+                        init[f.key] = f.defaultValue ?? '';
+                    }
                 });
                 setData(init);
             } else {
@@ -100,7 +152,13 @@ const AddEditMedicalRecord: React.FC = () => {
                 setData(prev => {
                     const init: Record<string, any> = {};
                     newFields.forEach((f: FieldDef) => { 
-                        init[f.key] = prev[f.key] !== undefined ? prev[f.key] : ''; 
+                        if (prev[f.key] !== undefined) {
+                            init[f.key] = prev[f.key];
+                        } else if (f.type === 'checkbox') {
+                            init[f.key] = Array.isArray(f.defaultValue) ? f.defaultValue : [];
+                        } else {
+                            init[f.key] = f.defaultValue ?? '';
+                        }
                     });
                     return init;
                 });
@@ -118,7 +176,7 @@ const AddEditMedicalRecord: React.FC = () => {
         if (!files || files.length === 0) return;
         const arr = Array.from(files).map(f => ({ name: f.name, size: f.size, type: f.type }));
         setAttachments(prev => [...prev, ...arr]);
-        handleChange(key, arr.map(a => a.name).join(','));
+        handleChange(key, arr.map(a => a.name));
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -201,15 +259,28 @@ const AddEditMedicalRecord: React.FC = () => {
                                 <div key={`${f.key}-${idx}-${selectedFormId}`} className="space-y-2">
                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                                         {f.label}
-                                        {f.required && <span className="text-rose-500 ml-1">*</span>}
+                                        {f.required && f.type !== 'section' && f.type !== 'pageBreak' && <span className="text-rose-500 ml-1">*</span>}
                                     </label>
+                                    {f.description && (
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">{f.description}</p>
+                                    )}
+                                    {f.type === 'section' && (
+                                        <div className="mt-1 pt-3 border-t border-slate-300 dark:border-slate-600" />
+                                    )}
+                                    {f.type === 'pageBreak' && (
+                                        <div className="mt-1 py-2">
+                                            <div className="border-t-2 border-dashed border-slate-300 dark:border-slate-600" />
+                                            <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400 mt-1">Next Page</p>
+                                        </div>
+                                    )}
                                     {f.type === 'text' && (
                                         <input 
                                             value={data[f.key] || ''} 
                                             onChange={e => handleChange(f.key, e.target.value)} 
                                             required={f.required}
+                                            {...getFieldValidationProps(f)}
                                             className="mt-1 block w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-brand-accent focus:border-brand-accent outline-none transition-all" 
-                                            placeholder={`Enter ${f.label.toLowerCase()}`}
+                                            placeholder={f.placeholder || `Enter ${f.label.toLowerCase()}`}
                                         />
                                     )}
                                     {f.type === 'number' && (
@@ -218,8 +289,31 @@ const AddEditMedicalRecord: React.FC = () => {
                                             value={data[f.key] || ''} 
                                             onChange={e => handleChange(f.key, e.target.value)} 
                                             required={f.required}
+                                            {...getFieldValidationProps(f)}
                                             className="mt-1 block w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-brand-accent focus:border-brand-accent outline-none transition-all" 
-                                            placeholder={`Enter ${f.label.toLowerCase()}`}
+                                            placeholder={f.placeholder || `Enter ${f.label.toLowerCase()}`}
+                                        />
+                                    )}
+                                    {f.type === 'email' && (
+                                        <input 
+                                            type="email"
+                                            value={data[f.key] || ''}
+                                            onChange={e => handleChange(f.key, e.target.value)}
+                                            required={f.required}
+                                            {...getFieldValidationProps(f)}
+                                            className="mt-1 block w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-brand-accent focus:border-brand-accent outline-none transition-all"
+                                            placeholder={f.placeholder || `Enter ${f.label.toLowerCase()}`}
+                                        />
+                                    )}
+                                    {f.type === 'tel' && (
+                                        <input 
+                                            type="tel"
+                                            value={data[f.key] || ''}
+                                            onChange={e => handleChange(f.key, e.target.value)}
+                                            required={f.required}
+                                            {...getFieldValidationProps(f)}
+                                            className="mt-1 block w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-brand-accent focus:border-brand-accent outline-none transition-all"
+                                            placeholder={f.placeholder || `Enter ${f.label.toLowerCase()}`}
                                         />
                                     )}
                                     {f.type === 'date' && (
@@ -228,7 +322,18 @@ const AddEditMedicalRecord: React.FC = () => {
                                             value={data[f.key] || ''} 
                                             onChange={e => handleChange(f.key, e.target.value)} 
                                             required={f.required}
+                                            {...getFieldValidationProps(f)}
                                             className="mt-1 block w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-accent focus:border-brand-accent outline-none transition-all" 
+                                        />
+                                    )}
+                                    {f.type === 'time' && (
+                                        <input 
+                                            type="time"
+                                            value={data[f.key] || ''}
+                                            onChange={e => handleChange(f.key, e.target.value)}
+                                            required={f.required}
+                                            {...getFieldValidationProps(f)}
+                                            className="mt-1 block w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-accent focus:border-brand-accent outline-none transition-all"
                                         />
                                     )}
                                     {f.type === 'textarea' && (
@@ -237,28 +342,116 @@ const AddEditMedicalRecord: React.FC = () => {
                                             onChange={e => handleChange(f.key, e.target.value)} 
                                             required={f.required}
                                             rows={4}
+                                            {...getFieldValidationProps(f)}
                                             className="mt-1 block w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-brand-accent focus:border-brand-accent outline-none transition-all resize-none" 
-                                            placeholder={`Enter ${f.label.toLowerCase()}`}
+                                            placeholder={f.placeholder || `Enter ${f.label.toLowerCase()}`}
                                         />
                                     )}
                                     {f.type === 'select' && (
-                                        <select 
-                                            value={data[f.key] || ''} 
-                                            onChange={e => handleChange(f.key, e.target.value)} 
-                                            required={f.required}
-                                            className="mt-1 block w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-accent focus:border-brand-accent outline-none transition-all"
-                                        >
-                                            <option value="">-- Select an option --</option>
-                                            {(f.options || []).map(opt => (
-                                                <option key={opt} value={opt}>{opt}</option>
+                                        <>
+                                            <select 
+                                                value={data[f.key] || (f.allowMultiple ? [] : '')} 
+                                                onChange={e => {
+                                                    if (f.allowMultiple) {
+                                                        const values = Array.from(e.target.selectedOptions as any).map((o: any) => o.value);
+                                                        handleChange(f.key, values);
+                                                    } else {
+                                                        handleChange(f.key, e.target.value);
+                                                    }
+                                                }} 
+                                                required={f.required}
+                                                multiple={!!f.allowMultiple}
+                                                className="mt-1 block w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-accent focus:border-brand-accent outline-none transition-all"
+                                            >
+                                                {!f.allowMultiple && <option value="">-- Select an option --</option>}
+                                                {withOtherOption(f.options).map(opt => (
+                                                    <option key={opt} value={opt}>{opt}</option>
+                                                ))}
+                                            </select>
+                                            {!f.allowMultiple && data[f.key] === OTHER_OPTION_VALUE && (
+                                                <input
+                                                    value={data[`${f.key}__other`] || ''}
+                                                    onChange={e => handleChange(`${f.key}__other`, e.target.value)}
+                                                    className="mt-2 block w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-brand-accent focus:border-brand-accent outline-none transition-all"
+                                                    placeholder="Please specify"
+                                                />
+                                            )}
+                                            {f.allowMultiple && Array.isArray(data[f.key]) && data[f.key].includes(OTHER_OPTION_VALUE) && (
+                                                <input
+                                                    value={data[`${f.key}__other`] || ''}
+                                                    onChange={e => handleChange(`${f.key}__other`, e.target.value)}
+                                                    className="mt-2 block w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-brand-accent focus:border-brand-accent outline-none transition-all"
+                                                    placeholder="Please specify"
+                                                />
+                                            )}
+                                        </>
+                                    )}
+                                    {f.type === 'radio' && (
+                                        <div className="space-y-2 mt-1">
+                                            {withOtherOption(f.options).map(opt => (
+                                                <label key={opt} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                                                    <input
+                                                        type="radio"
+                                                        name={f.key}
+                                                        value={opt}
+                                                        checked={data[f.key] === opt}
+                                                        onChange={() => handleChange(f.key, opt)}
+                                                        required={f.required}
+                                                    />
+                                                    {opt}
+                                                </label>
                                             ))}
-                                        </select>
+                                            {data[f.key] === OTHER_OPTION_VALUE && (
+                                                <input
+                                                    value={data[`${f.key}__other`] || ''}
+                                                    onChange={e => handleChange(`${f.key}__other`, e.target.value)}
+                                                    className="mt-1 block w-full max-w-xl px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-brand-accent focus:border-brand-accent outline-none transition-all"
+                                                    placeholder="Please specify"
+                                                />
+                                            )}
+                                        </div>
+                                    )}
+                                    {f.type === 'checkbox' && (
+                                        <div className="space-y-2 mt-1">
+                                            {withOtherOption(f.options).map(opt => {
+                                                const selected = Array.isArray(data[f.key]) ? data[f.key] : [];
+                                                const checked = selected.includes(opt);
+                                                return (
+                                                    <label key={opt} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                                                        <input
+                                                            type="checkbox"
+                                                            value={opt}
+                                                            checked={checked}
+                                                            onChange={(e) => {
+                                                                const next = Array.isArray(data[f.key]) ? [...data[f.key]] : [];
+                                                                if (e.target.checked) {
+                                                                    if (!next.includes(opt)) next.push(opt);
+                                                                } else {
+                                                                    const idxToRemove = next.indexOf(opt);
+                                                                    if (idxToRemove >= 0) next.splice(idxToRemove, 1);
+                                                                }
+                                                                handleChange(f.key, next);
+                                                            }}
+                                                        />
+                                                        {opt}
+                                                    </label>
+                                                );
+                                            })}
+                                            {Array.isArray(data[f.key]) && data[f.key].includes(OTHER_OPTION_VALUE) && (
+                                                <input
+                                                    value={data[`${f.key}__other`] || ''}
+                                                    onChange={e => handleChange(`${f.key}__other`, e.target.value)}
+                                                    className="mt-1 block w-full max-w-xl px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-brand-accent focus:border-brand-accent outline-none transition-all"
+                                                    placeholder="Please specify"
+                                                />
+                                            )}
+                                        </div>
                                     )}
                                     {f.type === 'file' && (
                                         <div className="mt-1">
                                             <input 
                                                 type="file" 
-                                                multiple 
+                                                multiple={!!f.allowMultiple}
                                                 onChange={e => handleFile(f.key, e.target.files)} 
                                                 className="block w-full text-sm text-slate-500 dark:text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-brand-primary file:text-white hover:file:bg-brand-secondary file:cursor-pointer" 
                                             />
