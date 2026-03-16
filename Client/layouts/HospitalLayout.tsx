@@ -459,8 +459,8 @@ const HospitalLayout: React.FC = () => {
             <div className="flex min-h-screen">
                 <aside className={`hidden lg:flex sticky top-0 h-screen overflow-y-auto border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex-col transition-[width,padding,border-color,box-shadow] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${isDesktopNavCollapsed ? 'w-0 px-0 py-0 overflow-hidden border-r-0 shadow-none' : 'w-60 p-4 shadow-sm'}`}>
                     <div className={`mb-5 px-2 transition-all duration-300 ${isDesktopNavCollapsed ? 'opacity-0 -translate-x-2' : 'opacity-100 translate-x-0'}`}>
-                        <h1 className="text-2xl font-bold text-blue-600 dark:text-blue-400 tracking-wide">G1CARD HOSPITAL</h1>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Clinical Operations</p>
+                        <h1 className="sidebar-brand-title text-2xl font-bold tracking-wide">G1CARD HOSPITAL</h1>
+                        <p className="sidebar-brand-subtitle text-xs mt-1">Clinical Operations</p>
                     </div>
                     <nav className={`flex-1 space-y-2 transition-all duration-300 ${isDesktopNavCollapsed ? 'opacity-0 -translate-x-2' : 'opacity-100 translate-x-0'}`}>{renderNavItems()}</nav>
                 </aside>
@@ -485,7 +485,7 @@ const HospitalLayout: React.FC = () => {
                     <div className="absolute inset-0 bg-slate-900/50 cursor-pointer" onClick={() => setShowMobileNav(false)} />
                     <aside className="absolute left-0 top-0 h-full w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 p-5">
                         <div className="flex items-center justify-between mb-6">
-                            <h1 className="text-xl font-bold text-blue-600 dark:text-blue-400 tracking-wide">G1CARD HOSPITAL</h1>
+                            <h1 className="sidebar-brand-title text-xl font-bold tracking-wide">G1CARD HOSPITAL</h1>
                             <button
                                 type="button"
                                 onClick={() => setShowMobileNav(false)}

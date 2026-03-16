@@ -60,8 +60,8 @@ const AdminLayout: React.FC = () => {
             <div className="flex min-h-screen">
                 <aside className="hidden lg:flex w-60 border-r border-[var(--app-border)] bg-[var(--app-surface)]/95 p-4 flex-col">
                     <div className="mb-5 px-2">
-                        <h1 className="text-2xl font-bold text-blue-600 dark:text-blue-400 tracking-wide">G1CARD ADMIN</h1>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Control Center</p>
+                        <h1 className="sidebar-brand-title text-2xl font-bold tracking-wide">G1CARD ADMIN</h1>
+                        <p className="sidebar-brand-subtitle text-xs mt-1">Control Center</p>
                     </div>
                     <nav className="flex-1 space-y-2">{renderNavItems()}</nav>
                 </aside>
@@ -188,7 +188,7 @@ const AdminLayout: React.FC = () => {
                     <div className="absolute inset-0 bg-black/40 dark:bg-slate-900/50 cursor-pointer" onClick={() => setShowMobileNav(false)} />
                     <aside className="absolute left-0 top-0 h-full w-72 bg-[var(--app-surface)] border-r border-[var(--app-border)] p-5">
                         <div className="flex items-center justify-between mb-6">
-                            <h1 className="text-xl font-bold text-blue-600 dark:text-blue-400 tracking-wide">G1CARD ADMIN</h1>
+                            <h1 className="sidebar-brand-title text-xl font-bold tracking-wide">G1CARD ADMIN</h1>
                             <button
                                 type="button"
                                 onClick={() => setShowMobileNav(false)}

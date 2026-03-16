@@ -364,8 +364,8 @@ const PatientLayout: React.FC = () => {
             <div className="flex min-h-screen">
                 <aside className="hidden lg:flex w-60 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 flex-col">
                     <div className="mb-5 px-2">
-                        <h1 className="text-2xl font-bold text-blue-600 dark:text-blue-400 tracking-wide">G1CARD USER</h1>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Patient Portal</p>
+                        <h1 className="sidebar-brand-title text-2xl font-bold tracking-wide">G1CARD USER</h1>
+                        <p className="sidebar-brand-subtitle text-xs mt-1">Patient Portal</p>
                     </div>
                     <nav className="flex-1 space-y-2">{renderNavItems()}</nav>
                 </aside>
@@ -387,7 +387,7 @@ const PatientLayout: React.FC = () => {
                     <div className="absolute inset-0 bg-slate-900/50 cursor-pointer" onClick={() => setShowMobileNav(false)} />
                     <aside className="absolute left-0 top-0 h-full w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 p-5">
                         <div className="flex items-center justify-between mb-6">
-                            <h1 className="text-xl font-bold text-blue-600 dark:text-blue-400 tracking-wide">G1CARD USER</h1>
+                            <h1 className="sidebar-brand-title text-xl font-bold tracking-wide">G1CARD USER</h1>
                             <button
                                 type="button"
                                 onClick={() => setShowMobileNav(false)}

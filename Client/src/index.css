@@ -20,6 +20,13 @@
   --app-text: #243247;
   --app-muted: #3f526c;
   --app-accent: #255da8;
+  --app-success-text: #14532d;
+  --app-success-strong: #166534;
+
+  --app-btn-soft-bg: #e3ebf7;
+  --app-btn-soft-bg-hover: #d3def0;
+  --app-btn-soft-border: #8ca3bf;
+  --app-btn-soft-text: #1f2f46;
 
   --table-head-bg: #d4e0ef;
   --table-row-odd: #f6f2eb;
@@ -106,12 +113,52 @@ select:not(:disabled) {
   to { transform: rotate(360deg); }
 }
 
+@keyframes theme-fade-out {
+  0% { opacity: 1; filter: blur(0px); transform: scale(1); }
+  100% { opacity: 0; filter: blur(2px); transform: scale(0.995); }
+}
+
+@keyframes theme-fade-in {
+  0% { opacity: 0; filter: blur(6px); transform: scale(1.01); }
+  100% { opacity: 1; filter: blur(0px); transform: scale(1); }
+}
+
 .animate-shimmer {
   animation: shimmer 2s infinite;
 }
 
 .animate-spin-slow {
   animation: spin-slow 3s linear infinite;
+}
+
+:root.theme-transitioning,
+:root.theme-transitioning * ,
+:root.theme-transitioning *::before,
+:root.theme-transitioning *::after {
+  transition:
+    background-color 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    fill 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    stroke 420ms cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 520ms;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    mix-blend-mode: normal;
+  }
+
+  ::view-transition-old(root) {
+    animation-name: theme-fade-out;
+  }
+
+  ::view-transition-new(root) {
+    animation-name: theme-fade-in;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -300,6 +347,23 @@ select:not(:disabled) {
   background-color: #1d4ed8;
 }
 
+.sidebar-brand-title {
+  color: #1d4ed8;
+}
+
+.sidebar-brand-subtitle {
+  color: #334155;
+  font-weight: 500;
+}
+
+.dark .sidebar-brand-title {
+  color: #93c5fd;
+}
+
+.dark .sidebar-brand-subtitle {
+  color: #cbd5e1;
+}
+
 button[class*='border-'],
 input[type='button'][class*='border-'],
 input[type='submit'][class*='border-'],
@@ -390,18 +454,23 @@ input[type='reset'][class*='border-'] {
 }
 
 :root:not(.dark) .text-green-300,
-:root:not(.dark) .text-green-400 {
-  color: #15803d !important;
-}
-
+:root:not(.dark) .text-green-400,
 :root:not(.dark) .text-green-500,
 :root:not(.dark) .text-green-600,
+:root:not(.dark) .text-green-700,
+:root:not(.dark) .text-green-800,
+:root:not(.dark) .text-emerald-200,
 :root:not(.dark) .text-emerald-300,
 :root:not(.dark) .text-emerald-400,
 :root:not(.dark) .text-emerald-500,
 :root:not(.dark) .text-emerald-600,
+:root:not(.dark) .text-emerald-700,
 :root:not(.dark) .text-status-green {
-  color: #166534 !important;
+  color: var(--app-success-text) !important;
+}
+
+:root:not(.dark) .text-green-200 {
+  color: var(--app-success-strong) !important;
 }
 
 :root:not(.dark) .text-red-300,
@@ -418,6 +487,12 @@ input[type='reset'][class*='border-'] {
 :root:not(.dark) .text-yellow-300,
 :root:not(.dark) .text-yellow-400 {
   color: #a16207 !important;
+}
+
+:root:not(.dark) .text-amber-300,
+:root:not(.dark) .text-amber-400,
+:root:not(.dark) .text-amber-500 {
+  color: #92400e !important;
 }
 
 :root:not(.dark) .text-blue-300,
@@ -459,6 +534,67 @@ input[type='reset'][class*='border-'] {
 :root:not(.dark) .patient-shell button:not(:disabled):hover {
   box-shadow: 0 6px 14px rgba(47, 69, 111, 0.14);
   transform: translateY(-1px);
+}
+
+/* Raise contrast for neutral/outlined controls in light mode */
+:root:not(.dark) .admin-shell button[class*='bg-slate-200'],
+:root:not(.dark) .hospital-shell button[class*='bg-slate-200'],
+:root:not(.dark) .patient-shell button[class*='bg-slate-200'],
+:root:not(.dark) .admin-shell button[class*='border-slate-300'],
+:root:not(.dark) .hospital-shell button[class*='border-slate-300'],
+:root:not(.dark) .patient-shell button[class*='border-slate-300'] {
+  background-color: var(--app-btn-soft-bg) !important;
+  border-color: var(--app-btn-soft-border) !important;
+  color: var(--app-btn-soft-text) !important;
+}
+
+:root:not(.dark) .admin-shell button[class*='bg-slate-200']:hover,
+:root:not(.dark) .hospital-shell button[class*='bg-slate-200']:hover,
+:root:not(.dark) .patient-shell button[class*='bg-slate-200']:hover,
+:root:not(.dark) .admin-shell button[class*='border-slate-300']:hover,
+:root:not(.dark) .hospital-shell button[class*='border-slate-300']:hover,
+:root:not(.dark) .patient-shell button[class*='border-slate-300']:hover {
+  background-color: var(--app-btn-soft-bg-hover) !important;
+}
+
+/* Keep colored outline action buttons readable on light surfaces */
+:root:not(.dark) button[class*='border-blue-'][class*='text-blue-'] {
+  background-color: #e7f0ff !important;
+  border-color: #8eb1e6 !important;
+  color: #1e40af !important;
+}
+
+:root:not(.dark) button[class*='border-emerald-'][class*='text-emerald-'] {
+  background-color: #16a34a !important;
+  border-color: #15803d !important;
+  color: #ffffff !important;
+}
+
+/* Normalize active status badges/pills to avoid pale white tint in light mode */
+:root:not(.dark) span[class*='bg-green-100'][class*='text-green-800'],
+:root:not(.dark) span[class*='bg-emerald-100'][class*='text-emerald-700'],
+:root:not(.dark) span[class*='bg-emerald-200'][class*='text-black'] {
+  background-color: #16a34a !important;
+  border-color: #15803d !important;
+  color: #ffffff !important;
+}
+
+:root:not(.dark) button[class*='border-amber-'][class*='text-amber-'] {
+  background-color: #fef3c7 !important;
+  border-color: #fcd34d !important;
+  color: #78350f !important;
+}
+
+:root:not(.dark) button[class*='border-violet-'][class*='text-violet-'] {
+  background-color: #ede9fe !important;
+  border-color: #c4b5fd !important;
+  color: #5b21b6 !important;
+}
+
+:root:not(.dark) button[class*='border-rose-'][class*='text-rose-'] {
+  background-color: #ffe4e6 !important;
+  border-color: #fda4af !important;
+  color: #9f1239 !important;
 }
 
 /* In light mode, remap hardcoded dark modal stacks to tokenized readable colors */

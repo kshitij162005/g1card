@@ -496,7 +496,7 @@ const CreateForm: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen p-8" style={{ backgroundColor: '#0f172a' }}>
+        <div className="min-h-screen p-8 form-builder-shell" style={{ backgroundColor: 'var(--app-bg)' }}>
             <div className="mx-auto max-w-[1500px] space-y-6">
                 <header className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6 pb-4 border-b border-slate-700/60">
                     <div>
@@ -512,7 +512,7 @@ const CreateForm: React.FC = () => {
 
                 <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6">
                     <main className="space-y-6">
-                        <div className="mx-auto max-w-[760px] rounded-2xl p-6 border border-slate-700/70 shadow-sm shadow-black/20" style={{ backgroundColor: '#1e293b' }}>
+                        <div className="mx-auto max-w-[760px] rounded-2xl p-6 border border-slate-700/70 shadow-sm shadow-black/20" style={{ backgroundColor: 'var(--app-surface)' }}>
                             <input
                                 value={name}
                                 onChange={e => setName(e.target.value)}
@@ -530,7 +530,7 @@ const CreateForm: React.FC = () => {
 
                         <div className="mx-auto max-w-[760px]">
                             {fields.length === 0 ? (
-                                <div className="text-center py-20 rounded-2xl border border-slate-700/70 shadow-sm shadow-black/20" style={{ backgroundColor: '#1e293b' }}>
+                                <div className="text-center py-20 rounded-2xl border border-slate-700/70 shadow-sm shadow-black/20" style={{ backgroundColor: 'var(--app-surface)' }}>
                                     <p className="text-[18px] font-semibold text-slate-100">Start building your form</p>
                                     <button
                                         type="button"
@@ -556,7 +556,7 @@ const CreateForm: React.FC = () => {
                                                     ? 'ring-1 ring-blue-400 shadow-lg shadow-blue-950/20'
                                                     : 'hover:-translate-y-0.5 hover:shadow-md hover:shadow-black/30 hover:border-slate-500'
                                             }`}
-                                            style={{ backgroundColor: '#1e293b', marginBottom: 24 }}
+                                            style={{ backgroundColor: 'var(--app-surface)', marginBottom: 24 }}
                                         >
                                             {field.type === 'section' ? (
                                                 <div>
@@ -609,7 +609,7 @@ const CreateForm: React.FC = () => {
                         </div>
                     </main>
 
-                    <aside className="builder-scrollbar sticky top-24 self-start max-h-[calc(100vh-7.5rem)] overflow-y-auto space-y-6 rounded-2xl p-6 border border-slate-700/70 shadow-sm shadow-black/20" style={{ backgroundColor: '#1e293b' }}>
+                    <aside className="builder-scrollbar sticky top-24 self-start max-h-[calc(100vh-7.5rem)] overflow-y-auto space-y-6 rounded-2xl p-6 border border-slate-700/70 shadow-sm shadow-black/20" style={{ backgroundColor: 'var(--app-surface)' }}>
                         <h3 className="text-[18px] font-semibold text-slate-100">Field Settings</h3>
                         {!currentField ? (
                             <p className="text-[15px] text-slate-400">Select a question to edit its settings.</p>
@@ -736,8 +736,8 @@ const CreateForm: React.FC = () => {
                             <h3 className="text-lg font-semibold text-slate-100">Preview</h3>
                             <button type="button" onClick={() => setPreviewOpen(false)} className="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:bg-slate-800">Close</button>
                         </div>
-                        <div className="flex-1 overflow-auto p-8" style={{ backgroundColor: theme.backgroundColor }}>
-                            <div className="mx-auto max-w-[760px] rounded-2xl p-6" style={{ backgroundColor: theme.cardColor }}>
+                        <div className="flex-1 overflow-auto p-8" style={{ backgroundColor: 'var(--app-bg)' }}>
+                            <div className="mx-auto max-w-[760px] rounded-2xl p-6 border border-[var(--app-border)]" style={{ backgroundColor: 'var(--app-surface)' }}>
                                 <h2 className="text-[28px] font-bold text-slate-100">{name || 'Form Title'}</h2>
                                 <p className="text-[15px] text-slate-300 mt-2">{description || 'Form Description'}</p>
                                 <div className="mt-6 space-y-6">

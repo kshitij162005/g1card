@@ -578,14 +578,14 @@ const PatientRecord: React.FC = () => {
 
                                 {aiSummary && (
                                     <>
-                                        <p className="text-sm text-slate-700 dark:text-slate-300">
+                                        <p className="text-sm text-slate-800 dark:text-slate-300">
                                             {aiSummary.overview}
                                         </p>
 
                                         {aiSummary.criticalAlerts.length > 0 && (
                                             <div>
-                                                <p className="text-xs font-semibold uppercase tracking-wide text-red-600 dark:text-red-400 mb-1">Critical Alerts</p>
-                                                <ul className="list-disc list-inside text-sm text-red-700 dark:text-red-300 space-y-1">
+                                                <p className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-400 mb-1">Critical Alerts</p>
+                                                <ul className="list-disc list-inside text-sm text-red-800 dark:text-red-300 space-y-1 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-lg px-3 py-2">
                                                     {aiSummary.criticalAlerts.map((item, idx) => <li key={`critical-${idx}`}>{item}</li>)}
                                                 </ul>
                                             </div>
@@ -593,14 +593,14 @@ const PatientRecord: React.FC = () => {
 
                                         {aiSummary.bulletPoints.length > 0 && (
                                             <div>
-                                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1">Medical Nutshell</p>
-                                                <ul className="list-disc list-inside text-sm text-slate-700 dark:text-slate-300 space-y-1">
+                                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-400 mb-1">Medical Nutshell</p>
+                                                <ul className="list-disc list-inside text-sm text-slate-800 dark:text-slate-300 space-y-1">
                                                     {aiSummary.bulletPoints.map((item, idx) => <li key={`summary-${idx}`}>{item}</li>)}
                                                 </ul>
                                             </div>
                                         )}
 
-                                        <p className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/30 rounded px-2 py-1">
+                                        <p className="text-xs text-amber-900 dark:text-amber-200 bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-800 rounded px-2 py-1">
                                             Safety note: Validate AI output against full records before treatment decisions.
                                         </p>
                                     </>
