@@ -1019,6 +1019,24 @@ router.post('/:id/patients/:patientId/records', async (req, res) => {
       notificationId: notification._id.toString()
     });
 
+    const prefs = {
+      emailForNewPrescriptions: true,
+      ...(patient.notificationPreferences || {}),
+    };
+    if (prefs.emailForNewPrescriptions && patient.email) {
+      const { sendPatientPreferenceEmail } = await import('../utils/emailService.js');
+      await sendPatientPreferenceEmail({
+        to: patient.email,
+        title: 'New medical record added',
+        message: `${hospital.name} has added a new ${formName} to your G1CARD profile.`,
+        details: [
+          `Hospital: ${hospital.name}`,
+          `Record Type: ${formName}`,
+          `Created At: ${new Date().toLocaleString('en-IN')}`,
+        ],
+      });
+    }
+
     return res.json({ ok: true, record: rec });
   } catch (err) {
     console.error('submit record error:', err);
@@ -1116,6 +1134,24 @@ router.get('/:id/patients/:patientId/records', async (req, res) => {
           hospitalName: hospital.name,
           notificationId: notification._id.toString()
         });
+
+        const prefs = {
+          emailWhenHospitalAccessRecords: true,
+          ...(patient.notificationPreferences || {}),
+        };
+        if (prefs.emailWhenHospitalAccessRecords && patient.email) {
+          const { sendPatientPreferenceEmail } = await import('../utils/emailService.js');
+          await sendPatientPreferenceEmail({
+            to: patient.email,
+            title: 'Hospital accessed your records',
+            message: `${hospital.name} viewed your medical records using ${access.accessLevel === 'COMPLETE' ? 'complete' : 'general'} access.`,
+            details: [
+              `Hospital: ${hospital.name}`,
+              `Access Level: ${access.accessLevel}`,
+              `Records Viewed: ${records.length}`,
+            ],
+          });
+        }
       }
     }
 

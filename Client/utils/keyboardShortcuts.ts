@@ -11,7 +11,7 @@ function getOpenModalCandidates(): HTMLElement[] {
     '[role="dialog"]',
     '.fixed.inset-0.z-40',
     '.fixed.inset-0.z-50',
-    '.fixed.inset-0.z-\[120\]'
+    '.fixed.inset-0.z-\\[120\\]'
   ];
 
   const seen = new Set<HTMLElement>();

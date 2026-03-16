@@ -24,6 +24,7 @@ import AuditLogs from './pages/admin/AuditLogs';
 import HospitalUpdateRequestsAdmin from './pages/admin/HospitalUpdateRequests';
 import AddHospitalPage from './pages/admin/AddHospitalPage';
 import PendingRequests from './pages/admin/PendingRequests';
+import DeletionRequests from './pages/admin/DeletionRequests';
 
 import HospitalLayout from './layouts/HospitalLayout';
 import HospitalDashboard from './pages/hospital/HospitalDashboard';
@@ -82,6 +83,7 @@ const AppRoutes: React.FC = () => {
                         <Route index element={<Navigate to="dashboard" />} />
                         <Route path="dashboard" element={<AdminDashboard />} />
                         <Route path="pending" element={<PendingRequests />} />
+                        <Route path="deletion-requests" element={<DeletionRequests />} />
                         <Route path="hospitals" element={<HospitalManagement />} />
                         <Route path="hospitals/add" element={<AddHospitalPage />} />
                         <Route path="hospitals/:id" element={<HospitalDetails />} />

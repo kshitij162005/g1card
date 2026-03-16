@@ -1,11 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { API_URL } from '../../config/api';
+
+async function parseApiResponse(resp: Response) {
+    const contentType = resp.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+        return resp.json();
+    }
+    const text = await resp.text();
+    return { error: text?.slice(0, 200) || `HTTP ${resp.status}` };
+}
 
 const HospitalOtpPage: React.FC = () => {
     const [otp, setOtp] = useState<string[]>(new Array(6).fill(""));
     const [timer, setTimer] = useState(25);
+    const [submitting, setSubmitting] = useState(false);
+    const [resending, setResending] = useState(false);
     const navigate = useNavigate();
+    const location = useLocation();
     const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
+    const email = String(location.state?.email || '').toLowerCase();
 
     useEffect(() => {
         const interval = setInterval(() => {
@@ -30,10 +44,64 @@ const HospitalOtpPage: React.FC = () => {
         }
     };
     
-    const handleVerify = () => {
-        // Mock verification logic
-        notify(`Verifying OTP: ${otp.join("")}. Redirecting to login.`);
-        navigate('/login'); // Redirect to login, they can login once approved by admin
+    const handleVerify = async () => {
+        if (!email) {
+            notify('Signup session missing. Please register again.');
+            navigate('/hospital/register');
+            return;
+        }
+
+        const otpValue = otp.join('');
+        if (otpValue.length !== 6) {
+            notify('Please enter the complete 6-digit OTP');
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            const resp = await fetch(`${API_URL}/auth/otp/verify-signup`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ role: 'Hospital', email, otp: otpValue }),
+            });
+            const data = await parseApiResponse(resp);
+            if (!resp.ok) {
+                notify(data?.error || data?.message || 'OTP verification failed');
+                return;
+            }
+
+            notify('Hospital registration completed. Await admin approval before login.');
+            navigate('/login');
+        } catch (err) {
+            console.error('verify hospital otp error', err);
+            notify('Error verifying OTP');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const resendOtp = async () => {
+        if (timer > 0 || !email) return;
+        setResending(true);
+        try {
+            const resp = await fetch(`${API_URL}/auth/otp/resend-signup`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ role: 'Hospital', email }),
+            });
+            const data = await parseApiResponse(resp);
+            if (!resp.ok) {
+                notify(data?.error || data?.message || 'Unable to resend OTP');
+                return;
+            }
+            setTimer(25);
+            notify('OTP resent successfully');
+        } catch (err) {
+            console.error('resend hospital otp error', err);
+            notify('Error resending OTP');
+        } finally {
+            setResending(false);
+        }
     };
 
     return (
@@ -43,7 +111,7 @@ const HospitalOtpPage: React.FC = () => {
             <div className="w-full max-w-md p-8 space-y-6 bg-white/80 dark:bg-slate-800/80 backdrop-blur-lg rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 z-10 text-center">
                  <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Verify Hospital Email</h2>
                 <p className="text-slate-600 dark:text-slate-400">
-                    We sent a verification code to <br /> <span className="font-semibold">rajesh@apollo.com</span>
+                    We sent a verification code to <br /> <span className="font-semibold">{email || 'your hospital email'}</span>
                 </p>
                  <p className="text-sm text-slate-500 dark:text-slate-400">Code expires in: 09:{timer < 10 ? `0${timer}` : timer}</p>
                 <div className="flex justify-center space-x-2">
@@ -66,14 +134,14 @@ const HospitalOtpPage: React.FC = () => {
                 <p className="text-slate-500 dark:text-slate-400">Didn't receive code?</p>
                 <button 
                   className="text-brand-accent hover:underline disabled:text-slate-400 disabled:no-underline"
-                  disabled={timer > 0}
-                  onClick={() => setTimer(25)}
+                                    disabled={timer > 0 || resending || !email}
+                                    onClick={resendOtp}
                 >
-                    Resend OTP {timer > 0 ? `(Cooldown: ${timer}s)` : ''}
+                                        {resending ? 'Resending...' : `Resend OTP ${timer > 0 ? `(Cooldown: ${timer}s)` : ''}`}
                 </button>
                 <div className="flex flex-col space-y-4 pt-4">
-                     <button onClick={handleVerify} className="w-full py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-brand-primary hover:bg-brand-secondary transition-transform transform hover:scale-105">
-                        Verify Email
+                                         <button onClick={handleVerify} disabled={submitting || !email} className="w-full py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-brand-primary hover:bg-brand-secondary transition-transform transform hover:scale-105 disabled:opacity-60">
+                                                {submitting ? 'Verifying...' : 'Verify Email'}
                     </button>
                     <p className="text-xs text-slate-500 dark:text-slate-400">Need help? Contact support@g1card.com</p>
                 </div>

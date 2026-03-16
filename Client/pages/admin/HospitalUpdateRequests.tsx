@@ -276,7 +276,7 @@ const HospitalUpdateRequestsAdmin: React.FC = () => {
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                                 filterStatus === status
                                     ? 'bg-brand-primary text-white'
-                                    : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+                                    : 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600'
                             }`}
                         >
                             <span className="flex items-center gap-2">
@@ -284,7 +284,7 @@ const HospitalUpdateRequestsAdmin: React.FC = () => {
                                 <span className={`px-2 py-0.5 rounded-full text-xs ${
                                     filterStatus === status
                                         ? 'bg-white/20'
-                                        : 'bg-slate-300 dark:bg-slate-600'
+                                        : 'bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-100'
                                 }`}>
                                     {counts[status as keyof typeof counts]}
                                 </span>
@@ -299,14 +299,15 @@ const HospitalUpdateRequestsAdmin: React.FC = () => {
                 <p className="text-center py-8 text-slate-600 dark:text-slate-400">Loading...</p>
             ) : requests.length === 0 ? (
                 <Card>
-                    <p className="text-center py-12 text-slate-600 dark:text-slate-400">
-                        No {filterStatus === 'ALL' ? '' : filterStatus.toLowerCase()} update requests found.
-                    </p>
+                    <div className="py-12 text-center">
+                        <p className="text-slate-800 dark:text-slate-200 font-semibold">No matching update requests</p>
+                        <p className="text-slate-600 dark:text-slate-400 mt-1">No {filterStatus === 'ALL' ? '' : filterStatus.toLowerCase()} update requests found.</p>
+                    </div>
                 </Card>
             ) : (
                 <div className="grid gap-4">
                     {requests.map(request => (
-                        <Card key={request._id} className="hover:shadow-lg transition-shadow">
+                        <Card key={request._id} className="hover:shadow-lg transition-shadow border border-slate-200 dark:border-slate-700">
                             <div className="flex justify-between items-start gap-4">
                                 <div className="flex-1">
                                     <div className="flex items-center gap-3 mb-2">
@@ -317,11 +318,11 @@ const HospitalUpdateRequestsAdmin: React.FC = () => {
                                             {request.status.replace('_', ' ')}
                                         </span>
                                     </div>
-                                    <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
+                                    <p className="text-sm text-slate-700 dark:text-slate-400 mb-3">
                                         {request.hospital.city}, {request.hospital.state} • {request.hospital.contactEmail}
                                     </p>
                                     <div className="flex flex-wrap gap-2 mb-2">
-                                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                                        <span className="text-xs text-slate-600 dark:text-slate-400">
                                             Submitted: {new Date(request.createdAt).toLocaleString()}
                                         </span>
                                         {request.resubmittedAt && (
@@ -331,7 +332,7 @@ const HospitalUpdateRequestsAdmin: React.FC = () => {
                                         )}
                                     </div>
                                     <div className="text-sm text-slate-700 dark:text-slate-300">
-                                        <strong>Fields to update:</strong> {request.requestedChanges ? Object.keys(request.requestedChanges).join(', ') : 'N/A'}
+                                        <strong className="text-slate-900 dark:text-slate-200">Fields to update:</strong> {request.requestedChanges ? Object.keys(request.requestedChanges).join(', ') : 'N/A'}
                                     </div>
                                 </div>
                                 <button
@@ -356,7 +357,7 @@ const HospitalUpdateRequestsAdmin: React.FC = () => {
                         <button
                             disabled={pagination.page === 1}
                             onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
-                            className="px-3 py-1 border dark:border-slate-600 rounded-lg text-sm disabled:opacity-50"
+                            className="px-3 py-1 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-lg text-sm disabled:opacity-50"
                         >
                             Previous
                         </button>
@@ -366,7 +367,7 @@ const HospitalUpdateRequestsAdmin: React.FC = () => {
                         <button
                             disabled={pagination.page === pagination.pages}
                             onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
-                            className="px-3 py-1 border dark:border-slate-600 rounded-lg text-sm disabled:opacity-50"
+                            className="px-3 py-1 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-lg text-sm disabled:opacity-50"
                         >
                             Next
                         </button>
@@ -377,8 +378,8 @@ const HospitalUpdateRequestsAdmin: React.FC = () => {
             {/* Review Modal */}
             {selectedRequest && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-                        <div className="p-6 border-b dark:border-slate-700 flex justify-between items-start">
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="p-6 border-b border-slate-200 dark:border-slate-700 flex justify-between items-start">
                             <div>
                                 <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200">{selectedRequest.hospital.name}</h2>
                                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Update Request Review</p>
@@ -400,18 +401,18 @@ const HospitalUpdateRequestsAdmin: React.FC = () => {
                                 {selectedRequest.requestedChanges && Object.keys(selectedRequest.requestedChanges).length > 0 ? (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         {Object.entries(selectedRequest.requestedChanges).map(([key, value]) => (
-                                            <div key={key} className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                                            <div key={key} className="p-4 bg-slate-100 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
                                                 <div className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">
                                                     {key.replace(/([A-Z])/g, ' $1').trim()}
                                                 </div>
                                                 <div className="space-y-1">
-                                                    <div className="text-sm">
+                                                    <div className="text-sm text-slate-700 dark:text-slate-300">
                                                         <span className="text-xs text-slate-500">Old:</span>{' '}
                                                         <span className="text-red-600 dark:text-red-400">
                                                             {selectedRequest.originalData?.[key] || 'N/A'}
                                                         </span>
                                                     </div>
-                                                    <div className="text-sm">
+                                                    <div className="text-sm text-slate-700 dark:text-slate-300">
                                                         <span className="text-xs text-slate-500">New:</span>{' '}
                                                         <span className="text-green-600 dark:text-green-400 font-medium">
                                                             {value as string}
@@ -430,7 +431,7 @@ const HospitalUpdateRequestsAdmin: React.FC = () => {
                             {selectedRequest.conversation && selectedRequest.conversation.length > 0 && (
                                 <div>
                                     <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-3">Conversation</h3>
-                                    <div className="space-y-3 max-h-60 overflow-y-auto p-4 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                                    <div className="space-y-3 max-h-60 overflow-y-auto p-4 bg-slate-100 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
                                         {selectedRequest.conversation.map((msg, idx) => (
                                             <div key={idx} className={`p-3 rounded-lg ${
                                                 msg.sender === 'ADMIN'
@@ -461,7 +462,7 @@ const HospitalUpdateRequestsAdmin: React.FC = () => {
                                     <textarea
                                         value={actionMessage}
                                         onChange={(e) => setActionMessage(e.target.value)}
-                                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-500"
                                         rows={4}
                                         placeholder="Add your comments, ask questions, or provide rejection reason..."
                                     />
@@ -469,7 +470,7 @@ const HospitalUpdateRequestsAdmin: React.FC = () => {
                             )}
                         </div>
 
-                        <div className="p-6 border-t dark:border-slate-700 flex justify-end gap-3">
+                        <div className="p-6 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3">
                             <button
                                 onClick={() => setSelectedRequest(null)}
                                 className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-300"
