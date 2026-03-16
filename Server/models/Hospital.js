@@ -19,6 +19,7 @@ const HospitalSchema = new mongoose.Schema(
     adminEmail: { type: String },
     adminPhone: { type: String },
     designation: { type: String },
+    emailVerified: { type: Boolean, default: false },
     active: { type: Boolean, default: true },
     // status reflects review/approval lifecycle. 'approved' for existing behavior.
     status: { type: String, enum: ['pending', 'approved', 'rejected', 'suspended'], default: 'approved' },

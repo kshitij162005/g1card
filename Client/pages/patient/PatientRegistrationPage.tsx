@@ -3,6 +3,7 @@ import { API_URL } from '../../config/api';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ThemeMode, getStoredTheme, setStoredTheme } from '../../utils/theme';
+import { Role } from '../../types';
 
 type AuthMode = 'manual' | 'google';
 
@@ -263,8 +264,14 @@ const PatientRegistrationPage: React.FC = () => {
                 return;
             }
 
-            notify('Registration successful. Please login to continue.');
-            navigate('/login');
+            notify('OTP sent to your email. Please verify to complete registration.');
+            navigate('/patient/verify-otp', {
+                state: {
+                    email: data?.email || form.email,
+                    role: Role.PATIENT,
+                },
+            });
+            setIsSubmitting(false);
         } catch (err) {
             console.error('patient signup error', err);
             notify('Registration error');

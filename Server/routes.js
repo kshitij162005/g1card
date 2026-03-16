@@ -60,6 +60,20 @@ function calculateAgeFromDob(dob) {
   return age;
 }
 
+function generateOtpCode(length = 6) {
+  let code = '';
+  for (let i = 0; i < length; i++) {
+    code += Math.floor(Math.random() * 10).toString();
+  }
+  return code;
+}
+
+function toRolePurpose(role) {
+  if (role === 'Patient' || role === 'PATIENT') return 'SIGNUP_PATIENT';
+  if (role === 'Hospital' || role === 'HOSPITAL') return 'SIGNUP_HOSPITAL';
+  return null;
+}
+
 // Health endpoint — includes DB status
 router.get('/health', (req, res) => {
   const dbState = mongoose?.connection?.readyState ?? 0; // 0 = disconnected, 1 = connected
@@ -85,44 +99,64 @@ router.get('/ai/readiness', (req, res) => {
 router.post('/auth/signup/patient', async (req, res) => {
   try {
     const Patient = (await import('./models/Patient.js')).default;
+    const EmailOtp = (await import('./models/EmailOtp.js')).default;
+    const { sendOtpEmail } = await import('./utils/emailService.js');
     const { email, password, firstName, lastName, dob, gender, phone, address, emergencyContactName, emergencyContactPhone, allergies, conditions, surgeries, medications, familyHistory, smoking } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'email and password are required' });
 
-    const exists = await Patient.findOne({ username: email });
+    const normalizedEmail = normalizeEmail(email);
+    const exists = await Patient.findOne({ username: normalizedEmail });
     if (exists) return res.status(409).json({ error: 'User already exists' });
 
     const salt = generateSalt();
     const passwordHash = hashWithSalt(password, salt);
 
-    // Generate unique patient ID
-    const patientId = `P${Date.now()}`;
-    const age = calculateAgeFromDob(dob);
+    await EmailOtp.deleteMany({ email: normalizedEmail, purpose: 'SIGNUP_PATIENT', usedAt: null });
 
-    const doc = new Patient({
-      username: email,
-      password: passwordHash,
-      salt,
-      patientId,
-      email,
-      firstName,
-      lastName,
-      dob,
-      age,
-      gender,
-      phone,
-      address,
-      emergencyContactName,
-      emergencyContactPhone,
-      allergies,
-      conditions,
-      surgeries,
-      medications,
-      familyHistory,
-      smoking,
+    const otp = generateOtpCode(6);
+    const otpSalt = generateSalt();
+    const otpHash = hashWithSalt(otp, otpSalt);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    const otpDoc = await EmailOtp.create({
+      email: normalizedEmail,
+      purpose: 'SIGNUP_PATIENT',
+      otpHash,
+      salt: otpSalt,
+      expiresAt,
+      payload: {
+        username: normalizedEmail,
+        password: passwordHash,
+        userSalt: salt,
+        email: normalizedEmail,
+        patientId: `P${Date.now()}`,
+        age: calculateAgeFromDob(dob),
+        firstName,
+        lastName,
+        dob,
+        gender,
+        phone,
+        address,
+        emergencyContactName,
+        emergencyContactPhone,
+        allergies,
+        conditions,
+        surgeries,
+        medications,
+        familyHistory,
+        smoking,
+      },
     });
 
-    await doc.save();
-    return res.json({ ok: true, id: doc._id, message: 'Patient registered' });
+    const delivery = await sendOtpEmail({ to: normalizedEmail, otp, purposeLabel: 'patient registration' });
+    if (!delivery?.ok) {
+      await EmailOtp.deleteOne({ _id: otpDoc._id });
+      return res.status(503).json({
+        error: `OTP could not be delivered: ${delivery?.reason || 'Email service is not configured'}`,
+      });
+    }
+
+    return res.json({ ok: true, email: normalizedEmail, message: 'OTP sent to your email. Verify to complete registration.' });
   } catch (err) {
     console.error('signup patient error:', err);
     return res.status(500).json({ error: err.message || String(err) });
@@ -133,48 +167,216 @@ router.post('/auth/signup/patient', async (req, res) => {
 router.post('/auth/signup/hospital', async (req, res) => {
   try {
     const Hospital = (await import('./models/Hospital.js')).default;
+    const EmailOtp = (await import('./models/EmailOtp.js')).default;
+    const { sendOtpEmail } = await import('./utils/emailService.js');
     const { hospitalName, regNumber, address, city, state, pin, license, email, phone, website, adminName, adminEmail, adminPhone, designation, password } = req.body;
     if (!email || !password || !hospitalName) return res.status(400).json({ error: 'hospitalName, email and password are required' });
 
-    const normalizedHospitalEmail = String(email || '').trim().toLowerCase();
-    const normalizedAdminEmail = String(adminEmail || '').trim().toLowerCase();
+    const normalizedHospitalEmail = normalizeEmail(email);
+    const normalizedAdminEmail = normalizeEmail(adminEmail);
     if (normalizedAdminEmail && normalizedHospitalEmail === normalizedAdminEmail) {
       return res.status(400).json({ error: 'Hospital contact email and admin email must be different' });
     }
 
-    const exists = await Hospital.findOne({ username: email });
+    const exists = await Hospital.findOne({ username: normalizedHospitalEmail });
     if (exists) return res.status(409).json({ error: 'Hospital already exists' });
 
     const salt = generateSalt();
     const passwordHash = hashWithSalt(password, salt);
 
-    // New registrations go into 'pending' status and are not active until approved by superadmin
-    const doc = new Hospital({
-      name: hospitalName,
-      username: email,
-      password: passwordHash,
-      salt,
-      regNumber,
-      address,
-      city,
-      state,
-      pin,
-      license,
-      contactEmail: email,
-      phone,
-      website,
-      adminName,
-      adminEmail,
-      adminPhone,
-      designation,
-      status: 'pending',
-      active: false,
+    await EmailOtp.deleteMany({ email: normalizedHospitalEmail, purpose: 'SIGNUP_HOSPITAL', usedAt: null });
+
+    const otp = generateOtpCode(6);
+    const otpSalt = generateSalt();
+    const otpHash = hashWithSalt(otp, otpSalt);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    const otpDoc = await EmailOtp.create({
+      email: normalizedHospitalEmail,
+      purpose: 'SIGNUP_HOSPITAL',
+      otpHash,
+      salt: otpSalt,
+      expiresAt,
+      payload: {
+        name: hospitalName,
+        username: normalizedHospitalEmail,
+        password: passwordHash,
+        userSalt: salt,
+        regNumber,
+        address,
+        city,
+        state,
+        pin,
+        license,
+        contactEmail: normalizedHospitalEmail,
+        phone,
+        website,
+        adminName,
+        adminEmail: normalizedAdminEmail,
+        adminPhone,
+        designation,
+        status: 'pending',
+        active: false,
+        emailVerified: true,
+      },
     });
 
-    await doc.save();
-    return res.json({ ok: true, id: doc._id, message: 'Hospital registered' });
+    const delivery = await sendOtpEmail({ to: normalizedHospitalEmail, otp, purposeLabel: 'hospital registration' });
+    if (!delivery?.ok) {
+      await EmailOtp.deleteOne({ _id: otpDoc._id });
+      return res.status(503).json({
+        error: `OTP could not be delivered: ${delivery?.reason || 'Email service is not configured'}`,
+      });
+    }
+
+    return res.json({ ok: true, email: normalizedHospitalEmail, message: 'OTP sent to hospital email. Verify to complete registration.' });
   } catch (err) {
     console.error('signup hospital error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Auth: verify signup OTP and finalize account creation
+router.post('/auth/otp/verify-signup', async (req, res) => {
+  try {
+    const Patient = (await import('./models/Patient.js')).default;
+    const Hospital = (await import('./models/Hospital.js')).default;
+    const EmailOtp = (await import('./models/EmailOtp.js')).default;
+
+    const { role, email, otp } = req.body || {};
+    const purpose = toRolePurpose(role);
+    const normalizedEmail = normalizeEmail(email);
+
+    if (!purpose || !normalizedEmail || !otp) {
+      return res.status(400).json({ error: 'role, email and otp are required' });
+    }
+
+    const otpDoc = await EmailOtp.findOne({
+      email: normalizedEmail,
+      purpose,
+      usedAt: null,
+      expiresAt: { $gt: new Date() },
+    }).sort({ createdAt: -1 });
+
+    if (!otpDoc) {
+      return res.status(400).json({ error: 'OTP expired or not found. Please request a new OTP.' });
+    }
+
+    const computed = hashWithSalt(String(otp), otpDoc.salt);
+    if (computed !== otpDoc.otpHash) {
+      otpDoc.attempts = (otpDoc.attempts || 0) + 1;
+      await otpDoc.save();
+      return res.status(401).json({ error: 'Invalid OTP' });
+    }
+
+    if (purpose === 'SIGNUP_PATIENT') {
+      const exists = await Patient.findOne({ username: normalizedEmail });
+      if (exists) {
+        otpDoc.usedAt = new Date();
+        await otpDoc.save();
+        return res.status(409).json({ error: 'User already exists' });
+      }
+
+      const payload = otpDoc.payload || {};
+      const doc = new Patient({
+        username: payload.username || normalizedEmail,
+        password: payload.password,
+        salt: payload.userSalt,
+        patientId: payload.patientId || `P${Date.now()}`,
+        email: payload.email || normalizedEmail,
+        emailVerified: true,
+        firstName: payload.firstName,
+        lastName: payload.lastName,
+        dob: payload.dob,
+        age: payload.age,
+        gender: payload.gender,
+        phone: payload.phone,
+        address: payload.address,
+        emergencyContactName: payload.emergencyContactName,
+        emergencyContactPhone: payload.emergencyContactPhone,
+        allergies: payload.allergies,
+        conditions: payload.conditions,
+        surgeries: payload.surgeries,
+        medications: payload.medications,
+        familyHistory: payload.familyHistory,
+        smoking: payload.smoking,
+      });
+      await doc.save();
+      otpDoc.usedAt = new Date();
+      await otpDoc.save();
+      return res.json({ ok: true, id: doc._id, message: 'Patient registration completed.' });
+    }
+
+    const exists = await Hospital.findOne({ username: normalizedEmail });
+    if (exists) {
+      otpDoc.usedAt = new Date();
+      await otpDoc.save();
+      return res.status(409).json({ error: 'Hospital already exists' });
+    }
+
+    const payload = otpDoc.payload || {};
+    const doc = new Hospital({
+      ...payload,
+      username: payload.username || normalizedEmail,
+      contactEmail: payload.contactEmail || normalizedEmail,
+      emailVerified: true,
+    });
+    await doc.save();
+    otpDoc.usedAt = new Date();
+    await otpDoc.save();
+    return res.json({ ok: true, id: doc._id, message: 'Hospital registration completed.' });
+  } catch (err) {
+    console.error('verify signup otp error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Auth: resend signup OTP
+router.post('/auth/otp/resend-signup', async (req, res) => {
+  try {
+    const EmailOtp = (await import('./models/EmailOtp.js')).default;
+    const { sendOtpEmail } = await import('./utils/emailService.js');
+    const { role, email } = req.body || {};
+    const purpose = toRolePurpose(role);
+    const normalizedEmail = normalizeEmail(email);
+    if (!purpose || !normalizedEmail) {
+      return res.status(400).json({ error: 'role and email are required' });
+    }
+
+    const lastOtp = await EmailOtp.findOne({ email: normalizedEmail, purpose }).sort({ createdAt: -1 });
+    if (!lastOtp || !lastOtp.payload) {
+      return res.status(404).json({ error: 'No pending signup found for this email' });
+    }
+
+    const otp = generateOtpCode(6);
+    const otpSalt = generateSalt();
+    const otpHash = hashWithSalt(otp, otpSalt);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    const otpDoc = await EmailOtp.create({
+      email: normalizedEmail,
+      purpose,
+      otpHash,
+      salt: otpSalt,
+      expiresAt,
+      payload: lastOtp.payload,
+    });
+
+    const delivery = await sendOtpEmail({
+      to: normalizedEmail,
+      otp,
+      purposeLabel: purpose === 'SIGNUP_PATIENT' ? 'patient registration' : 'hospital registration',
+    });
+    if (!delivery?.ok) {
+      await EmailOtp.deleteOne({ _id: otpDoc._id });
+      return res.status(503).json({
+        error: `OTP could not be delivered: ${delivery?.reason || 'Email service is not configured'}`,
+      });
+    }
+
+    return res.json({ ok: true, message: 'OTP resent successfully' });
+  } catch (err) {
+    console.error('resend signup otp error:', err);
     return res.status(500).json({ error: err.message || String(err) });
   }
 });
@@ -219,6 +421,7 @@ router.post('/auth/google', async (req, res) => {
         user = new Patient({
           username: email,
           email,
+          emailVerified: true,
           firstName: payload?.given_name,
           lastName: payload?.family_name,
           name: displayName || email,
@@ -227,10 +430,15 @@ router.post('/auth/google', async (req, res) => {
         });
       } else {
         user.email = user.email || email;
+        user.emailVerified = true;
         user.firstName = user.firstName || payload?.given_name;
         user.lastName = user.lastName || payload?.family_name;
         user.name = user.name || displayName || user.email || user.username;
         user.lastAccess = new Date();
+      }
+
+      if (user.accountDeleted) {
+        return res.status(403).json({ error: 'Account has been deactivated by admin approval of deletion request' });
       }
 
       await user.save();
@@ -267,6 +475,7 @@ router.post('/auth/google', async (req, res) => {
       }
 
       user.lastAccess = new Date();
+      user.emailVerified = true;
       await user.save();
 
       return res.json({
@@ -357,35 +566,131 @@ router.post('/auth/login', async (req, res) => {
   }
 });
 
-// Auth: change password (no email flow, in-app only for patients)
-router.post('/auth/change-password', async (req, res) => {
+// Auth: request OTP for password change
+router.post('/auth/change-password/request-otp', async (req, res) => {
   try {
-    const { role, email, currentPassword, newPassword } = req.body || {};
-    if (!role || !email || !currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'role, email, currentPassword and newPassword are required' });
+    const { role, email, currentPassword } = req.body || {};
+    if (!role || !email) {
+      return res.status(400).json({ error: 'role and email are required' });
     }
 
     if (role === 'Patient' || role === 'PATIENT') {
       const Patient = (await import('./models/Patient.js')).default;
-      const user = await Patient.findOne({ username: email });
+      const EmailOtp = (await import('./models/EmailOtp.js')).default;
+      const { sendOtpEmail } = await import('./utils/emailService.js');
+      const normalizedEmail = normalizeEmail(email);
+      const user = await Patient.findOne({ username: normalizedEmail });
       if (!user) return res.status(404).json({ error: 'User not found' });
-      const computed = hashWithSalt(currentPassword, user.salt || '');
-      if (computed !== user.password) {
-        return res.status(401).json({ error: 'Current password is incorrect' });
+      if (user.accountDeleted) return res.status(403).json({ error: 'Account has been deactivated by admin approval of deletion request' });
+
+      const hasExistingPassword = Boolean(user.password && user.salt);
+      const providedCurrentPassword = String(currentPassword || '');
+      if (hasExistingPassword) {
+        if (!providedCurrentPassword) {
+          return res.status(400).json({ error: 'Current password is required for this account' });
+        }
+        const computed = hashWithSalt(providedCurrentPassword, user.salt || '');
+        if (computed !== user.password) {
+          return res.status(401).json({ error: 'Current password is incorrect' });
+        }
       }
+
+      await EmailOtp.deleteMany({ email: normalizedEmail, purpose: 'CHANGE_PASSWORD_PATIENT', usedAt: null });
+      const otp = generateOtpCode(6);
+      const otpSalt = generateSalt();
+      const otpHash = hashWithSalt(otp, otpSalt);
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+      const otpDoc = await EmailOtp.create({
+        email: normalizedEmail,
+        purpose: 'CHANGE_PASSWORD_PATIENT',
+        otpHash,
+        salt: otpSalt,
+        expiresAt,
+        payload: { patientId: user._id.toString() },
+      });
+
+      const delivery = await sendOtpEmail({
+        to: normalizedEmail,
+        otp,
+        purposeLabel: hasExistingPassword ? 'password change' : 'password setup',
+      });
+      if (!delivery?.ok) {
+        await EmailOtp.deleteOne({ _id: otpDoc._id });
+        return res.status(503).json({
+          error: `OTP could not be delivered: ${delivery?.reason || 'Email service is not configured'}`,
+        });
+      }
+      return res.json({
+        ok: true,
+        message: hasExistingPassword
+          ? 'OTP sent to your email for password change verification.'
+          : 'OTP sent to your email to set your password.',
+      });
+    }
+
+    return res.status(400).json({ error: 'Password change OTP is currently supported only for Patient role' });
+  } catch (err) {
+    console.error('request password otp error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Auth: confirm OTP and apply new password
+router.post('/auth/change-password/confirm-otp', async (req, res) => {
+  try {
+    const { role, email, otp, newPassword } = req.body || {};
+    if (!role || !email || !otp || !newPassword) {
+      return res.status(400).json({ error: 'role, email, otp and newPassword are required' });
+    }
+
+    if (role === 'Patient' || role === 'PATIENT') {
+      const Patient = (await import('./models/Patient.js')).default;
+      const EmailOtp = (await import('./models/EmailOtp.js')).default;
+      const normalizedEmail = normalizeEmail(email);
+
+      const otpDoc = await EmailOtp.findOne({
+        email: normalizedEmail,
+        purpose: 'CHANGE_PASSWORD_PATIENT',
+        usedAt: null,
+        expiresAt: { $gt: new Date() },
+      }).sort({ createdAt: -1 });
+
+      if (!otpDoc) {
+        return res.status(400).json({ error: 'OTP expired or not found. Please request a new OTP.' });
+      }
+
+      const computed = hashWithSalt(String(otp), otpDoc.salt);
+      if (computed !== otpDoc.otpHash) {
+        otpDoc.attempts = (otpDoc.attempts || 0) + 1;
+        await otpDoc.save();
+        return res.status(401).json({ error: 'Invalid OTP' });
+      }
+
+      const user = await Patient.findOne({ username: normalizedEmail });
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
       const salt = generateSalt();
       const passwordHash = hashWithSalt(newPassword, salt);
       user.salt = salt;
       user.password = passwordHash;
       await user.save();
+
+      otpDoc.usedAt = new Date();
+      await otpDoc.save();
+
       return res.json({ ok: true, message: 'Password updated successfully' });
     }
 
     return res.status(400).json({ error: 'Password change is currently supported only for Patient role' });
   } catch (err) {
-    console.error('change password error:', err);
+    console.error('confirm password otp error:', err);
     return res.status(500).json({ error: err.message || String(err) });
   }
+});
+
+// Backward-compatibility route: old change-password now proxies OTP flow with explicit error
+router.post('/auth/change-password', async (req, res) => {
+  return res.status(400).json({ error: 'This endpoint is deprecated. Use /auth/change-password/request-otp then /auth/change-password/confirm-otp.' });
 });
 
 // Dev-only seed endpoint retained (kept for compatibility)

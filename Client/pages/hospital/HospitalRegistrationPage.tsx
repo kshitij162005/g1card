@@ -101,7 +101,6 @@ const HospitalRegistrationPage: React.FC = () => {
     const [themePreference, setThemePreference] = useState<ThemeMode>(() => getStoredTheme());
     const [isGoogleReady, setIsGoogleReady] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [registrationComplete, setRegistrationComplete] = useState(false);
 
     const navigate = useNavigate();
     const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
@@ -255,7 +254,13 @@ const HospitalRegistrationPage: React.FC = () => {
                 return;
             }
 
-            setRegistrationComplete(true);
+            notify('OTP sent to hospital email. Please verify to complete registration.');
+            navigate('/hospital/verify-otp', {
+                state: {
+                    email: data?.email || form.email,
+                    role: 'Hospital',
+                },
+            });
             setIsSubmitting(false);
         } catch (err) {
             console.error('hospital signup error', err);
@@ -263,23 +268,6 @@ const HospitalRegistrationPage: React.FC = () => {
             setIsSubmitting(false);
         }
     };
-
-    if (registrationComplete) {
-        return (
-            <div className="min-h-screen bg-slate-100 dark:bg-slate-900 py-10 px-4">
-                <div className="max-w-2xl mx-auto bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 p-8 text-center space-y-5">
-                    <div className="mx-auto w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                        <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
-                    </div>
-                    <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Registration Submitted</h1>
-                    <p className="text-slate-600 dark:text-slate-300">Your hospital is now under verification. We will notify you after review.</p>
-                    <button onClick={() => navigate('/login')} className="px-6 py-2.5 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary text-sm font-medium">
-                        Go to Login
-                    </button>
-                </div>
-            </div>
-        );
-    }
 
     return (
         <div className="min-h-screen bg-slate-100 dark:bg-slate-900 py-10 px-4 relative overflow-hidden">

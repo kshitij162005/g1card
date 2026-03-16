@@ -6,6 +6,7 @@ import { ThemeMode, getStoredTheme, setStoredTheme } from '../utils/theme';
 const adminNavItems = [
     { to: '/admin/dashboard', label: 'Dashboard' },
     { to: '/admin/pending', label: 'Pending Requests' },
+    { to: '/admin/deletion-requests', label: 'Deletion Requests' },
     { to: '/admin/update-requests', label: 'Update Requests' },
     { to: '/admin/hospitals', label: 'Hospitals' },
     { to: '/admin/users', label: 'Users' },

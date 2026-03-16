@@ -5,6 +5,63 @@ import { sendEventToUser } from './sse.js';
 
 const router = express.Router();
 
+const DEFAULT_NOTIFICATION_PREFERENCES = {
+  emailWhenHospitalAccessRecords: true,
+  emailForNewPrescriptions: true,
+  emailForConsultationReminders: true,
+};
+
+const escapeCsv = (value) => {
+  const str = String(value ?? '');
+  if (/[",\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
+  return str;
+};
+
+async function purgePatientData({ patientObjectId, patientEmail = '', patientUsername = '' }) {
+  const Patient = (await import('../models/Patient.js')).default;
+  const Record = (await import('../models/Record.js')).default;
+  const HospitalAccess = (await import('../models/HospitalAccess.js')).default;
+  const Notification = (await import('../models/Notification.js')).default;
+  const EmailOtp = (await import('../models/EmailOtp.js')).default;
+  const DeletionRequest = (await import('../models/DeletionRequest.js')).default;
+  const AuditLog = (await import('../models/AuditLog.js')).default;
+
+  const emailCandidates = [patientEmail, patientUsername]
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean);
+
+  const patientIdAsString = patientObjectId?.toString?.() || String(patientObjectId || '');
+
+  const tasks = [
+    Record.deleteMany({ patient: patientObjectId }),
+    HospitalAccess.deleteMany({ patient: patientObjectId }),
+    Notification.deleteMany({
+      $or: [
+        { recipient: patientObjectId, recipientModel: 'Patient' },
+        { sender: patientObjectId, senderModel: 'Patient' },
+      ],
+    }),
+    DeletionRequest.deleteMany({ patient: patientObjectId }),
+    AuditLog.deleteMany({
+      $or: [
+        { 'actor.id': patientObjectId, 'actor.model': 'Patient' },
+        { 'target.id': patientObjectId, 'target.model': 'Patient' },
+      ],
+    }),
+  ];
+
+  if (emailCandidates.length) {
+    tasks.push(EmailOtp.deleteMany({ email: { $in: emailCandidates } }));
+  }
+
+  if (patientIdAsString) {
+    tasks.push(EmailOtp.deleteMany({ 'payload.patientId': patientIdAsString }));
+  }
+
+  await Promise.all(tasks);
+  await Patient.deleteOne({ _id: patientObjectId });
+}
+
 // Fetch patient details (safe view, excludes password/salt)
 router.get('/:id', async (req, res) => {
   try {
@@ -705,6 +762,806 @@ router.post('/:id/hospital-accesses/:accessId/revoke', async (req, res) => {
     });
   } catch (err) {
     console.error('revoke access error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Get patient notification preferences
+router.get('/:id/preferences/notifications', async (req, res) => {
+  try {
+    const Patient = (await import('../models/Patient.js')).default;
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ error: 'Missing patient id' });
+
+    const patient = await Patient.findById(id).select('notificationPreferences').lean();
+    if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
+    return res.json({
+      ok: true,
+      preferences: {
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+        ...(patient.notificationPreferences || {}),
+      },
+    });
+  } catch (err) {
+    console.error('get notification preferences error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Update patient notification preferences
+router.patch('/:id/preferences/notifications', async (req, res) => {
+  try {
+    const Patient = (await import('../models/Patient.js')).default;
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ error: 'Missing patient id' });
+
+    const incoming = req.body || {};
+    const nextPrefs = {
+      emailWhenHospitalAccessRecords: Boolean(incoming.emailWhenHospitalAccessRecords),
+      emailForNewPrescriptions: Boolean(incoming.emailForNewPrescriptions),
+      emailForConsultationReminders: Boolean(incoming.emailForConsultationReminders),
+    };
+
+    const updated = await Patient.findByIdAndUpdate(
+      id,
+      { $set: { notificationPreferences: nextPrefs } },
+      { new: true }
+    ).select('notificationPreferences').lean();
+
+    if (!updated) return res.status(404).json({ error: 'Patient not found' });
+
+    return res.json({ ok: true, preferences: updated.notificationPreferences });
+  } catch (err) {
+    console.error('update notification preferences error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Trigger consultation reminder (used for reminder workflows and preference-driven email)
+router.post('/:id/consultation-reminders', async (req, res) => {
+  try {
+    const Patient = (await import('../models/Patient.js')).default;
+    const Notification = (await import('../models/Notification.js')).default;
+    const { sendPatientPreferenceEmail } = await import('../utils/emailService.js');
+
+    const id = req.params.id;
+    const { hospitalName, reminderText, reminderAt } = req.body || {};
+    if (!id) return res.status(400).json({ error: 'Missing patient id' });
+
+    const patient = await Patient.findById(id).lean();
+    if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
+    const title = 'Consultation Reminder';
+    const message = reminderText || `You have an upcoming consultation${hospitalName ? ` with ${hospitalName}` : ''}.`;
+
+    const notification = await Notification.create({
+      type: 'GENERAL',
+      recipient: patient._id,
+      recipientModel: 'Patient',
+      title,
+      message,
+      metadata: {
+        source: 'CONSULTATION_REMINDER',
+        hospitalName: hospitalName || '',
+        reminderAt: reminderAt || null,
+      },
+    });
+
+    sendEventToUser('Patient', patient._id.toString(), {
+      type: 'CONSULTATION_REMINDER',
+      title,
+      message,
+      timestamp: new Date().toISOString(),
+      notificationId: notification._id.toString(),
+    });
+
+    const prefs = { ...DEFAULT_NOTIFICATION_PREFERENCES, ...(patient.notificationPreferences || {}) };
+    if (prefs.emailForConsultationReminders && patient.email) {
+      await sendPatientPreferenceEmail({
+        to: patient.email,
+        title,
+        message,
+        details: [
+          hospitalName ? `Hospital: ${hospitalName}` : 'Hospital: N/A',
+          reminderAt ? `Scheduled At: ${new Date(reminderAt).toLocaleString('en-IN')}` : 'Scheduled At: As advised by care team',
+        ],
+      });
+    }
+
+    return res.json({ ok: true, message: 'Consultation reminder sent' });
+  } catch (err) {
+    console.error('consultation reminder error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Download structured patient data export as CSV or PDF
+router.get('/:id/data-export', async (req, res) => {
+  try {
+    const Patient = (await import('../models/Patient.js')).default;
+    const HospitalAccess = (await import('../models/HospitalAccess.js')).default;
+    const Record = (await import('../models/Record.js')).default;
+    const Notification = (await import('../models/Notification.js')).default;
+    const DeletionRequest = (await import('../models/DeletionRequest.js')).default;
+    const AuditLog = (await import('../models/AuditLog.js')).default;
+    const EmailOtp = (await import('../models/EmailOtp.js')).default;
+    await import('../models/Hospital.js');
+    await import('../models/FormTemplate.js');
+
+    const id = req.params.id;
+    const format = String(req.query.format || 'csv').toLowerCase();
+    if (!id) return res.status(400).json({ error: 'Missing patient id' });
+    if (!['csv', 'pdf'].includes(format)) return res.status(400).json({ error: 'format must be csv or pdf' });
+
+    const patient = await Patient.findById(id).lean();
+    if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
+    const sanitizedPatient = { ...patient };
+    delete sanitizedPatient.password;
+    delete sanitizedPatient.__v;
+
+    const iso = (value) => {
+      if (!value) return '';
+      const d = new Date(value);
+      return Number.isNaN(d.getTime()) ? '' : d.toISOString();
+    };
+
+    const normalizeText = (value) => String(value ?? '')
+      .replace(/[\{\}\[\]"]/g, ' ')
+      .replace(/:/g, ' - ')
+      .replace(/,/g, ' - ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const formatFieldPath = (path) => String(path || '')
+      .replace(/\[(\d+)\]/g, ' item $1')
+      .replace(/\./g, ' - ')
+      .replace(/_/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const plain = (value) => {
+      if (value === undefined || value === null) return '';
+      if (value instanceof Date) return normalizeText(value.toISOString());
+      if (Array.isArray(value)) return normalizeText(value.map((item) => plain(item)).join(' | '));
+      if (typeof value === 'object') {
+        if (value && typeof value.toHexString === 'function') return normalizeText(value.toHexString());
+        if (value && value._id && typeof value._id.toString === 'function') return normalizeText(value._id.toString());
+        return normalizeText(
+          Object.entries(value)
+            .map(([key, nested]) => `${formatFieldPath(key)} ${plain(nested)}`)
+            .join(' | ')
+        );
+      }
+      return normalizeText(String(value));
+    };
+
+    const flattenObject = (input, parentKey = '') => {
+      const rows = [];
+      if (input === null || input === undefined) {
+        rows.push({ field: parentKey || 'value', value: '' });
+        return rows;
+      }
+
+      if (Array.isArray(input)) {
+        if (!input.length) {
+          rows.push({ field: parentKey || 'value', value: '' });
+          return rows;
+        }
+        input.forEach((item, index) => {
+          const nextKey = parentKey ? `${parentKey}[${index}]` : `[${index}]`;
+          if (item && typeof item === 'object' && !(item instanceof Date)) {
+            rows.push(...flattenObject(item, nextKey));
+          } else {
+            rows.push({ field: formatFieldPath(nextKey), value: plain(item) });
+          }
+        });
+        return rows;
+      }
+
+      if (typeof input === 'object' && !(input instanceof Date)) {
+        const keys = Object.keys(input);
+        if (!keys.length) {
+          rows.push({ field: parentKey || 'value', value: '' });
+          return rows;
+        }
+        keys.forEach((key) => {
+          const nextKey = parentKey ? `${parentKey}.${key}` : key;
+          const value = input[key];
+          if (value && typeof value === 'object' && !(value instanceof Date)) {
+            rows.push(...flattenObject(value, nextKey));
+          } else {
+            rows.push({ field: formatFieldPath(nextKey), value: plain(value) });
+          }
+        });
+        return rows;
+      }
+
+      rows.push({ field: formatFieldPath(parentKey || 'value'), value: plain(input) });
+      return rows;
+    };
+
+    const patientEmail = String(sanitizedPatient.email || '').trim().toLowerCase();
+    const patientUsername = String(sanitizedPatient.username || '').trim().toLowerCase();
+    const emailCandidates = [patientEmail, patientUsername].filter(Boolean);
+
+    const [accesses, recordsPrimary, notifications, deletionRequests, auditLogs, emailOtps] = await Promise.all([
+      HospitalAccess.find({ patient: id }).populate('hospital', 'name contactEmail').lean(),
+      Record.find({ patient: id })
+        .populate('hospital', 'name contactEmail')
+        .populate('form', 'name')
+        .sort({ createdAt: -1 })
+        .lean(),
+      Notification.find({
+        $or: [
+          { recipient: id, recipientModel: 'Patient' },
+          { sender: id, senderModel: 'Patient' },
+        ],
+      }).sort({ createdAt: -1 }).lean(),
+      DeletionRequest.find({ patient: id }).sort({ createdAt: -1 }).lean(),
+      AuditLog.find({
+        $or: [
+          { 'actor.id': id, 'actor.model': 'Patient' },
+          { 'target.id': id, 'target.model': 'Patient' },
+        ],
+      }).sort({ createdAt: -1 }).lean(),
+      EmailOtp.find({
+        $or: [
+          ...(emailCandidates.length ? [{ email: { $in: emailCandidates } }] : []),
+          ...(sanitizedPatient.patientId ? [{ 'payload.patientId': String(sanitizedPatient.patientId) }] : []),
+        ],
+      }).sort({ createdAt: -1 }).lean(),
+    ]);
+
+    // Legacy fallback in case older records don't have patient ObjectId linked properly
+    const records = recordsPrimary.length
+      ? recordsPrimary
+      : (sanitizedPatient.patientId
+        ? await Record.find({ 'data.patientId': sanitizedPatient.patientId })
+            .populate('hospital', 'name contactEmail')
+            .populate('form', 'name')
+            .sort({ createdAt: -1 })
+            .lean()
+        : []);
+
+    const profileRows = flattenObject(sanitizedPatient);
+    const recordFieldRows = records.flatMap((record) => {
+      const flattened = flattenObject(record.data || {}, 'data');
+      return flattened.map((entry) => ({
+        recordId: String(record._id || ''),
+        hospital: record.hospital?.name || 'Unknown',
+        form: record.form?.name || 'General Record',
+        field: entry.field,
+        value: entry.value,
+      }));
+    });
+    const attachmentRows = records.flatMap((record) => {
+      const attachments = Array.isArray(record.attachments) ? record.attachments : [];
+      return attachments.length
+        ? attachments.flatMap((item, index) => flattenObject(item, `attachment[${index}]`).map((entry) => ({
+            recordId: String(record._id || ''),
+            field: entry.field,
+            value: entry.value,
+          })))
+        : [];
+    });
+    const notificationMetadataRows = notifications.flatMap((notification) =>
+      flattenObject(notification.metadata || {}, 'metadata').map((entry) => ({
+        notificationId: String(notification._id || ''),
+        field: entry.field,
+        value: entry.value,
+      }))
+    );
+    const auditDetailRows = auditLogs.flatMap((log) => {
+      const changesBefore = flattenObject(log.changes?.before || {}, 'changes.before');
+      const changesAfter = flattenObject(log.changes?.after || {}, 'changes.after');
+      const metadataRows = flattenObject(log.metadata || {}, 'metadata');
+      const complianceRows = flattenObject(log.compliance || {}, 'compliance');
+      return [...changesBefore, ...changesAfter, ...metadataRows, ...complianceRows].map((entry) => ({
+        auditId: String(log._id || ''),
+        field: entry.field,
+        value: entry.value,
+      }));
+    });
+
+    const nowIso = new Date().toISOString();
+
+    if (format === 'csv') {
+      const lines = [];
+
+      const pushTable = (title, headers, rows) => {
+        lines.push('');
+        lines.push('G1CARD CONFIDENTIAL WATERMARK');
+        lines.push(title);
+        lines.push(['WATERMARK', ...headers].map((header) => escapeCsv(header)).join(','));
+        if (!rows.length) {
+          lines.push([escapeCsv('G1CARD CONFIDENTIAL'), escapeCsv('No rows')].join(','));
+          return;
+        }
+        rows.forEach((row) => {
+          lines.push(['G1CARD CONFIDENTIAL', ...row].map((value) => escapeCsv(value)).join(','));
+        });
+      };
+
+      lines.push('G1CARD PATIENT DETAILED DATA EXPORT');
+      lines.push(`Generated At (ISO),${escapeCsv(nowIso)}`);
+      lines.push(`Patient DB ID,${escapeCsv(id)}`);
+
+      pushTable('PROFILE_FIELDS', ['Field', 'Value'], profileRows.map((row) => [row.field, row.value]));
+
+      pushTable(
+        'HOSPITAL_ACCESS',
+        ['Access ID', 'Hospital Name', 'Hospital Email', 'Status', 'Access Level', 'Last Accessed', 'Created At', 'Updated At'],
+        accesses.map((access) => [
+          String(access._id || ''),
+          access.hospital?.name || 'Unknown',
+          access.hospital?.contactEmail || '',
+          access.status || '',
+          access.accessLevel || '',
+          iso(access.lastAccessed),
+          iso(access.createdAt),
+          iso(access.updatedAt),
+        ])
+      );
+
+      pushTable(
+        'MEDICAL_RECORDS',
+        ['Record ID', 'Hospital', 'Hospital Email', 'Form', 'Created By', 'Created At', 'Updated At'],
+        records.map((record) => [
+          String(record._id || ''),
+          record.hospital?.name || 'Unknown',
+          record.hospital?.contactEmail || '',
+          record.form?.name || 'General Record',
+          record.createdBy || '',
+          iso(record.createdAt),
+          iso(record.updatedAt),
+        ])
+      );
+
+      pushTable(
+        'MEDICAL_RECORD_FIELDS',
+        ['Record ID', 'Hospital', 'Form', 'Field Path', 'Value'],
+        recordFieldRows.map((row) => [row.recordId, row.hospital, row.form, row.field, row.value])
+      );
+
+      pushTable(
+        'MEDICAL_RECORD_ATTACHMENTS',
+        ['Record ID', 'Attachment Field', 'Value'],
+        attachmentRows.map((row) => [row.recordId, row.field, row.value])
+      );
+
+      pushTable(
+        'NOTIFICATIONS',
+        ['Notification ID', 'Type', 'Title', 'Message', 'Read', 'Recipient Model', 'Sender Model', 'Action URL', 'Created At'],
+        notifications.map((notification) => [
+          String(notification._id || ''),
+          notification.type || '',
+          notification.title || '',
+          notification.message || '',
+          notification.isRead ? 'true' : 'false',
+          notification.recipientModel || '',
+          notification.senderModel || '',
+          notification.actionUrl || '',
+          iso(notification.createdAt),
+        ])
+      );
+
+      pushTable(
+        'NOTIFICATION_METADATA',
+        ['Notification ID', 'Field Path', 'Value'],
+        notificationMetadataRows.map((row) => [row.notificationId, row.field, row.value])
+      );
+
+      pushTable(
+        'DELETION_REQUESTS',
+        ['Request ID', 'Type', 'Status', 'Reason', 'Review Notes', 'Requested By Email', 'Reviewed By', 'Created At', 'Reviewed At'],
+        deletionRequests.map((request) => [
+          String(request._id || ''),
+          request.requestType || '',
+          request.status || '',
+          request.reason || '',
+          request.reviewNotes || request.adminRemarks || '',
+          request.requestedByEmail || '',
+          plain(request.reviewedBy || ''),
+          iso(request.createdAt),
+          iso(request.reviewedAt),
+        ])
+      );
+
+      pushTable(
+        'AUDIT_LOGS',
+        ['Audit ID', 'Event', 'Outcome', 'Severity', 'Actor Model', 'Actor Name', 'Target Model', 'Description', 'Created At'],
+        auditLogs.map((log) => [
+          String(log._id || ''),
+          log.event || '',
+          log.action?.outcome || '',
+          log.severity || '',
+          log.actor?.model || '',
+          log.actor?.name || '',
+          log.target?.model || '',
+          log.action?.description || '',
+          iso(log.createdAt),
+        ])
+      );
+
+      pushTable(
+        'AUDIT_LOG_DETAILS',
+        ['Audit ID', 'Field Path', 'Value'],
+        auditDetailRows.map((row) => [row.auditId, row.field, row.value])
+      );
+
+      pushTable(
+        'EMAIL_OTP_LOGS',
+        ['OTP ID', 'Email', 'Purpose', 'Attempts', 'Expires At', 'Used At', 'Created At', 'Updated At'],
+        emailOtps.map((otp) => [
+          String(otp._id || ''),
+          otp.email || '',
+          otp.purpose || '',
+          plain(otp.attempts || 0),
+          iso(otp.expiresAt),
+          iso(otp.usedAt),
+          iso(otp.createdAt),
+          iso(otp.updatedAt),
+        ])
+      );
+
+      pushTable(
+        'EMAIL_OTP_PAYLOAD',
+        ['OTP ID', 'Field Path', 'Value'],
+        emailOtps.flatMap((otp) => flattenObject(otp.payload || {}, 'payload').map((entry) => [String(otp._id || ''), entry.field, entry.value]))
+      );
+
+      const csv = lines.join('\n');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="g1card-data-export-${id}.csv"`);
+      return res.send(csv);
+    }
+
+    const PDFDocument = (await import('pdfkit')).default;
+    const doc = new PDFDocument({ margin: 40, size: 'A4' });
+    const filename = `g1card-data-export-${id}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    doc.pipe(res);
+
+    const pageBottom = () => doc.page.height - doc.page.margins.bottom;
+    const ensureSpace = (heightNeeded = 28) => {
+      if (doc.y + heightNeeded > pageBottom()) doc.addPage();
+    };
+
+    const drawWatermark = () => {
+      const cx = doc.page.width / 2;
+      const cy = doc.page.height / 2;
+      doc.save();
+      doc.rotate(-35, { origin: [cx, cy] });
+      doc.fillColor('#64748b', 0.12);
+      doc.font('Helvetica-Bold').fontSize(64).text('G1CARD CONFIDENTIAL', cx - 280, cy - 50, { width: 560, align: 'center' });
+      doc.font('Helvetica-Bold').fontSize(36).text('DO NOT SHARE', cx - 200, cy + 10, { width: 400, align: 'center' });
+      doc.restore();
+      doc.save();
+      doc.fillColor('#64748b', 0.3);
+      doc.font('Helvetica-Bold').fontSize(8).text('G1CARD CONFIDENTIAL - EXPORTED PATIENT DATA', doc.page.margins.left, doc.page.height - 20, {
+        width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+        align: 'center',
+      });
+      doc.restore();
+      doc.fillColor('#0f172a', 1);
+    };
+
+    doc.on('pageAdded', () => {
+      drawWatermark();
+      doc.font('Helvetica');
+      doc.fillColor('#0f172a', 1);
+    });
+    drawWatermark();
+
+    const drawSectionTitle = (title) => {
+      ensureSpace(40);
+      doc.moveDown(0.5);
+      doc.font('Helvetica-Bold').fontSize(13).fillColor('#0f4aa0').text(title);
+      doc.moveDown(0.25);
+    };
+
+    const drawTable = (headers, rows, columnWidths) => {
+      const xStart = doc.page.margins.left;
+      const yStart = doc.y;
+      const widths = columnWidths || headers.map(() => (doc.page.width - doc.page.margins.left - doc.page.margins.right) / headers.length);
+      const padX = 4;
+      const padY = 5;
+
+      const drawHeaderRow = () => {
+        ensureSpace(24);
+        let x = xStart;
+        doc.font('Helvetica-Bold').fontSize(8);
+        headers.forEach((header, idx) => {
+          const w = widths[idx];
+          doc.rect(x, doc.y, w, 20).fillAndStroke('#dbeafe', '#93c5fd');
+          doc.fillColor('#0f172a').text(String(header), x + padX, doc.y + 6, { width: w - padX * 2, align: 'left' });
+          x += w;
+        });
+        doc.moveDown(1.4);
+      };
+
+      drawHeaderRow();
+
+      if (!rows.length) {
+        ensureSpace(22);
+        doc.font('Helvetica').fontSize(9).fillColor('#64748b').text('No rows available for this section.');
+        doc.moveDown(0.6);
+        return;
+      }
+
+      rows.forEach((row) => {
+        doc.font('Helvetica').fontSize(8).fillColor('#1f2937');
+        const values = row.map((value) => String(value ?? ''));
+        const heights = values.map((value, idx) => {
+          const w = widths[idx] || 80;
+          return doc.heightOfString(value || '-', { width: w - padX * 2, align: 'left' });
+        });
+        const rowHeight = Math.max(18, Math.max(...heights) + padY * 2);
+        ensureSpace(rowHeight + 2);
+        if (doc.y + rowHeight > pageBottom()) {
+          doc.addPage();
+          drawHeaderRow();
+        }
+
+        let x = xStart;
+        const y = doc.y;
+        values.forEach((value, idx) => {
+          const w = widths[idx] || 80;
+          doc.rect(x, y, w, rowHeight).strokeColor('#cbd5e1').stroke();
+          doc.fillColor('#1f2937').text(value || '-', x + padX, y + padY, { width: w - padX * 2, align: 'left' });
+          x += w;
+        });
+        doc.y = y + rowHeight;
+      });
+
+      doc.moveDown(0.7);
+      if (doc.y < yStart) doc.y = yStart;
+    };
+
+    doc.font('Helvetica-Bold').fontSize(20).fillColor('#0f4aa0').text('G1CARD Patient Data Export', { align: 'left' });
+    doc.font('Helvetica').fontSize(10).fillColor('#334155').text(`Generated: ${new Date().toLocaleString('en-IN')}`);
+    doc.text(`Patient ID: ${id}`);
+    doc.text('This export includes all patient-linked records in the database except password fields.');
+
+    drawSectionTitle('Profile Fields');
+    drawTable(
+      ['Field', 'Value'],
+      profileRows.map((row) => [row.field, row.value]),
+      [220, 295]
+    );
+
+    drawSectionTitle('Hospital Access');
+    drawTable(
+      ['Hospital', 'Status', 'Access', 'Last Accessed', 'Updated'],
+      accesses.map((access) => [
+        access.hospital?.name || 'Unknown',
+        access.status || '',
+        access.accessLevel || '',
+        iso(access.lastAccessed),
+        iso(access.updatedAt),
+      ]),
+      [140, 80, 70, 112, 113]
+    );
+
+    drawSectionTitle('Medical Records');
+    drawTable(
+      ['Record ID', 'Hospital', 'Form', 'Created By', 'Created At'],
+      records.map((record) => [
+        String(record._id || ''),
+        record.hospital?.name || 'Unknown',
+        record.form?.name || 'General Record',
+        record.createdBy || '',
+        iso(record.createdAt),
+      ]),
+      [120, 130, 95, 80, 90]
+    );
+
+    drawSectionTitle('Medical Record Fields (Flattened)');
+    drawTable(
+      ['Record ID', 'Field Path', 'Value'],
+      recordFieldRows.map((row) => [row.recordId, row.field, row.value]),
+      [120, 175, 220]
+    );
+
+    drawSectionTitle('Medical Record Attachments');
+    drawTable(
+      ['Record ID', 'Attachment Field', 'Value'],
+      attachmentRows.map((row) => [row.recordId, row.field, row.value]),
+      [120, 175, 220]
+    );
+
+    drawSectionTitle('Notifications');
+    drawTable(
+      ['Type', 'Title', 'Read', 'Created At', 'Message'],
+      notifications.map((notification) => [
+        notification.type || '',
+        notification.title || '',
+        notification.isRead ? 'Yes' : 'No',
+        iso(notification.createdAt),
+        notification.message || '',
+      ]),
+      [80, 125, 45, 95, 170]
+    );
+
+    drawSectionTitle('Deletion Requests');
+    drawTable(
+      ['Type', 'Status', 'Reason', 'Review Notes', 'Created'],
+      deletionRequests.map((request) => [
+        request.requestType || '',
+        request.status || '',
+        request.reason || '',
+        request.reviewNotes || request.adminRemarks || '',
+        iso(request.createdAt),
+      ]),
+      [95, 60, 130, 145, 85]
+    );
+
+    drawSectionTitle('Audit Logs');
+    drawTable(
+      ['Event', 'Outcome', 'Severity', 'Description', 'Created At'],
+      auditLogs.map((log) => [
+        log.event || '',
+        log.action?.outcome || '',
+        log.severity || '',
+        log.action?.description || '',
+        iso(log.createdAt),
+      ]),
+      [110, 70, 65, 180, 90]
+    );
+
+    drawSectionTitle('Audit Log Details (Flattened)');
+    drawTable(
+      ['Audit ID', 'Field Path', 'Value'],
+      auditDetailRows.map((row) => [row.auditId, row.field, row.value]),
+      [120, 175, 220]
+    );
+
+    drawSectionTitle('Email OTP Logs');
+    drawTable(
+      ['Email', 'Purpose', 'Attempts', 'Expires At', 'Used At'],
+      emailOtps.map((otp) => [
+        otp.email || '',
+        otp.purpose || '',
+        plain(otp.attempts || 0),
+        iso(otp.expiresAt),
+        iso(otp.usedAt),
+      ]),
+      [145, 130, 55, 95, 90]
+    );
+
+    drawSectionTitle('Email OTP Payload (Flattened)');
+    drawTable(
+      ['OTP ID', 'Field Path', 'Value'],
+      emailOtps.flatMap((otp) => flattenObject(otp.payload || {}, 'payload').map((entry) => [String(otp._id || ''), entry.field, entry.value])),
+      [120, 175, 220]
+    );
+
+    ensureSpace(24);
+    doc.font('Helvetica').fontSize(9).fillColor('#64748b').text('G1CARD Confidential Export. Handle according to healthcare privacy policy.');
+    doc.end();
+  } catch (err) {
+    console.error('data export error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Submit patient deletion request for super admin approval
+router.post('/:id/deletion-requests', async (req, res) => {
+  try {
+    const Patient = (await import('../models/Patient.js')).default;
+    const Superadmin = (await import('../models/Superadmin.js')).default;
+    const Notification = (await import('../models/Notification.js')).default;
+    const DeletionRequest = (await import('../models/DeletionRequest.js')).default;
+    const { sendDeletionRequestEmailToAdmin } = await import('../utils/emailService.js');
+
+    const id = req.params.id;
+    const { requestType, reason } = req.body || {};
+    if (!id) return res.status(400).json({ error: 'Missing patient id' });
+    if (!['DATA_DELETION', 'ACCOUNT_DELETION'].includes(String(requestType || ''))) {
+      return res.status(400).json({ error: 'requestType must be DATA_DELETION or ACCOUNT_DELETION' });
+    }
+
+    const patient = await Patient.findById(id).lean();
+    if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
+    if (requestType === 'ACCOUNT_DELETION') {
+      await purgePatientData({
+        patientObjectId: patient._id,
+        patientEmail: patient.email || '',
+        patientUsername: patient.username || '',
+      });
+
+      // Notify admin by email only to avoid storing user traces in DB.
+      await sendDeletionRequestEmailToAdmin({
+        patientName: `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || patient.name || 'Unknown Patient',
+        patientEmail: patient.email || patient.username || '',
+        requestType,
+        reason: String(reason || '').trim(),
+      });
+
+      return res.json({
+        ok: true,
+        accountDeleted: true,
+        message: 'Your account and associated data have been permanently deleted.',
+      });
+    }
+
+    const existingPending = await DeletionRequest.findOne({ patient: id, requestType, status: 'PENDING' }).lean();
+    if (existingPending) {
+      return res.status(409).json({ error: 'A pending request already exists for this request type' });
+    }
+
+    const request = await DeletionRequest.create({
+      patient: id,
+      requestType,
+      reason: String(reason || '').trim(),
+      requestedByEmail: patient.email || patient.username || '',
+    });
+
+    const admins = await Superadmin.find({}).select('_id').lean();
+    if (admins.length) {
+      await Notification.insertMany(
+        admins.map((admin) => ({
+          type: 'GENERAL',
+          recipient: admin._id,
+          recipientModel: 'Superadmin',
+          sender: id,
+          senderModel: 'Patient',
+          title: 'Patient Deletion Request Submitted',
+          message: `${(`${patient.firstName || ''} ${patient.lastName || ''}`.trim() || patient.email || 'A patient')} submitted a deletion request.`,
+          metadata: {
+            source: 'PATIENT_DELETION_REQUEST',
+            requestId: request._id,
+            requestType,
+            patientId: patient._id,
+            patientEmail: patient.email || '',
+            reason: request.reason,
+          },
+        }))
+      );
+    }
+
+    await sendDeletionRequestEmailToAdmin({
+      patientName: `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || patient.name || 'Unknown Patient',
+      patientEmail: patient.email || patient.username || '',
+      requestType,
+      reason: request.reason,
+    });
+
+    return res.json({ ok: true, request });
+  } catch (err) {
+    console.error('create deletion request error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Get deletion request status/history for a patient
+router.get('/:id/deletion-requests', async (req, res) => {
+  try {
+    const DeletionRequest = (await import('../models/DeletionRequest.js')).default;
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ error: 'Missing patient id' });
+
+    const requests = await DeletionRequest.find({ patient: id })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const normalizedRequests = requests.map((r) => ({
+      ...r,
+      reviewNotes: r.reviewNotes || r.adminRemarks || '',
+    }));
+
+    return res.json({
+      ok: true,
+      requests: normalizedRequests,
+      latestRequest: normalizedRequests[0] || null,
+      hasPendingRequest: normalizedRequests.some((r) => r.status === 'PENDING'),
+    });
+  } catch (err) {
+    console.error('get deletion requests error:', err);
     return res.status(500).json({ error: err.message || String(err) });
   }
 });

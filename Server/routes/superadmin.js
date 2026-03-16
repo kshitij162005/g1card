@@ -616,6 +616,180 @@ router.post('/update-requests/:requestId/message', async (req, res) => {
 
 // ==================== END UPDATE REQUEST MANAGEMENT ====================
 
+// List patient deletion requests for admin review
+router.get('/deletion-requests', async (req, res) => {
+  try {
+    const DeletionRequest = (await import('../models/DeletionRequest.js')).default;
+    const status = String(req.query.status || '').trim().toUpperCase();
+    const requestType = String(req.query.requestType || '').trim().toUpperCase();
+    const search = String(req.query.search || '').trim().toLowerCase();
+    const query = {};
+    if (status) query.status = status;
+    if (requestType) query.requestType = requestType;
+
+    const requests = await DeletionRequest.find(query)
+      .populate('patient', 'firstName lastName name email username patientId')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const filtered = search
+      ? requests.filter((r) => {
+        const patientName = `${r?.patient?.firstName || ''} ${r?.patient?.lastName || ''}`.trim() || r?.patient?.name || '';
+        const patientEmail = (r?.patient?.email || r?.patient?.username || '').toLowerCase();
+        return patientName.toLowerCase().includes(search) || patientEmail.includes(search);
+      })
+      : requests;
+
+    const normalizedRequests = filtered.map((r) => ({
+      ...r,
+      reviewNotes: r.reviewNotes || r.adminRemarks || '',
+    }));
+
+    return res.json({ ok: true, requests: normalizedRequests });
+  } catch (err) {
+    console.error('list deletion requests error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Review patient deletion request (approve/reject)
+router.patch('/deletion-requests/:requestId/review', async (req, res) => {
+  try {
+    const DeletionRequest = (await import('../models/DeletionRequest.js')).default;
+    const Patient = (await import('../models/Patient.js')).default;
+    const Record = (await import('../models/Record.js')).default;
+    const HospitalAccess = (await import('../models/HospitalAccess.js')).default;
+    const Notification = (await import('../models/Notification.js')).default;
+    const EmailOtp = (await import('../models/EmailOtp.js')).default;
+    const { sendEventToUser } = await import('./sse.js');
+    const { sendDeletionReviewEmailToPatient } = await import('../utils/emailService.js');
+
+    const { requestId } = req.params;
+    const { adminId, decision, reviewNotes } = req.body || {};
+
+    const normalizedDecision = String(decision || '').toUpperCase();
+    if (!['APPROVED', 'REJECTED'].includes(normalizedDecision)) {
+      return res.status(400).json({ error: 'decision must be APPROVED or REJECTED' });
+    }
+
+    const request = await DeletionRequest.findById(requestId).populate('patient');
+    if (!request) return res.status(404).json({ error: 'Deletion request not found' });
+    if (request.status !== 'PENDING') {
+      return res.status(400).json({ error: 'Only pending requests can be reviewed' });
+    }
+
+    request.status = normalizedDecision;
+    request.reviewedBy = adminId || null;
+    request.reviewNotes = String(reviewNotes || '').trim();
+    request.reviewedAt = new Date();
+    await request.save();
+
+    const patientId = request.patient?._id?.toString();
+    const patientObjectId = request.patient?._id;
+    const patientEmail = String(request.patient?.email || request.patient?.username || '').trim().toLowerCase();
+    const patientUsername = String(request.patient?.username || '').trim().toLowerCase();
+    const emailCandidates = [patientEmail, patientUsername].filter(Boolean);
+
+    // Apply operational effect for approved deletion requests
+    if (normalizedDecision === 'APPROVED' && patientObjectId) {
+      const cleanupTasks = [
+        Record.deleteMany({ patient: patientObjectId }),
+        HospitalAccess.deleteMany({ patient: patientObjectId }),
+        Notification.deleteMany({
+          $or: [
+            { recipient: patientObjectId, recipientModel: 'Patient' },
+            { sender: patientObjectId, senderModel: 'Patient' },
+          ],
+        }),
+      ];
+
+      if (emailCandidates.length) {
+        cleanupTasks.push(EmailOtp.deleteMany({ email: { $in: emailCandidates } }));
+      }
+
+      if (request.requestType === 'DATA_DELETION') {
+        await Promise.all(cleanupTasks);
+      }
+
+      if (request.requestType === 'ACCOUNT_DELETION') {
+        await Promise.all(cleanupTasks);
+
+        await DeletionRequest.updateMany(
+          {
+            patient: patientObjectId,
+            status: 'PENDING',
+            _id: { $ne: request._id },
+          },
+          {
+            $set: {
+              status: 'APPROVED',
+              reviewedBy: adminId || null,
+              reviewedAt: new Date(),
+              reviewNotes: 'Auto-approved because account deletion was approved.',
+            },
+          }
+        );
+
+        await Patient.deleteOne({ _id: patientObjectId });
+        await DeletionRequest.deleteMany({ patient: patientObjectId });
+      }
+    }
+
+    if (patientId) {
+      const patientName = `${request.patient?.firstName || ''} ${request.patient?.lastName || ''}`.trim() || request.patient?.name || 'Patient';
+      const title = normalizedDecision === 'APPROVED' ? 'Deletion Request Approved' : 'Deletion Request Rejected';
+      const message = normalizedDecision === 'APPROVED'
+        ? 'Your deletion request has been approved by the admin team.'
+        : `Your deletion request was rejected.${request.reviewNotes ? ` Reason: ${request.reviewNotes}` : ''}`;
+
+      const shouldCreateInAppNotification = !(normalizedDecision === 'APPROVED' && request.requestType === 'ACCOUNT_DELETION');
+
+      if (shouldCreateInAppNotification) {
+        const notification = await Notification.create({
+          type: 'GENERAL',
+          recipient: request.patient._id,
+          recipientModel: 'Patient',
+          sender: adminId || null,
+          senderModel: 'Superadmin',
+          title,
+          message,
+          metadata: {
+            source: 'PATIENT_DELETION_REQUEST_REVIEW',
+            requestId: request._id,
+            requestType: request.requestType,
+            status: normalizedDecision,
+            reviewNotes: request.reviewNotes || '',
+          },
+        });
+
+        sendEventToUser('Patient', patientId, {
+          type: 'PATIENT_DELETION_REQUEST_REVIEW',
+          title,
+          message,
+          timestamp: new Date().toISOString(),
+          notificationId: notification._id.toString(),
+          requestId: request._id.toString(),
+        });
+      }
+
+      if (patientEmail) {
+        await sendDeletionReviewEmailToPatient({
+          to: patientEmail,
+          patientName,
+          requestType: request.requestType,
+          decision: normalizedDecision,
+          reviewNotes: request.reviewNotes || '',
+        });
+      }
+    }
+
+    return res.json({ ok: true, request });
+  } catch (err) {
+    console.error('review deletion request error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
 // Fetch superadmin by id (safe view) - MUST be last to not conflict with other routes
 router.get('/:id', async (req, res) => {
   try {

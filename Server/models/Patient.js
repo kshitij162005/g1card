@@ -25,6 +25,13 @@ const PatientSchema = new mongoose.Schema(
     phone: { type: String },
     address: { type: String },
     email: { type: String },
+    emailVerified: { type: Boolean, default: false },
+    accountDeleted: { type: Boolean, default: false },
+    notificationPreferences: {
+      emailWhenHospitalAccessRecords: { type: Boolean, default: true },
+      emailForNewPrescriptions: { type: Boolean, default: true },
+      emailForConsultationReminders: { type: Boolean, default: true },
+    },
     emergencyContactName: { type: String },
     emergencyContactPhone: { type: String },
     allergies: { type: Array },

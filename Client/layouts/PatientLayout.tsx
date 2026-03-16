@@ -362,7 +362,7 @@ const PatientLayout: React.FC = () => {
     return (
         <div className="patient-shell min-h-screen bg-[var(--app-bg)]">
             <div className="flex min-h-screen">
-                <aside className="hidden lg:flex w-60 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 flex-col">
+                <aside className="hidden lg:flex sticky top-0 h-screen overflow-y-auto w-60 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 flex-col">
                     <div className="mb-5 px-2">
                         <h1 className="sidebar-brand-title text-2xl font-bold tracking-wide">G1CARD USER</h1>
                         <p className="sidebar-brand-subtitle text-xs mt-1">Patient Portal</p>
