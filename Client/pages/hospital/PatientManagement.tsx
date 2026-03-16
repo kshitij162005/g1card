@@ -63,10 +63,10 @@ const PatientManagement: React.FC = () => {
     };
     
     const getStatusChip = (status: any) => {
-        if (status === 'APPROVED') return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-        if (status === 'DENIED') return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-        if (status === 'REVOKED') return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+        if (status === 'APPROVED') return 'bg-emerald-200 text-black border border-emerald-300 dark:bg-emerald-900 dark:text-emerald-200 dark:border-emerald-700';
+        if (status === 'DENIED') return 'bg-red-200 text-black border border-red-300 dark:bg-red-900 dark:text-red-200 dark:border-red-700';
+        if (status === 'REVOKED') return 'bg-orange-200 text-black border border-orange-300 dark:bg-orange-900 dark:text-orange-200 dark:border-orange-700';
+        return 'bg-amber-200 text-black border border-amber-300 dark:bg-amber-900 dark:text-amber-200 dark:border-amber-700';
     };
 
     if (loading && patients.length === 0) {
@@ -155,7 +155,7 @@ const PatientManagement: React.FC = () => {
                     </Card>
                 )}
 
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto rounded-xl border border-slate-300 dark:border-slate-700">
                     <table className="min-w-full">
                         <thead className="bg-slate-50 dark:bg-slate-700">
                             <tr>
@@ -172,19 +172,19 @@ const PatientManagement: React.FC = () => {
                                 const isAccessRevoked = String(patient.status || '').toUpperCase() === 'REVOKED';
                                 const canInteract = !isConsentPending && !isAccessRevoked;
                                 return (
-                                <tr key={patient.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-slate-700 dark:text-slate-300">
+                                <tr key={patient.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-slate-800 dark:text-slate-200">
                                     <td className="py-4 px-6 whitespace-nowrap font-mono text-sm">{(patient as any).patientId || patient.id}</td>
                                     <td className="py-4 px-6 whitespace-nowrap">{patient.name}</td>
                                     <td className="py-4 px-6 whitespace-nowrap">{patient.dob}</td>
                                     <td className="py-4 px-6 whitespace-nowrap">
-                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusChip(patient.status)}`}>
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-bold rounded-full ${getStatusChip(patient.status)}`}>
                                             {patient.status}{(patient as any).accessLevel ? ` - ${(patient as any).accessLevel === 'COMPLETE' ? 'Complete Info' : 'General Info'}` : ''}
                                         </span>
                                     </td>
                                     <td className="py-4 px-6 whitespace-nowrap text-sm font-medium space-x-2">
                                         <button
                                             onClick={() => navigate(`/hospital/patients/${patient.id}`)}
-                                            className={`px-3 py-1 text-sm font-medium rounded-md border border-transparent text-brand-accent ${!canInteract ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-50 dark:hover:bg-slate-700/60'}`}
+                                            className={`px-3 py-1 text-sm font-semibold rounded-md border border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-200 bg-blue-50/80 dark:bg-blue-900/20 ${!canInteract ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-100 dark:hover:bg-blue-900/40'}`}
                                             aria-label={`View ${patient.name}`}
                                             disabled={!canInteract}
                                         >

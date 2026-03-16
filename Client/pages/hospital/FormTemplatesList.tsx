@@ -83,7 +83,7 @@ const FormTemplatesList: React.FC = () => {
     };
 
     const statusBadge = (active?: boolean) => (
-        <span className={`px-2.5 py-1 text-xs rounded-full font-medium ${active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200'}`}>
+        <span className={`px-2.5 py-1 text-xs rounded-full font-bold border ${active ? 'bg-emerald-200 text-black border-emerald-300 dark:bg-emerald-900/40 dark:text-emerald-200 dark:border-emerald-700' : 'bg-rose-200 text-black border-rose-300 dark:bg-rose-900/40 dark:text-rose-200 dark:border-rose-700'}`}>
             {active ? 'Active' : 'Inactive'}
         </span>
     );
@@ -91,13 +91,13 @@ const FormTemplatesList: React.FC = () => {
     const draftBadge = (template: Template) => {
         if (template.active) return null;
         return (
-            <span className="ml-2 px-2 py-0.5 text-[11px] rounded-full font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
+            <span className="ml-2 px-2 py-0.5 text-[11px] rounded-full font-bold border border-amber-300 bg-amber-200 text-black dark:bg-amber-900/40 dark:text-amber-200 dark:border-amber-700">
                 Draft
             </span>
         );
     };
 
-    const actionButtonBase = 'inline-flex items-center justify-center whitespace-nowrap text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors';
+    const actionButtonBase = 'inline-flex items-center justify-center whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors';
 
     if (loading && templates.length === 0) {
         return <Loader text="Loading form templates..." fullScreen />;
@@ -129,7 +129,7 @@ const FormTemplatesList: React.FC = () => {
                 )}
 
                 {!loading && !loadError && templates.length > 0 && (
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto rounded-xl border border-slate-300 dark:border-slate-700">
                         <table className="min-w-[980px] w-full">
                             <thead className="bg-slate-50 dark:bg-slate-700">
                                 <tr>
@@ -161,31 +161,31 @@ const FormTemplatesList: React.FC = () => {
                                             <div className="flex items-center gap-2 whitespace-nowrap">
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); navigate(`/hospital/forms/${t._id}`); }}
-                                                    className={`${actionButtonBase} border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700`}
+                                                    className={`${actionButtonBase} border-slate-300 dark:border-slate-600 text-black font-semibold dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700`}
                                                 >
                                                     View
                                                 </button>
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); navigate(`/hospital/forms/${t._id}/edit`); }}
-                                                    className={`${actionButtonBase} border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40`}
+                                                    className={`${actionButtonBase} border-blue-400 dark:border-blue-700 text-black font-semibold dark:text-blue-200 bg-blue-200 dark:bg-blue-900/20 hover:bg-blue-300 dark:hover:bg-blue-900/40`}
                                                 >
                                                     Edit
                                                 </button>
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); navigate(`/hospital/forms/create?clone=${t._id}`); }}
-                                                    className={`${actionButtonBase} border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/40`}
+                                                    className={`${actionButtonBase} border-violet-400 dark:border-violet-700 text-black font-semibold dark:text-violet-200 bg-violet-200 dark:bg-violet-900/20 hover:bg-violet-300 dark:hover:bg-violet-900/40`}
                                                 >
                                                     Clone
                                                 </button>
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); toggleFormStatus(t); }}
-                                                    className={`${actionButtonBase} ${t.active ? 'border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40' : 'border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'}`}
+                                                    className={`${actionButtonBase} ${t.active ? 'border-amber-400 dark:border-amber-700 text-black font-semibold dark:text-amber-200 bg-amber-200 dark:bg-amber-900/20 hover:bg-amber-300 dark:hover:bg-amber-900/40' : 'border-emerald-400 dark:border-emerald-700 text-black font-semibold dark:text-emerald-200 bg-emerald-200 dark:bg-emerald-900/20 hover:bg-emerald-300 dark:hover:bg-emerald-900/40'}`}
                                                 >
                                                     {t.active ? 'Deactivate' : 'Activate'}
                                                 </button>
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); deleteForm(t._id, t.name); }}
-                                                    className={`${actionButtonBase} border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40`}
+                                                    className={`${actionButtonBase} border-rose-400 dark:border-rose-700 text-black font-semibold dark:text-rose-200 bg-rose-200 dark:bg-rose-900/20 hover:bg-rose-300 dark:hover:bg-rose-900/40`}
                                                 >
                                                     Delete
                                                 </button>

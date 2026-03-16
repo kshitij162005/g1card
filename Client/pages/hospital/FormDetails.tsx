@@ -172,23 +172,23 @@ const FormDetails: React.FC = () => {
                 ) : (
                     <ul className="space-y-4">
                         {form.fields.map((field, index) => (
-                            <li key={field.key} className="p-5 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                            <li key={field.key} className="p-5 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50">
                                 <div className="flex items-start justify-between gap-3">
                                     <div>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Field {index + 1}</p>
-                                        <h4 className="text-[18px] font-semibold text-slate-800 dark:text-slate-100">{field.label}</h4>
+                                        <p className="text-xs font-semibold text-slate-700 dark:text-slate-400 mb-1">Field {index + 1}</p>
+                                        <h4 className="text-[18px] font-bold text-slate-900 dark:text-slate-100">{field.label}</h4>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2 text-xs">
-                                        <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200">
+                                        <span className="px-2 py-1 rounded-full font-semibold bg-blue-100 text-blue-900 dark:bg-blue-900/30 dark:text-blue-200">
                                             {typeLabels[field.type] || field.type}
                                         </span>
                                         {field.required && (
-                                            <span className="px-2 py-1 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200">
+                                            <span className="px-2 py-1 rounded-full font-semibold bg-rose-100 text-rose-900 dark:bg-rose-900/30 dark:text-rose-200">
                                                 Required
                                             </span>
                                         )}
                                         {field.allowMultiple && (
-                                            <span className="px-2 py-1 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-200">
+                                            <span className="px-2 py-1 rounded-full font-semibold bg-indigo-100 text-indigo-900 dark:bg-indigo-900/30 dark:text-indigo-200">
                                                 Multiple
                                             </span>
                                         )}
@@ -196,18 +196,18 @@ const FormDetails: React.FC = () => {
                                 </div>
 
                                 {field.description && (
-                                    <p className="mt-2 text-[15px] text-slate-600 dark:text-slate-300">{field.description}</p>
+                                    <p className="mt-2 text-[15px] font-medium text-slate-900 dark:text-slate-300">{field.description}</p>
                                 )}
 
                                 {(field.placeholder || (field.options && field.options.length > 0)) && (
                                     <div className="mt-3 space-y-2">
                                         {field.placeholder && (
-                                            <p className="text-sm text-slate-500 dark:text-slate-400">Placeholder: {field.placeholder}</p>
+                                            <p className="text-sm font-medium text-slate-900 dark:text-slate-400">Placeholder: {field.placeholder}</p>
                                         )}
                                         {field.options && field.options.length > 0 && (
                                             <div className="flex flex-wrap gap-2">
                                                 {field.options.map(option => (
-                                                    <span key={option} className="px-2 py-1 rounded-md text-xs bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                                                    <span key={option} className="px-2 py-1 rounded-md text-xs font-semibold bg-slate-200 text-slate-900 dark:bg-slate-700 dark:text-slate-200">
                                                         {option}
                                                     </span>
                                                 ))}
@@ -217,8 +217,8 @@ const FormDetails: React.FC = () => {
                                 )}
 
                                 {field.validation && (
-                                    <div className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-                                        <span className="font-medium text-slate-700 dark:text-slate-200 mr-2">Validation:</span>
+                                    <div className="mt-3 text-sm text-slate-900 dark:text-slate-400">
+                                        <span className="font-semibold text-slate-900 dark:text-slate-200 mr-2">Validation:</span>
                                         {[
                                             field.validation.min !== undefined && field.validation.min !== '' ? `min ${field.validation.min}` : '',
                                             field.validation.max !== undefined && field.validation.max !== '' ? `max ${field.validation.max}` : '',

@@ -145,9 +145,9 @@ const HospitalDashboard: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <Card className="bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-slate-800 dark:to-slate-800">
-                <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200">Welcome, {user?.name || 'Hospital'}</h2>
-                <div className="flex flex-wrap gap-4 text-sm text-slate-500 dark:text-slate-400 mt-2">
+            <Card className="dashboard-hero bg-[linear-gradient(130deg,#dce7f6_0%,#e7eef8_52%,#dceaf7_100%)] dark:bg-gradient-to-r dark:from-slate-800 dark:to-slate-800">
+                <h2 className="text-2xl font-bold text-[var(--app-text)]">Welcome, {user?.name || 'Hospital'}</h2>
+                <div className="flex flex-wrap gap-4 text-sm text-[var(--app-muted)] mt-2">
                     <span>Verification Status: <span className="text-status-green font-semibold">Approved</span></span>
                     <span>Last Activity: {formatLastActivity()}</span>
                 </div>

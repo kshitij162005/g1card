@@ -1439,6 +1439,12 @@ router.get('/:id/notifications/count', async (req, res) => {
 router.get('/:id/notifications', async (req, res) => {
   try {
     const Notification = (await import('../models/Notification.js')).default;
+    // Register all possible sender models for Notification.sender refPath population.
+    await Promise.all([
+      import('../models/Patient.js'),
+      import('../models/Hospital.js'),
+      import('../models/Superadmin.js'),
+    ]);
     const id = req.params.id;
     if (!id) return res.status(400).json({ error: 'Missing hospital id' });
 
