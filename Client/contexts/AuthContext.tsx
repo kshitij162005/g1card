@@ -6,6 +6,7 @@ import { User, Role } from '../types';
 interface AuthContextType {
     user: User | null;
     login: (role: Role, email: string, password: string) => Promise<boolean>;
+    loginWithGoogle: (role: Role, idToken: string) => Promise<boolean>;
     logout: () => void;
 }
 
@@ -57,6 +58,38 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     };
 
+    const loginWithGoogle = async (role: Role, idToken: string) => {
+        try {
+            const resp = await fetch(`${API_URL}/auth/google`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ role, idToken }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                console.warn('google login failed', data);
+                return false;
+            }
+
+            const u = data.user;
+            const newUser: User = {
+                id: u.id,
+                email: u.email,
+                name: u.name,
+                role: role,
+                lastLogin: new Date().toISOString(),
+                lastAccess: u.lastAccess || new Date().toISOString(),
+            };
+
+            setUser(newUser);
+            localStorage.setItem('g1card_user', JSON.stringify(newUser));
+            return true;
+        } catch (err) {
+            console.error('google login error', err);
+            return false;
+        }
+    };
+
     const logout = () => {
         setUser(null);
         // Clear from localStorage
@@ -64,7 +97,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout }}>
+        <AuthContext.Provider value={{ user, login, loginWithGoogle, logout }}>
             {children}
         </AuthContext.Provider>
     );

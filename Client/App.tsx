@@ -7,9 +7,9 @@ import LoginPage from './pages/LoginPage';
 import OtpPage from './pages/OtpPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
-import HospitalRegistrationPage from './pages/hospital/HospitalRegistrationPage';
+import HospitalRegistrationPage from './pages/hospital/HospitalRegistrationPage.tsx';
 import HospitalOtpPage from './pages/hospital/HospitalOtpPage';
-import PatientRegistrationPage from './pages/patient/PatientRegistrationPage';
+import PatientRegistrationPage from './pages/patient/PatientRegistrationPage.tsx';
 import PatientOtpPage from './pages/patient/PatientOtpPage';
 
 
@@ -48,6 +48,8 @@ import PatientSettings from './pages/patient/PatientSettings';
 import PatientNotifications from './pages/patient/PatientNotifications.tsx';
 import AppNotificationCenter from './components/AppNotificationCenter';
 import { installAlertNotificationBridge } from './utils/notifications';
+import { applyTheme, getStoredTheme } from './utils/theme';
+import { installGlobalKeyboardShortcuts } from './utils/keyboardShortcuts';
 
 
 const AppRoutes: React.FC = () => {
@@ -58,6 +60,7 @@ const AppRoutes: React.FC = () => {
             <Routes>
                 <Route element={<AuthLayout />}>
                     <Route path="/login" element={<LoginPage />} />
+                    <Route path="/admin/login" element={<LoginPage />} />
                     <Route path="/otp" element={<OtpPage />} />
                     <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                     <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -134,7 +137,13 @@ const AppRoutes: React.FC = () => {
 
 const App: React.FC = () => {
     useEffect(() => {
+        applyTheme(getStoredTheme());
         installAlertNotificationBridge();
+        const removeKeyboardShortcuts = installGlobalKeyboardShortcuts();
+
+        return () => {
+            removeKeyboardShortcuts();
+        };
     }, []);
 
   return (

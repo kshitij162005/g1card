@@ -1,11 +1,12 @@
 import { API_URL } from '../../config/api';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import Card from '../../components/Card';
 import { useNavigate } from 'react-router-dom';
 import { DetailedPatient } from '../../types';
 import Loader from '../../components/Loader';
+import ProfileCompletionPopup from '../../components/ProfileCompletionPopup';
 
 const HealthSummaryItem: React.FC<{ label: string; value: string }> = ({ label, value }) => (
     <div className="text-center">
@@ -14,13 +15,38 @@ const HealthSummaryItem: React.FC<{ label: string; value: string }> = ({ label, 
     </div>
 );
 
-const QuickInfoItem: React.FC<{ icon: string; label: string; value: string; color: string }> = ({ icon, label, value, color }) => (
+const QuickInfoItem: React.FC<{ icon: 'allergy' | 'condition' | 'medication' | 'consultation'; label: string; value: string; color: string }> = ({ icon, label, value, color }) => {
+    const iconMap = {
+        allergy: (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M12 4l9 16H3l9-16z" />
+            </svg>
+        ),
+        condition: (
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" />
+            </svg>
+        ),
+        medication: (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14m-7-7h14" />
+            </svg>
+        ),
+        consultation: (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+        ),
+    } as const;
+
+    return (
     <div className="flex items-center py-2">
-        <span className={`text-xl ${color}`}>{icon}</span>
+        <span className={`text-xl ${color}`}>{iconMap[icon]}</span>
         <span className="ml-3 text-sm font-medium text-slate-700 dark:text-slate-300">{label}:</span>
         <span className="ml-auto text-sm text-slate-900 dark:text-slate-100 font-semibold">{value}</span>
     </div>
-);
+    );
+};
 
 interface HospitalAccessEntry {
     hospitalId: string;
@@ -55,6 +81,20 @@ const PatientDashboard: React.FC = () => {
     const [pendingNotifications, setPendingNotifications] = useState<Notification[]>([]);
     const [showAccessRequestModal, setShowAccessRequestModal] = useState(false);
     const [processingRequest, setProcessingRequest] = useState(false);
+    const [showProfileCompletionPopup, setShowProfileCompletionPopup] = useState(false);
+    const [missingProfileItems, setMissingProfileItems] = useState<string[]>([]);
+    const profilePromptShownRef = useRef(false);
+
+    const getMissingPatientProfileItems = (p: DetailedPatient | null) => {
+        if (!p) return [];
+        const missing: string[] = [];
+        const phone = (p as unknown as { phone?: string }).phone || p.contact;
+        if (!phone) missing.push('Phone Number');
+        if (!p.dob) missing.push('Date of Birth');
+        if (!p.gender) missing.push('Gender');
+        if (!p.address) missing.push('Address');
+        return missing;
+    };
 
     const openModal = () => {
         setForm({
@@ -174,6 +214,19 @@ const PatientDashboard: React.FC = () => {
         });
     }, [user?.id]);
 
+    useEffect(() => {
+        if (!patient) return;
+        if (profilePromptShownRef.current) return;
+
+        const missing = getMissingPatientProfileItems(patient);
+        if (missing.length === 0) return;
+
+        profilePromptShownRef.current = true;
+        setMissingProfileItems(missing);
+        setShowProfileCompletionPopup(true);
+        notify('Complete your patient profile for a better onboarding experience.');
+    }, [patient]);
+
     const relativeTime = (iso?: string) => {
         if (!iso) return 'N/A';
         const d = new Date(iso).getTime();
@@ -230,15 +283,24 @@ const PatientDashboard: React.FC = () => {
         setShowAccessRequestModal(false);
     };
 
+    const handleProfileCompleteNow = () => {
+        setShowProfileCompletionPopup(false);
+        navigate('/patient/settings');
+    };
+
+    const handleProfileLater = () => {
+        setShowProfileCompletionPopup(false);
+    };
+
     if (initialLoading) {
         return <Loader text="Loading your dashboard..." fullScreen />;
     }
 
     return (
         <div className="space-y-6">
-            <div className="rounded-2xl bg-gradient-to-r from-sky-50 to-cyan-50 dark:from-slate-800 dark:to-slate-800 border border-slate-200/80 dark:border-slate-700 p-5">
-                <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Welcome Back, {user?.name}!</h2>
-                <p className="text-sm text-slate-600 dark:text-slate-300">Last Access: {relativeTime(user?.lastLogin || patient?.lastUpdated)}</p>
+            <div className="dashboard-hero rounded-2xl border border-[var(--app-border)] p-5 bg-[var(--app-surface-soft)] dark:bg-gradient-to-r dark:from-slate-800 dark:to-slate-800">
+                <h2 className="text-2xl font-bold text-[var(--app-text)]">Welcome Back, {user?.name}!</h2>
+                <p className="text-sm text-[var(--app-muted)]">Last Access: {relativeTime(user?.lastLogin || patient?.lastUpdated)}</p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -274,10 +336,10 @@ const PatientDashboard: React.FC = () => {
 
                 <div className="space-y-6">
                     <Card title="Quick Health Info">
-                        <QuickInfoItem icon="🔺" label="Allergies" value={patient?.allergies?.length ? (Array.isArray(patient.allergies) ? (patient.allergies as any).join(', ') : String(patient.allergies)) : 'None'} color="text-red-500" />
-                        <QuickInfoItem icon="❤️" label="Chronic Conditions" value={patient?.conditions?.length ? (patient.conditions as any).join(', ') : 'None'} color="text-red-600" />
-                        <QuickInfoItem icon="💊" label="Active Medications" value={patient?.medications?.length ? `${patient.medications.length} medicines` : 'None'} color="text-yellow-500" />
-                        <QuickInfoItem icon="📋" label="Recent Consultations" value={patient && (patient.consultationHistory as any)?.length ? `${(patient.consultationHistory as any).length} (Last: ${(patient.consultationHistory as any)[0]?.date || 'N/A'})` : 'None'} color="text-blue-500" />
+                        <QuickInfoItem icon="allergy" label="Allergies" value={patient?.allergies?.length ? (Array.isArray(patient.allergies) ? (patient.allergies as any).join(', ') : String(patient.allergies)) : 'None'} color="text-red-500" />
+                        <QuickInfoItem icon="condition" label="Chronic Conditions" value={patient?.conditions?.length ? (patient.conditions as any).join(', ') : 'None'} color="text-red-600" />
+                        <QuickInfoItem icon="medication" label="Active Medications" value={patient?.medications?.length ? `${patient.medications.length} medicines` : 'None'} color="text-yellow-500" />
+                        <QuickInfoItem icon="consultation" label="Recent Consultations" value={patient && (patient.consultationHistory as any)?.length ? `${(patient.consultationHistory as any).length} (Last: ${(patient.consultationHistory as any)[0]?.date || 'N/A'})` : 'None'} color="text-blue-500" />
                     </Card>
                     <Card title="Hospital Access History">
                         {hospitalAccess.length === 0 ? (
@@ -346,6 +408,14 @@ const PatientDashboard: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            <ProfileCompletionPopup
+                isOpen={showProfileCompletionPopup}
+                roleLabel="Patient"
+                missingItems={missingProfileItems}
+                onCompleteNow={handleProfileCompleteNow}
+                onLater={handleProfileLater}
+            />
 
             {showAccessRequestModal && pendingNotifications.length > 0 && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/60">

@@ -19,12 +19,12 @@ interface Notification {
 
 const notificationTypeConfig: Record<string, { icon: string; color: string; bgColor: string }> = {
     ACCESS_GRANTED: {
-        icon: '✓',
+        icon: 'OK',
         color: 'text-green-700 dark:text-green-400',
         bgColor: 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700'
     },
     ACCESS_DENIED: {
-        icon: '✕',
+        icon: 'NO',
         color: 'text-red-700 dark:text-red-400',
         bgColor: 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700'
     },
@@ -207,7 +207,7 @@ const HospitalNotifications: React.FC = () => {
                         <div className="space-y-2">
                             {notifications.map((notification) => {
                                 const config = notificationTypeConfig[notification.type] || {
-                                    icon: 'ℹ',
+                                    icon: 'i',
                                     color: 'text-slate-700 dark:text-slate-400',
                                     bgColor: 'bg-slate-50 dark:bg-slate-900/20 border-slate-300 dark:border-slate-700'
                                 };
