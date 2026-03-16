@@ -1,9 +1,10 @@
 import { API_URL } from '../../config/api';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import Card from '../../components/Card';
 import { useNavigate } from 'react-router-dom';
 import Loader from '../../components/Loader';
+import ProfileCompletionPopup from '../../components/ProfileCompletionPopup';
 
 const StatCard: React.FC<{ title: string; value: string | number; loading?: boolean; }> = ({ title, value, loading }) => (
     <Card className="text-center">
@@ -24,16 +25,45 @@ interface RecentPatient {
     createdAt: string;
 }
 
+interface HospitalProfile {
+    regNumber?: string;
+    phone?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    pin?: string;
+    license?: string;
+    adminPhone?: string;
+}
+
 const HospitalDashboard: React.FC = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const [loadingMetrics, setLoadingMetrics] = useState(true);
+    const [hospitalProfile, setHospitalProfile] = useState<HospitalProfile | null>(null);
+    const [showProfileCompletionPopup, setShowProfileCompletionPopup] = useState(false);
+    const [missingProfileItems, setMissingProfileItems] = useState<string[]>([]);
+    const profilePromptShownRef = useRef(false);
     const [metrics, setMetrics] = useState<{ patientsTotal: number; recordsTotal: number; patientsPending: number; recentPatients: RecentPatient[] }>({
         patientsTotal: 0,
         recordsTotal: 0,
         patientsPending: 0,
         recentPatients: [],
     });
+
+    const getMissingHospitalProfileItems = (profile: HospitalProfile | null) => {
+        if (!profile) return [];
+        const missing: string[] = [];
+        if (!profile.regNumber) missing.push('Registration Number');
+        if (!profile.license) missing.push('License Number');
+        if (!profile.phone) missing.push('Hospital Phone');
+        if (!profile.address) missing.push('Address');
+        if (!profile.city) missing.push('City');
+        if (!profile.state) missing.push('State');
+        if (!profile.pin) missing.push('PIN Code');
+        if (!profile.adminPhone) missing.push('Admin Phone');
+        return missing;
+    };
 
     useEffect(() => {
         const fetchMetrics = async () => {
@@ -55,8 +85,43 @@ const HospitalDashboard: React.FC = () => {
                 setLoadingMetrics(false);
             }
         };
+        const fetchHospitalProfile = async () => {
+            if (!user) return;
+            try {
+                const resp = await fetch(`${API_URL}/hospitals/${user.id}`);
+                const data = await resp.json();
+                if (resp.ok && data?.hospital) {
+                    setHospitalProfile(data.hospital as HospitalProfile);
+                }
+            } catch (err) {
+                console.error('fetch hospital profile', err);
+            }
+        };
         fetchMetrics();
+        fetchHospitalProfile();
     }, [user]);
+
+    useEffect(() => {
+        if (!hospitalProfile) return;
+        if (profilePromptShownRef.current) return;
+
+        const missing = getMissingHospitalProfileItems(hospitalProfile);
+        if (missing.length === 0) return;
+
+        profilePromptShownRef.current = true;
+        setMissingProfileItems(missing);
+        setShowProfileCompletionPopup(true);
+        notify('Complete your hospital profile to improve onboarding and approvals.');
+    }, [hospitalProfile]);
+
+    const handleProfileCompleteNow = () => {
+        setShowProfileCompletionPopup(false);
+        navigate('/hospital/settings');
+    };
+
+    const handleProfileLater = () => {
+        setShowProfileCompletionPopup(false);
+    };
 
     if (loadingMetrics) {
         return <Loader text="Loading dashboard..." fullScreen />;
@@ -83,7 +148,7 @@ const HospitalDashboard: React.FC = () => {
             <Card className="bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-slate-800 dark:to-slate-800">
                 <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200">Welcome, {user?.name || 'Hospital'}</h2>
                 <div className="flex flex-wrap gap-4 text-sm text-slate-500 dark:text-slate-400 mt-2">
-                    <span>Verification Status: <span className="text-status-green font-semibold">✓ Approved</span></span>
+                    <span>Verification Status: <span className="text-status-green font-semibold">Approved</span></span>
                     <span>Last Activity: {formatLastActivity()}</span>
                 </div>
             </Card>
@@ -142,6 +207,14 @@ const HospitalDashboard: React.FC = () => {
                     <button onClick={() => navigate('/hospital/settings')} className="px-4 py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-all">Account Settings</button>
                 </div>
             </Card>
+
+            <ProfileCompletionPopup
+                isOpen={showProfileCompletionPopup}
+                roleLabel="Hospital"
+                missingItems={missingProfileItems}
+                onCompleteNow={handleProfileCompleteNow}
+                onLater={handleProfileLater}
+            />
         </div>
     );
 };

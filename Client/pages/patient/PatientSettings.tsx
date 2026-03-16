@@ -358,14 +358,14 @@ const PatientSettings: React.FC = () => {
             <div className="divide-y divide-slate-200 dark:divide-slate-700">
                 <Section title="Profile Information">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>Name:</strong> {patient?.name || `${patient?.firstName || ''} ${patient?.lastName || ''}` || user?.name || '—'}</p>
-                        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>Email:</strong> {patient?.email || user?.email || '—'} {patient?.email && <span className="text-green-600">(Verified ✓)</span>}</p>
-                        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>Phone:</strong> {patient?.phone || '—'}</p>
-                        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>DOB:</strong> {patient?.dob || '—'}</p>
+                        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>Name:</strong> <span className="font-semibold text-[var(--app-text)]">{patient?.name || `${patient?.firstName || ''} ${patient?.lastName || ''}` || user?.name || '—'}</span></p>
+                        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>Email:</strong> <span className="font-semibold text-[var(--app-text)]">{patient?.email || user?.email || '—'}</span> {patient?.email && <span className="text-green-600">(Verified)</span>}</p>
+                        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>Phone:</strong> <span className="font-semibold text-[var(--app-text)]">{patient?.phone || '—'}</span></p>
+                        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>DOB:</strong> <span className="font-semibold text-[var(--app-text)]">{patient?.dob || '—'}</span></p>
                     </div>
                     <div className="flex gap-2 mt-4">
-                        <button onClick={openEdit} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">Edit Profile</button>
-                        <button className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">Change Email</button>
+                        <button onClick={openEdit} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">Edit Profile</button>
+                        <button className="px-4 py-2 bg-slate-200 dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">Change Email</button>
                     </div>
                 </Section>
                 
@@ -406,7 +406,7 @@ const PatientSettings: React.FC = () => {
                         <p className="text-sm"><strong>Password:</strong> •••••••• <span className="text-xs text-slate-500 ml-4">Last Changed: 15 days ago</span></p>
                         <button
                             onClick={() => setChangingPassword(true)}
-                            className="mt-2 px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600"
+                            className="mt-2 px-4 py-2 bg-slate-200 dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600"
                         >
                             Change Password
                         </button>
@@ -423,7 +423,7 @@ const PatientSettings: React.FC = () => {
                     <div className="flex flex-col md:flex-row justify-between items-center pt-4 border-t dark:border-slate-700 mt-6">
                         <div>
                              <h4 className="font-semibold text-slate-800 dark:text-slate-200">Download Your Data</h4>
-                             <button className="mt-1 px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">Download Data Export (PDF/JSON)</button>
+                             <button className="mt-1 px-4 py-2 bg-slate-200 dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">Download Data Export (PDF/JSON)</button>
                         </div>
                         <div className="mt-4 md:mt-0">
                              <h4 className="font-semibold text-red-700 dark:text-red-400">Data Deletion Request</h4>
@@ -451,7 +451,7 @@ const PatientSettings: React.FC = () => {
             </div>
         </Card>
         {showEdit && (
-            <div className="fixed inset-0 z-40 flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="patient-settings-modal fixed inset-0 z-40 flex items-center justify-center p-4 animate-in fade-in duration-200">
                 <div className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-pointer" onClick={() => setShowEdit(false)} />
                 <div className="relative w-full max-w-lg animate-in zoom-in-95 duration-200">
                     <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden">
@@ -521,7 +521,7 @@ const PatientSettings: React.FC = () => {
             </div>
         )}
         {changingPassword && (
-            <div className="fixed inset-0 z-40 flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="patient-settings-modal fixed inset-0 z-40 flex items-center justify-center p-4 animate-in fade-in duration-200">
                 <div className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-pointer" onClick={() => { setChangingPassword(false); setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' }); }} />
                 <div className="relative w-full max-w-md animate-in zoom-in-95 duration-200">
                     <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden">
@@ -609,7 +609,7 @@ const PatientSettings: React.FC = () => {
             </div>
         )}
         {showPermissionsManager && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="patient-settings-modal fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
                 <div className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-pointer" onClick={closePermissionsManager} />
                 <div className="relative w-full max-w-5xl animate-in zoom-in-95 duration-200">
                     <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden">
@@ -741,7 +741,7 @@ const PatientSettings: React.FC = () => {
             </div>
         )}
         {revokeModal?.show && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="patient-settings-modal fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
                 <div className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-pointer" onClick={() => setRevokeModal(null)} />
                 <div className="relative w-full max-w-md animate-in zoom-in-95 duration-200">
                     <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden">
@@ -809,7 +809,7 @@ const PatientSettings: React.FC = () => {
             </div>
         )}
         {accessLevelModal?.show && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="patient-settings-modal fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
                 <div className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-pointer" onClick={() => setAccessLevelModal(null)} />
                 <div className="relative w-full max-w-md animate-in zoom-in-95 duration-200">
                     <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden">

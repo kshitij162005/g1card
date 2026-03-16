@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import ThemeToggle from '../components/ThemeToggle';
 import { API_URL } from '../config/api';
 import { useSSE } from '../hooks/useSSE';
 import AccessRequestModal from '../components/AccessRequestModal';
 import GlassNotification from '../components/GlassNotification';
+import { ThemeMode, getStoredTheme, setStoredTheme } from '../utils/theme';
 
 interface PatientHeaderProps {
     pendingCount?: number;
@@ -24,6 +24,7 @@ const PatientHeader: React.FC<PatientHeaderProps> = ({ pendingCount = 0, onOpenR
     const location = useLocation();
     const navigate = useNavigate();
     const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+    const [themeMode, setThemeMode] = useState<ThemeMode>(() => getStoredTheme());
     const isNotificationsPage = location.pathname.includes('/patient/notifications');
     const isSettingsPage = location.pathname.includes('/patient/settings');
 
@@ -32,24 +33,32 @@ const PatientHeader: React.FC<PatientHeaderProps> = ({ pendingCount = 0, onOpenR
         navigate('/login');
     };
 
+    const toggleThemeMode = () => {
+        setThemeMode((prev) => {
+            const next: ThemeMode = prev === 'dark' ? 'light' : 'dark';
+            setStoredTheme(next);
+            return next;
+        });
+    };
+
     return (
-        <header className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-md sticky top-0 z-50 border-b border-slate-200/90 dark:border-slate-800 shadow-sm">
+        <header className="bg-[var(--app-surface)]/95 backdrop-blur-md sticky top-0 z-50 border-b border-[var(--app-border)] shadow-sm">
             <nav className="max-w-[1400px] mx-auto px-4 sm:px-6 py-3 flex justify-between items-center">
                 <div className="flex items-center space-x-6">
                     <button
                         type="button"
-                        className="lg:hidden p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                        className="lg:hidden p-2 rounded-lg hover:bg-[var(--app-surface-soft)]"
                         onClick={onOpenNav}
                         aria-label="Open navigation"
                     >
-                        <svg className="w-5 h-5 text-slate-700 dark:text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-5 h-5 text-[var(--app-text)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                         </svg>
                     </button>
                     <h1 className="text-xl font-bold text-brand-primary dark:text-white tracking-wider">G1CARD</h1>
                 </div>
                 <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 min-w-0">
-                    <span className="text-slate-600 dark:text-slate-300 text-sm hidden sm:block">Welcome, {user?.name}</span>
+                    <span className="text-[var(--app-muted)] text-sm hidden sm:block">Welcome, {user?.name}</span>
                     {onOpenRequests && (
                         <button
                             type="button"
@@ -57,7 +66,7 @@ const PatientHeader: React.FC<PatientHeaderProps> = ({ pendingCount = 0, onOpenR
                             className={`relative inline-flex items-center justify-center h-10 w-10 shrink-0 rounded-xl border transition-all ${
                                 isNotificationsPage
                                     ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
-                                    : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                    : 'border-[var(--app-border)] text-[var(--app-text)] hover:bg-[var(--app-surface-soft)]'
                             }`}
                             aria-label="Hospital access requests"
                         >
@@ -78,14 +87,13 @@ const PatientHeader: React.FC<PatientHeaderProps> = ({ pendingCount = 0, onOpenR
                             {isNotificationsPage && <span className="absolute -top-1 -left-1 h-2.5 w-2.5 rounded-full bg-blue-200 ring-2 ring-blue-600" />}
                         </button>
                     )}
-                    <ThemeToggle />
                     <div className="relative">
                         <button
                             onClick={() => setShowSettingsMenu(!showSettingsMenu)}
                             className={`relative inline-flex items-center justify-center h-10 w-10 shrink-0 rounded-xl border transition-all ${
                                 isSettingsPage
                                     ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
-                                    : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                    : 'border-[var(--app-border)] text-[var(--app-text)] hover:bg-[var(--app-surface-soft)]'
                             }`}
                             aria-label="Settings"
                         >
@@ -96,21 +104,36 @@ const PatientHeader: React.FC<PatientHeaderProps> = ({ pendingCount = 0, onOpenR
                             {isSettingsPage && <span className="absolute -top-1 -left-1 h-2.5 w-2.5 rounded-full bg-blue-200 ring-2 ring-blue-600" />}
                         </button>
                         {showSettingsMenu && (
-                            <div className="absolute right-0 mt-2 w-56 bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 overflow-hidden z-50">
+                            <div className="absolute right-0 mt-2 w-56 bg-[var(--app-surface)]/95 backdrop-blur-sm rounded-lg shadow-lg border border-[var(--app-border)] overflow-hidden z-50">
                                 <button
                                     onClick={() => {
                                         navigate('/patient/settings');
                                         setShowSettingsMenu(false);
                                     }}
-                                    className="w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-3"
+                                    className="w-full text-left px-4 py-3 hover:bg-[var(--app-surface-soft)] transition-colors flex items-center gap-3"
                                 >
                                     <svg className="h-5 w-5 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                     </svg>
                                     <div>
-                                        <div className="text-sm font-medium text-slate-700 dark:text-slate-200">Settings</div>
-                                        <div className="text-xs text-slate-500 dark:text-slate-400">Manage account</div>
+                                        <div className="text-sm font-medium text-[var(--app-text)]">Settings</div>
+                                        <div className="text-xs text-[var(--app-muted)]">Manage account</div>
+                                    </div>
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        toggleThemeMode();
+                                        setShowSettingsMenu(false);
+                                    }}
+                                    className="w-full text-left px-4 py-3 hover:bg-[var(--app-surface-soft)] transition-colors flex items-center gap-3"
+                                >
+                                    <svg className="h-5 w-5 text-[var(--app-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.364 6.364l-1.414-1.414M7.05 7.05 5.636 5.636m12.728 0L16.95 7.05M7.05 16.95l-1.414 1.414M12 8a4 4 0 100 8 4 4 0 000-8z" />
+                                    </svg>
+                                    <div>
+                                        <div className="text-sm font-medium text-[var(--app-text)]">Appearance</div>
+                                        <div className="text-xs text-[var(--app-muted)]">Switch to {themeMode === 'dark' ? 'Light' : 'Dark'} mode</div>
                                     </div>
                                 </button>
                                 <button
@@ -118,14 +141,14 @@ const PatientHeader: React.FC<PatientHeaderProps> = ({ pendingCount = 0, onOpenR
                                         setShowSettingsMenu(false);
                                         handleLogout();
                                     }}
-                                    className="w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-3 border-t border-slate-200 dark:border-slate-700"
+                                    className="w-full text-left px-4 py-3 hover:bg-[var(--app-surface-soft)] transition-colors flex items-center gap-3"
                                 >
                                     <svg className="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H6a2 2 0 01-2-2V7a2 2 0 012-2h5a2 2 0 012 2v1" />
                                     </svg>
                                     <div>
                                         <div className="text-sm font-medium text-red-600 dark:text-red-400">Logout</div>
-                                        <div className="text-xs text-slate-500 dark:text-slate-400">Sign out of your account</div>
+                                        <div className="text-xs text-[var(--app-muted)]">Sign out of your account</div>
                                     </div>
                                 </button>
                             </div>
@@ -308,7 +331,7 @@ const PatientLayout: React.FC = () => {
     };
 
     const navLinkClasses = ({ isActive }: { isActive: boolean }): string =>
-        `block w-full px-4 py-3 rounded-xl text-sm font-medium transition-colors cursor-pointer ${isActive ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-slate-100 dark:hover:bg-slate-800/80'}`;
+        `block w-full px-4 py-3 rounded-xl text-sm font-medium transition-colors cursor-pointer ${isActive ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-700 dark:text-slate-300 bg-transparent'}`;
 
     const isNotificationsPage = location.pathname.includes('/patient/notifications');
 
@@ -337,7 +360,7 @@ const PatientLayout: React.FC = () => {
     );
 
     return (
-        <div className="patient-shell min-h-screen bg-gradient-to-b from-slate-50 via-slate-100 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-900">
+        <div className="patient-shell min-h-screen bg-[var(--app-bg)]">
             <div className="flex min-h-screen">
                 <aside className="hidden lg:flex w-60 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 flex-col">
                     <div className="mb-5 px-2">

@@ -220,7 +220,7 @@ const HospitalDetails: React.FC = () => {
             title: 'Delete Hospital - Permanent Action',
             message: `Are you sure you want to permanently delete "${hospital.name}"?`,
             consequences: [
-                '⚠️ THIS ACTION CANNOT BE UNDONE',
+                'THIS ACTION CANNOT BE UNDONE',
                 `All hospital data will be permanently deleted`,
                 `${hospital.patientCount || 0} patient records will be removed`,
                 `${hospital.recordsCount || 0} medical records will be deleted`,

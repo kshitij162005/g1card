@@ -2,7 +2,7 @@
 
 @theme {
   --font-sans: 'Inter', sans-serif;
-  
+
   --color-brand-primary: #0D47A1;
   --color-brand-secondary: #1565C0;
   --color-brand-accent: #2196F3;
@@ -12,26 +12,59 @@
   --color-status-red: #F44336;
 }
 
+:root {
+  --app-bg: #ece7de;
+  --app-surface: #f3efe8;
+  --app-surface-soft: #dbe6f3;
+  --app-border: #8fa2ba;
+  --app-text: #243247;
+  --app-muted: #3f526c;
+  --app-accent: #255da8;
+
+  --table-head-bg: #d4e0ef;
+  --table-row-odd: #f6f2eb;
+  --table-row-even: #e9eef5;
+  --table-row-hover: #d8e2f0;
+
+  --scrollbar-track: #e3e7eb;
+  --scrollbar-thumb: #b1bac5;
+  --scrollbar-thumb-hover: #98a3b1;
+}
+
+.dark {
+  --app-bg: #020617;
+  --app-surface: #0b1220;
+  --app-surface-soft: #0f172a;
+  --app-border: #1e293b;
+  --app-text: #e2e8f0;
+  --app-muted: #94a3b8;
+  --app-accent: #93c5fd;
+
+  --table-head-bg: #111a2b;
+  --table-row-odd: #0b1220;
+  --table-row-even: #0f172a;
+  --table-row-hover: rgba(30, 58, 138, 0.22);
+
+  --scrollbar-track: #1e293b;
+  --scrollbar-thumb: #334155;
+  --scrollbar-thumb-hover: #475569;
+}
+
 body {
   font-family: 'Inter', sans-serif;
-  background-color: #f1f5f9; /* slate-100 */
-  color: #0f172a;
+  background-color: var(--app-bg);
+  background-image: radial-gradient(circle at 8% 6%, rgba(88, 137, 214, 0.22), transparent 24%), radial-gradient(circle at 88% 82%, rgba(63, 106, 179, 0.16), transparent 28%), linear-gradient(180deg, rgba(255,255,255,0.16) 0%, rgba(236,231,222,0) 35%);
+  color: var(--app-text);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
-.dark body {
-  background-color: #0f172a; /* slate-900 */
-  color: #e2e8f0;
-}
-
 .dark ::-webkit-calendar-picker-indicator {
   filter: invert(1);
 }
 
-/* Keep motion subtle and scoped to interactive elements */
 button,
 a,
 input,
@@ -42,7 +75,6 @@ summary,
   transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
-/* Ensure interactive controls consistently show pointer cursor */
 button:not(:disabled),
 a[href],
 a,
@@ -58,30 +90,20 @@ select:not(:disabled) {
   cursor: pointer;
 }
 
-/* Fallback for interactive UI elements styled via hover classes */
 [class*='hover:bg-'],
 [class*='hover:text-'],
 [class*='hover:border-'] {
   cursor: pointer;
 }
 
-/* Custom animations for loader */
 @keyframes shimmer {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
 @keyframes spin-slow {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .animate-shimmer {
@@ -103,17 +125,13 @@ select:not(:disabled) {
   }
 }
 
-/* Admin section visual system */
-.admin-shell {
-  --admin-surface: #ffffff;
-  --admin-muted: #64748b;
-  --admin-border: #cbd5e1;
-}
-
-.dark .admin-shell {
-  --admin-surface: #1e293b;
-  --admin-muted: #94a3b8;
-  --admin-border: #334155;
+.admin-shell,
+.patient-shell,
+.hospital-shell {
+  --shell-surface: var(--app-surface);
+  --shell-border: var(--app-border);
+  --shell-text: var(--app-text);
+  --shell-muted: var(--app-muted);
 }
 
 .admin-shell h1,
@@ -121,63 +139,150 @@ select:not(:disabled) {
   letter-spacing: -0.01em;
 }
 
-.admin-shell input,
-.admin-shell select,
-.admin-shell textarea {
-  border-radius: 0.75rem;
-  border-color: var(--admin-border);
+.admin-shell .bg-white,
+.admin-shell .bg-slate-50,
+.admin-shell .bg-slate-100,
+.hospital-shell .bg-white,
+.hospital-shell .bg-slate-50,
+.hospital-shell .bg-slate-100,
+.patient-shell .bg-white,
+.patient-shell .bg-slate-50,
+.patient-shell .bg-slate-100 {
+  background-color: var(--shell-surface) !important;
+  border-color: var(--shell-border) !important;
+  box-shadow: 0 12px 28px rgba(36, 50, 71, 0.2);
 }
 
-.admin-shell table {
+.dark .admin-shell .bg-white,
+.dark .admin-shell .bg-slate-50,
+.dark .admin-shell .bg-slate-100,
+.dark .hospital-shell .bg-white,
+.dark .hospital-shell .bg-slate-50,
+.dark .hospital-shell .bg-slate-100,
+.dark .patient-shell .bg-white,
+.dark .patient-shell .bg-slate-50,
+.dark .patient-shell .bg-slate-100 {
+  box-shadow: 0 10px 28px rgba(2, 6, 23, 0.45);
+}
+
+.admin-shell .border-slate-200,
+.admin-shell .border-slate-300,
+.hospital-shell .border-slate-200,
+.hospital-shell .border-slate-300,
+.patient-shell .border-slate-200,
+.patient-shell .border-slate-300 {
+  border-color: var(--shell-border) !important;
+}
+
+.admin-shell .text-slate-900,
+.admin-shell .text-slate-800,
+.admin-shell .text-slate-700,
+.hospital-shell .text-slate-900,
+.hospital-shell .text-slate-800,
+.hospital-shell .text-slate-700,
+.patient-shell .text-slate-900,
+.patient-shell .text-slate-800,
+.patient-shell .text-slate-700 {
+  color: var(--shell-text) !important;
+}
+
+.admin-shell .text-slate-600,
+.admin-shell .text-slate-500,
+.hospital-shell .text-slate-600,
+.hospital-shell .text-slate-500,
+.patient-shell .text-slate-600,
+.patient-shell .text-slate-500 {
+  color: var(--shell-muted) !important;
+}
+
+.admin-shell input,
+.admin-shell select,
+.admin-shell textarea,
+.hospital-shell input,
+.hospital-shell select,
+.hospital-shell textarea,
+.patient-shell input,
+.patient-shell select,
+.patient-shell textarea {
+  border-radius: 0.75rem;
+  border-color: var(--shell-border);
+}
+
+.admin-shell table,
+.hospital-shell table,
+.patient-shell table {
   border-collapse: separate;
   border-spacing: 0;
   width: 100%;
+  border: 1px solid var(--shell-border);
+  border-radius: 0.9rem;
+  overflow: hidden;
+  background: var(--shell-surface);
 }
 
-.admin-shell table thead tr {
-  background: color-mix(in srgb, var(--admin-surface) 90%, #1d4ed8 10%);
+.admin-shell table thead tr,
+.hospital-shell table thead tr,
+.patient-shell table thead tr {
+  background: var(--table-head-bg);
 }
 
-.admin-shell table thead th {
+.admin-shell table thead th,
+.hospital-shell table thead th,
+.patient-shell table thead th {
+  color: var(--app-accent) !important;
   font-size: 0.7rem;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid var(--shell-border);
 }
 
-.admin-shell table tbody tr {
-  border-bottom: 1px solid var(--admin-border);
+.admin-shell table tbody td,
+.hospital-shell table tbody td,
+.patient-shell table tbody td {
+  color: var(--shell-text);
+  padding: 0.82rem 1rem;
 }
 
-/* Patient + hospital shells */
-.patient-shell,
-.hospital-shell {
-  --role-surface: #ffffff;
-  --role-border: #cbd5e1;
+.admin-shell table tbody tr,
+.hospital-shell table tbody tr,
+.patient-shell table tbody tr {
+  transition: background-color 140ms ease;
 }
 
-.dark .patient-shell,
-.dark .hospital-shell {
-  --role-surface: #1e293b;
-  --role-border: #334155;
+.admin-shell table tbody tr:nth-child(odd),
+.hospital-shell table tbody tr:nth-child(odd),
+.patient-shell table tbody tr:nth-child(odd) {
+  background-color: var(--table-row-odd);
 }
 
-.patient-shell .bg-white,
-.hospital-shell .bg-white {
-  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.05);
+.admin-shell table tbody tr:nth-child(even),
+.hospital-shell table tbody tr:nth-child(even),
+.patient-shell table tbody tr:nth-child(even) {
+  background-color: var(--table-row-even);
 }
 
-.patient-shell input,
-.patient-shell select,
-.patient-shell textarea,
-.hospital-shell input,
-.hospital-shell select,
-.hospital-shell textarea {
-  border-radius: 0.75rem;
-  border-color: var(--role-border);
+.admin-shell table tbody tr + tr td,
+.hospital-shell table tbody tr + tr td,
+.patient-shell table tbody tr + tr td {
+  border-top: 1px solid var(--shell-border);
 }
 
-.patient-shell table thead tr,
-.hospital-shell table thead tr {
-  background: color-mix(in srgb, var(--role-surface) 90%, #1d4ed8 10%);
+.admin-shell table tbody tr:hover,
+.hospital-shell table tbody tr:hover,
+.patient-shell table tbody tr:hover {
+  background-color: var(--table-row-hover);
+}
+
+.admin-shell .divide-slate-200,
+.admin-shell .divide-slate-700,
+.hospital-shell .divide-slate-200,
+.hospital-shell .divide-slate-700,
+.patient-shell .divide-slate-200,
+.patient-shell .divide-slate-700 {
+  --tw-divide-opacity: 1;
+  border-color: color-mix(in srgb, var(--shell-border) 94%, #000 6%) !important;
 }
 
 .patient-shell .text-brand-primary,
@@ -195,13 +300,18 @@ select:not(:disabled) {
   background-color: #1d4ed8;
 }
 
-/* Remove playful hover scaling so controls feel stable and production-ready */
+button[class*='border-'],
+input[type='button'][class*='border-'],
+input[type='submit'][class*='border-'],
+input[type='reset'][class*='border-'] {
+  border-width: 1.5px;
+}
+
 .hover\:scale-105:hover,
 .hover\:scale-110:hover {
   transform: none !important;
 }
 
-/* Ensure dropdown text is readable in dark mode across pages */
 .dark select,
 .dark option,
 .dark optgroup {
@@ -213,16 +323,240 @@ select:not(:disabled) {
   background-color: #0f172a;
 }
 
-:root {
-  --scrollbar-track: #e2e8f0;
-  --scrollbar-thumb: #94a3b8;
-  --scrollbar-thumb-hover: #64748b;
+/* Light-mode safety net for legacy dark utility classes across untouched screens */
+:root:not(.dark) .bg-slate-950,
+:root:not(.dark) .bg-slate-900,
+:root:not(.dark) .bg-slate-800,
+:root:not(.dark) .bg-slate-700,
+:root:not(.dark) .bg-slate-600,
+:root:not(.dark) [class*='bg-slate-9'],
+:root:not(.dark) [class*='bg-slate-8'],
+:root:not(.dark) [class*='bg-slate-7'],
+:root:not(.dark) .bg-slate-800\/95,
+:root:not(.dark) .bg-slate-800\/90,
+:root:not(.dark) .bg-slate-800\/85,
+:root:not(.dark) .bg-slate-800\/80,
+:root:not(.dark) .bg-slate-800\/70,
+:root:not(.dark) .bg-slate-900\/95,
+:root:not(.dark) .bg-slate-900\/90,
+:root:not(.dark) .bg-slate-900\/85,
+:root:not(.dark) .bg-slate-950\/95,
+:root:not(.dark) .bg-slate-950\/90,
+:root:not(.dark) .bg-slate-950\/80,
+:root:not(.dark) .bg-slate-900\/80,
+:root:not(.dark) .bg-slate-900\/70,
+:root:not(.dark) .bg-slate-950\/70 {
+  background-color: var(--app-surface) !important;
 }
 
-.dark {
-  --scrollbar-track: #1e293b;
-  --scrollbar-thumb: #334155;
-  --scrollbar-thumb-hover: #475569;
+:root:not(.dark) .bg-slate-700,
+:root:not(.dark) .bg-slate-700\/90,
+:root:not(.dark) .bg-slate-700\/80,
+:root:not(.dark) .bg-slate-700\/70,
+:root:not(.dark) .bg-slate-600,
+:root:not(.dark) .bg-slate-600\/80 {
+  background-color: var(--app-surface-soft) !important;
+}
+
+:root:not(.dark) .bg-blue-950,
+:root:not(.dark) .bg-blue-900,
+:root:not(.dark) .bg-blue-800,
+:root:not(.dark) .bg-indigo-950,
+:root:not(.dark) .bg-indigo-900,
+:root:not(.dark) .bg-indigo-800 {
+  background-color: var(--app-surface-soft) !important;
+}
+
+:root:not(.dark) .text-slate-50,
+:root:not(.dark) .text-slate-100,
+:root:not(.dark) .text-slate-200,
+:root:not(.dark) .text-slate-300,
+:root:not(.dark) .text-slate-700,
+:root:not(.dark) .text-slate-800,
+:root:not(.dark) .text-slate-900,
+:root:not(.dark) [class*='text-slate-7'],
+:root:not(.dark) [class*='text-slate-8'],
+:root:not(.dark) [class*='text-slate-9'] {
+  color: var(--app-text) !important;
+}
+
+:root:not(.dark) .text-slate-400,
+:root:not(.dark) .text-slate-500,
+:root:not(.dark) .text-slate-600,
+:root:not(.dark) [class*='text-slate-4'],
+:root:not(.dark) [class*='text-slate-5'],
+:root:not(.dark) [class*='text-slate-6'] {
+  color: var(--app-muted) !important;
+}
+
+:root:not(.dark) .text-green-300,
+:root:not(.dark) .text-green-400 {
+  color: #15803d !important;
+}
+
+:root:not(.dark) .text-green-500,
+:root:not(.dark) .text-green-600,
+:root:not(.dark) .text-emerald-300,
+:root:not(.dark) .text-emerald-400,
+:root:not(.dark) .text-emerald-500,
+:root:not(.dark) .text-emerald-600,
+:root:not(.dark) .text-status-green {
+  color: #166534 !important;
+}
+
+:root:not(.dark) .text-red-300,
+:root:not(.dark) .text-red-400 {
+  color: #b91c1c !important;
+}
+
+:root:not(.dark) .text-red-500,
+:root:not(.dark) .text-red-600,
+:root:not(.dark) .text-status-red {
+  color: #991b1b !important;
+}
+
+:root:not(.dark) .text-yellow-300,
+:root:not(.dark) .text-yellow-400 {
+  color: #a16207 !important;
+}
+
+:root:not(.dark) .text-blue-300,
+:root:not(.dark) .text-blue-400,
+:root:not(.dark) .text-cyan-300,
+:root:not(.dark) .text-cyan-400 {
+  color: #1d4ed8 !important;
+}
+
+:root:not(.dark) .border-slate-900,
+:root:not(.dark) .border-slate-800,
+:root:not(.dark) .border-slate-700,
+:root:not(.dark) .border-slate-600,
+:root:not(.dark) .border-slate-500 {
+  border-color: var(--app-border) !important;
+}
+
+:root:not(.dark) .hover\:bg-slate-900:hover,
+:root:not(.dark) .hover\:bg-slate-800:hover,
+:root:not(.dark) .hover\:bg-slate-700:hover,
+:root:not(.dark) .hover\:bg-slate-100:hover,
+:root:not(.dark) .hover\:bg-slate-50:hover {
+  background-color: var(--app-surface-soft) !important;
+}
+
+/* Force-remove legacy hardcoded navy backgrounds in light mode */
+:root:not(.dark) [style*='#324158'],
+:root:not(.dark) [style*='#1C293C'],
+:root:not(.dark) [style*='#1c293c'],
+:root:not(.dark) [style*='rgb(50, 65, 88)'],
+:root:not(.dark) [style*='rgb(28, 41, 60)'] {
+  background-color: var(--app-surface) !important;
+  border-color: var(--app-border) !important;
+  color: var(--app-text) !important;
+}
+
+:root:not(.dark) .admin-shell button:not(:disabled):hover,
+:root:not(.dark) .hospital-shell button:not(:disabled):hover,
+:root:not(.dark) .patient-shell button:not(:disabled):hover {
+  box-shadow: 0 6px 14px rgba(47, 69, 111, 0.14);
+  transform: translateY(-1px);
+}
+
+/* In light mode, remap hardcoded dark modal stacks to tokenized readable colors */
+:root:not(.dark) .patient-shell .bg-slate-900 .text-white:not([class*='bg-blue-']):not([class*='bg-red-']):not([class*='bg-brand-']),
+:root:not(.dark) .patient-shell .bg-slate-800 .text-white:not([class*='bg-blue-']):not([class*='bg-red-']):not([class*='bg-brand-']) {
+  color: var(--app-text) !important;
+}
+
+:root:not(.dark) .patient-shell .bg-slate-900 .placeholder\:text-slate-500::placeholder,
+:root:not(.dark) .patient-shell .bg-slate-800 .placeholder\:text-slate-500::placeholder {
+  color: color-mix(in srgb, var(--app-muted) 86%, #8a97a8 14%) !important;
+}
+
+:root:not(.dark) .patient-settings-modal .bg-slate-900,
+:root:not(.dark) .patient-settings-modal .bg-slate-900\/50,
+:root:not(.dark) .patient-settings-modal .bg-slate-900\/30,
+:root:not(.dark) .patient-settings-modal .bg-slate-800,
+:root:not(.dark) .patient-settings-modal .bg-slate-800\/70,
+:root:not(.dark) .patient-settings-modal .bg-slate-800\/50,
+:root:not(.dark) .patient-settings-modal .bg-slate-800\/40,
+:root:not(.dark) .patient-settings-modal .bg-slate-800\/30 {
+  background-color: var(--app-surface) !important;
+  border-color: var(--app-border) !important;
+}
+
+:root:not(.dark) .patient-settings-modal .text-white,
+:root:not(.dark) .patient-settings-modal .text-slate-100,
+:root:not(.dark) .patient-settings-modal .text-slate-200,
+:root:not(.dark) .patient-settings-modal .text-slate-300,
+:root:not(.dark) .patient-settings-modal .text-slate-400,
+:root:not(.dark) .patient-settings-modal .text-slate-500 {
+  color: var(--app-text) !important;
+}
+
+:root:not(.dark) .patient-settings-modal input,
+:root:not(.dark) .patient-settings-modal textarea,
+:root:not(.dark) .patient-settings-modal select {
+  background-color: var(--app-surface) !important;
+  border-color: var(--app-border) !important;
+  color: var(--app-text) !important;
+}
+
+:root:not(.dark) .patient-settings-modal input::placeholder,
+:root:not(.dark) .patient-settings-modal textarea::placeholder {
+  color: var(--app-muted) !important;
+}
+
+:root:not(.dark) .patient-settings-modal button.bg-blue-600,
+:root:not(.dark) .patient-settings-modal button.bg-red-600,
+:root:not(.dark) .patient-settings-modal button.bg-brand-primary {
+  color: #ffffff !important;
+}
+
+:root:not(.dark) .dashboard-hero {
+  background: linear-gradient(130deg, #dce7f6 0%, #e7eef8 52%, #dceaf7 100%) !important;
+  border-color: var(--app-border) !important;
+}
+
+:root:not(.dark) .dashboard-hero h2,
+:root:not(.dark) .dashboard-hero p {
+  color: var(--app-text) !important;
+}
+
+:root:not(.dark) .login-role-pill {
+  background-color: transparent !important;
+  color: var(--app-muted) !important;
+  border: 1px solid transparent !important;
+}
+
+:root:not(.dark) .login-role-pill:hover {
+  background-color: color-mix(in srgb, var(--app-surface-soft) 76%, white 24%) !important;
+  color: var(--app-text) !important;
+}
+
+:root:not(.dark) .login-role-pill-active {
+  background-color: #ffffff !important;
+  color: var(--app-text) !important;
+  border: 1px solid var(--app-border) !important;
+}
+
+:root:not(.dark) .login-role-pill-active * {
+  color: var(--app-text) !important;
+}
+
+:root:not(.dark) button:disabled,
+:root:not(.dark) input[type='button']:disabled,
+:root:not(.dark) input[type='submit']:disabled,
+:root:not(.dark) input[type='reset']:disabled {
+  color: color-mix(in srgb, var(--app-text) 60%, #7d8da3 40%) !important;
+}
+
+:root:not(.dark) button.bg-brand-primary:disabled,
+:root:not(.dark) button.bg-blue-600:disabled,
+:root:not(.dark) button.bg-red-600:disabled,
+:root:not(.dark) input[type='submit'].bg-brand-primary:disabled,
+:root:not(.dark) input[type='submit'].bg-blue-600:disabled,
+:root:not(.dark) input[type='submit'].bg-red-600:disabled {
+  color: #ffffff !important;
 }
 
 * {
@@ -249,7 +583,6 @@ select:not(:disabled) {
   background: var(--scrollbar-thumb-hover);
 }
 
-/* Dark, integrated scrollbar for form builder panels */
 .builder-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: #334155 #1e293b;

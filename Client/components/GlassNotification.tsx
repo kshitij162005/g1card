@@ -83,9 +83,9 @@ const GlassNotification: React.FC<GlassNotificationProps> = ({
             }`}
         >
             {/* Glass morphism card */}
-            <div className="backdrop-blur-xl bg-slate-900/80 border border-slate-700/50 rounded-2xl shadow-2xl overflow-hidden">
+            <div className="backdrop-blur-xl bg-[var(--app-surface)]/95 border border-[var(--app-border)] rounded-2xl shadow-[0_16px_40px_rgba(36,50,71,0.24)] dark:shadow-[0_16px_40px_rgba(2,6,23,0.55)] overflow-hidden">
                 {/* Glow effect */}
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10 pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/14 via-cyan-500/8 to-transparent pointer-events-none" />
                 
                 <div className="relative p-4">
                     <div className="flex items-start gap-3">
@@ -96,10 +96,10 @@ const GlassNotification: React.FC<GlassNotificationProps> = ({
 
                         {/* Content */}
                         <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-white text-sm mb-1">
+                            <h4 className="font-semibold text-[var(--app-text)] text-sm mb-1">
                                 {title}
                             </h4>
-                            <p className="text-slate-300 text-xs leading-relaxed">
+                            <p className="text-[var(--app-muted)] text-xs leading-relaxed">
                                 {message}
                             </p>
 
@@ -120,7 +120,7 @@ const GlassNotification: React.FC<GlassNotificationProps> = ({
                         {/* Close button */}
                         <button
                             onClick={handleClose}
-                            className="flex-shrink-0 text-slate-400 hover:text-white transition-colors"
+                            className="flex-shrink-0 text-[var(--app-muted)] hover:text-[var(--app-text)] transition-colors"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

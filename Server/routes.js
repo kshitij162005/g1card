@@ -1,5 +1,6 @@
 import express from 'express';
 import crypto from 'crypto';
+import { OAuth2Client } from 'google-auth-library';
 import { mongoose } from './db.js';
 import { getAiReadiness } from './utils/aiClient.js';
 
@@ -14,6 +15,32 @@ function hashWithSalt(password, salt) {
   // PBKDF2 with SHA-256, 100k iterations, 64 byte key
   const derived = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha256');
   return derived.toString('hex');
+}
+
+let googleOauthClient;
+
+function getGoogleOauthClient() {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) {
+    throw new Error('GOOGLE_CLIENT_ID is not configured on server');
+  }
+  if (!googleOauthClient) {
+    googleOauthClient = new OAuth2Client(clientId);
+  }
+  return { client: googleOauthClient, clientId };
+}
+
+async function verifyGoogleIdToken(idToken) {
+  const { client, clientId } = getGoogleOauthClient();
+  const ticket = await client.verifyIdToken({
+    idToken,
+    audience: clientId,
+  });
+  return ticket.getPayload();
+}
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function calculateAgeFromDob(dob) {
@@ -105,6 +132,12 @@ router.post('/auth/signup/hospital', async (req, res) => {
     const { hospitalName, regNumber, address, city, state, pin, license, email, phone, website, adminName, adminEmail, adminPhone, designation, password } = req.body;
     if (!email || !password || !hospitalName) return res.status(400).json({ error: 'hospitalName, email and password are required' });
 
+    const normalizedHospitalEmail = String(email || '').trim().toLowerCase();
+    const normalizedAdminEmail = String(adminEmail || '').trim().toLowerCase();
+    if (normalizedAdminEmail && normalizedHospitalEmail === normalizedAdminEmail) {
+      return res.status(400).json({ error: 'Hospital contact email and admin email must be different' });
+    }
+
     const exists = await Hospital.findOne({ username: email });
     if (exists) return res.status(409).json({ error: 'Hospital already exists' });
 
@@ -138,6 +171,110 @@ router.post('/auth/signup/hospital', async (req, res) => {
     return res.json({ ok: true, id: doc._id, message: 'Hospital registered' });
   } catch (err) {
     console.error('signup hospital error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Auth: Google sign-in/sign-up
+router.post('/auth/google', async (req, res) => {
+  try {
+    const { role, idToken } = req.body || {};
+    if (!role || !idToken) {
+      return res.status(400).json({ error: 'role and idToken are required' });
+    }
+
+    if (role === 'Super Admin' || role === 'Super_Admin' || role === 'SUPER_ADMIN') {
+      return res.status(400).json({ error: 'Google login is not supported for Super Admin' });
+    }
+
+    const payload = await verifyGoogleIdToken(idToken);
+    const email = payload?.email ? String(payload.email).trim().toLowerCase() : '';
+    const emailVerified = Boolean(payload?.email_verified);
+
+    if (!email || !emailVerified) {
+      return res.status(401).json({ error: 'Google account email is not verified' });
+    }
+
+    const displayName = payload?.name || [payload?.given_name, payload?.family_name].filter(Boolean).join(' ').trim();
+    const escapedEmail = escapeRegex(email);
+
+    if (role === 'Patient' || role === 'PATIENT') {
+      const Patient = (await import('./models/Patient.js')).default;
+
+      let user = await Patient.findOne({ username: { $regex: `^${escapedEmail}$`, $options: 'i' } });
+      if (!user) {
+        user = await Patient.findOne({ email: { $regex: `^${escapedEmail}$`, $options: 'i' } });
+      }
+
+      if (!user) {
+        const patientId = `P${Date.now()}`;
+        user = new Patient({
+          username: email,
+          email,
+          firstName: payload?.given_name,
+          lastName: payload?.family_name,
+          name: displayName || email,
+          patientId,
+          lastAccess: new Date(),
+        });
+      } else {
+        user.email = user.email || email;
+        user.firstName = user.firstName || payload?.given_name;
+        user.lastName = user.lastName || payload?.family_name;
+        user.name = user.name || displayName || user.email || user.username;
+        user.lastAccess = new Date();
+      }
+
+      await user.save();
+
+      return res.json({
+        ok: true,
+        user: {
+          id: user._id,
+          email: user.email || user.username,
+          name: user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim() || email,
+          role: 'Patient',
+          lastAccess: user.lastAccess,
+        },
+      });
+    }
+
+    if (role === 'Hospital' || role === 'HOSPITAL') {
+      const Hospital = (await import('./models/Hospital.js')).default;
+      const query = {
+        $or: [
+          { username: { $regex: `^${escapedEmail}$`, $options: 'i' } },
+          { contactEmail: { $regex: `^${escapedEmail}$`, $options: 'i' } },
+        ],
+      };
+      const user = await Hospital.findOne(query);
+
+      if (!user) {
+        return res.status(404).json({ error: 'Hospital not found. Please register first.' });
+      }
+
+      if (user.status && user.status !== 'approved') {
+        return res.status(403).json({ error: 'Hospital registration is not approved yet', status: user.status });
+      }
+
+      user.lastAccess = new Date();
+      await user.save();
+
+      return res.json({
+        ok: true,
+        user: {
+          id: user._id,
+          email: user.contactEmail || user.username,
+          name: user.name,
+          role: 'Hospital',
+          lastAccess: user.lastAccess,
+        },
+      });
+    }
+
+    return res.status(400).json({ error: 'Unknown role' });
+  } catch (err) {
+    console.error('google auth error:', err);
     return res.status(500).json({ error: err.message || String(err) });
   }
 });
