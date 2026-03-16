@@ -71,7 +71,8 @@ const LoginPage: React.FC = () => {
             }
             navigateByRole(activeRole);
         } catch (err) {
-            notify('Google sign-in failed. Please try again.');
+            const errorMessage = err instanceof Error ? err.message : 'Google sign-in failed. Please try again.';
+            notify(errorMessage);
             setIsLoggingIn(false);
         }
     }, [loginWithGoogle, navigateByRole]);

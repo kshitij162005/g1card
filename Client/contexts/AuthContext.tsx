@@ -68,7 +68,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const data = await resp.json();
             if (!resp.ok) {
                 console.warn('google login failed', data);
-                return false;
+                throw new Error(data?.error || data?.message || 'Google sign-in failed');
             }
 
             const u = data.user;
@@ -86,7 +86,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return true;
         } catch (err) {
             console.error('google login error', err);
-            return false;
+            throw err;
         }
     };
 

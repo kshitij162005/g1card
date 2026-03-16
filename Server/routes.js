@@ -43,6 +43,10 @@ function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
 function calculateAgeFromDob(dob) {
   if (!dob) return undefined;
   const d = new Date(dob);
@@ -187,8 +191,12 @@ router.post('/auth/google', async (req, res) => {
       return res.status(400).json({ error: 'Google login is not supported for Super Admin' });
     }
 
+    if (!process.env.GOOGLE_CLIENT_ID) {
+      return res.status(503).json({ error: 'Server Google auth is not configured. Set GOOGLE_CLIENT_ID on backend.' });
+    }
+
     const payload = await verifyGoogleIdToken(idToken);
-    const email = payload?.email ? String(payload.email).trim().toLowerCase() : '';
+    const email = normalizeEmail(payload?.email);
     const emailVerified = Boolean(payload?.email_verified);
 
     if (!email || !emailVerified) {
@@ -245,6 +253,7 @@ router.post('/auth/google', async (req, res) => {
         $or: [
           { username: { $regex: `^${escapedEmail}$`, $options: 'i' } },
           { contactEmail: { $regex: `^${escapedEmail}$`, $options: 'i' } },
+          { adminEmail: { $regex: `^${escapedEmail}$`, $options: 'i' } },
         ],
       };
       const user = await Hospital.findOne(query);
@@ -275,7 +284,11 @@ router.post('/auth/google', async (req, res) => {
     return res.status(400).json({ error: 'Unknown role' });
   } catch (err) {
     console.error('google auth error:', err);
-    return res.status(500).json({ error: err.message || String(err) });
+    const message = err?.message || String(err);
+    if (/GOOGLE_CLIENT_ID/i.test(message) || /not configured/i.test(message)) {
+      return res.status(503).json({ error: 'Server Google auth is not configured. Set GOOGLE_CLIENT_ID on backend.' });
+    }
+    return res.status(500).json({ error: message });
   }
 });
 
