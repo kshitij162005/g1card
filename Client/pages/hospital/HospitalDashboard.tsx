@@ -6,6 +6,23 @@ import { useNavigate } from 'react-router-dom';
 import Loader from '../../components/Loader';
 import ProfileCompletionPopup from '../../components/ProfileCompletionPopup';
 
+const ONBOARDING_SNOOZE_MS = 24 * 60 * 60 * 1000;
+
+const HOSPITAL_ONBOARDING_FIELDS = [
+    { key: 'regNumber', label: 'Registration Number', type: 'text' as const, placeholder: 'Enter official registration number' },
+    { key: 'license', label: 'License Number', type: 'text' as const, placeholder: 'Enter healthcare license number' },
+    { key: 'phone', label: 'Hospital Phone', type: 'tel' as const, placeholder: 'Main hospital phone number' },
+    { key: 'address', label: 'Address', type: 'text' as const, placeholder: 'Building, street, area' },
+    { key: 'city', label: 'City', type: 'text' as const, placeholder: 'City' },
+    { key: 'state', label: 'State', type: 'text' as const, placeholder: 'State' },
+    { key: 'pin', label: 'PIN Code', type: 'text' as const, placeholder: 'Postal code' },
+    { key: 'contactEmail', label: 'Contact Email', type: 'email' as const, placeholder: 'Public support or contact email' },
+    { key: 'website', label: 'Website', type: 'url' as const, placeholder: 'https://yourhospital.com' },
+    { key: 'adminPhone', label: 'Admin Phone', type: 'tel' as const, placeholder: 'Primary admin phone number' },
+];
+
+type HospitalOnboardingKey = typeof HOSPITAL_ONBOARDING_FIELDS[number]['key'];
+
 const StatCard: React.FC<{ title: string; value: string | number; loading?: boolean; }> = ({ title, value, loading }) => (
     <Card className="text-center">
         <p className="text-sm text-slate-500 dark:text-slate-400">{title}</p>
@@ -26,13 +43,18 @@ interface RecentPatient {
 }
 
 interface HospitalProfile {
+    name?: string;
     regNumber?: string;
+    contactEmail?: string;
     phone?: string;
     address?: string;
     city?: string;
     state?: string;
     pin?: string;
     license?: string;
+    website?: string;
+    adminName?: string;
+    adminEmail?: string;
     adminPhone?: string;
 }
 
@@ -42,7 +64,20 @@ const HospitalDashboard: React.FC = () => {
     const [loadingMetrics, setLoadingMetrics] = useState(true);
     const [hospitalProfile, setHospitalProfile] = useState<HospitalProfile | null>(null);
     const [showProfileCompletionPopup, setShowProfileCompletionPopup] = useState(false);
-    const [missingProfileItems, setMissingProfileItems] = useState<string[]>([]);
+    const [skippedOnboardingFields, setSkippedOnboardingFields] = useState<string[]>([]);
+    const [profileSaving, setProfileSaving] = useState(false);
+    const [profileForm, setProfileForm] = useState<Record<HospitalOnboardingKey, string>>({
+        regNumber: '',
+        license: '',
+        phone: '',
+        address: '',
+        city: '',
+        state: '',
+        pin: '',
+        contactEmail: '',
+        website: '',
+        adminPhone: '',
+    });
     const profilePromptShownRef = useRef(false);
     const [metrics, setMetrics] = useState<{ patientsTotal: number; recordsTotal: number; patientsPending: number; recentPatients: RecentPatient[] }>({
         patientsTotal: 0,
@@ -64,6 +99,8 @@ const HospitalDashboard: React.FC = () => {
         if (!profile.adminPhone) missing.push('Admin Phone');
         return missing;
     };
+
+    const getHospitalFieldValue = (profile: HospitalProfile, key: HospitalOnboardingKey) => String((profile as any)?.[key] || '');
 
     useEffect(() => {
         const fetchMetrics = async () => {
@@ -103,24 +140,93 @@ const HospitalDashboard: React.FC = () => {
 
     useEffect(() => {
         if (!hospitalProfile) return;
+        const formValues: Record<HospitalOnboardingKey, string> = {
+            regNumber: getHospitalFieldValue(hospitalProfile, 'regNumber'),
+            license: getHospitalFieldValue(hospitalProfile, 'license'),
+            phone: getHospitalFieldValue(hospitalProfile, 'phone'),
+            address: getHospitalFieldValue(hospitalProfile, 'address'),
+            city: getHospitalFieldValue(hospitalProfile, 'city'),
+            state: getHospitalFieldValue(hospitalProfile, 'state'),
+            pin: getHospitalFieldValue(hospitalProfile, 'pin'),
+            contactEmail: getHospitalFieldValue(hospitalProfile, 'contactEmail'),
+            website: getHospitalFieldValue(hospitalProfile, 'website'),
+            adminPhone: getHospitalFieldValue(hospitalProfile, 'adminPhone'),
+        };
+        setProfileForm(formValues);
+
         if (profilePromptShownRef.current) return;
+        const snoozeKey = `g1card:hospital-onboarding:snooze:${user?.id || 'anon'}`;
+        const snoozeUntil = Number(window.localStorage.getItem(snoozeKey) || '0');
+        if (Date.now() < snoozeUntil) return;
 
         const missing = getMissingHospitalProfileItems(hospitalProfile);
         if (missing.length === 0) return;
 
         profilePromptShownRef.current = true;
-        setMissingProfileItems(missing);
+        setSkippedOnboardingFields([]);
         setShowProfileCompletionPopup(true);
         notify('Complete your hospital profile to improve onboarding and approvals.');
-    }, [hospitalProfile]);
-
-    const handleProfileCompleteNow = () => {
-        setShowProfileCompletionPopup(false);
-        navigate('/hospital/settings');
-    };
+    }, [hospitalProfile, user?.id]);
 
     const handleProfileLater = () => {
+        const snoozeKey = `g1card:hospital-onboarding:snooze:${user?.id || 'anon'}`;
+        window.localStorage.setItem(snoozeKey, String(Date.now() + ONBOARDING_SNOOZE_MS));
         setShowProfileCompletionPopup(false);
+    };
+
+    const handleOnboardingFieldChange = (key: string, value: string) => {
+        setProfileForm((prev) => ({ ...prev, [key]: value } as Record<HospitalOnboardingKey, string>));
+    };
+
+    const handleSkipOnboardingField = (key: string) => {
+        setSkippedOnboardingFields((prev) => (prev.includes(key) ? prev : [...prev, key]));
+    };
+
+    const handleUnskipOnboardingField = (key: string) => {
+        setSkippedOnboardingFields((prev) => prev.filter((item) => item !== key));
+    };
+
+    const handleSubmitOnboarding = async () => {
+        if (!user?.id || !hospitalProfile) return;
+
+        const changes: Record<string, string> = {};
+        HOSPITAL_ONBOARDING_FIELDS.forEach((field) => {
+            if (skippedOnboardingFields.includes(field.key)) return;
+            const nextValue = (profileForm[field.key] || '').trim();
+            if (!nextValue) return;
+            if (nextValue === String((hospitalProfile as any)?.[field.key] || '')) return;
+            changes[field.key] = nextValue;
+        });
+
+        if (Object.keys(changes).length === 0) {
+            notify('No onboarding answers to submit yet. You can continue later from Settings.');
+            setShowProfileCompletionPopup(false);
+            return;
+        }
+
+        setProfileSaving(true);
+        try {
+            const resp = await fetch(`${API_URL}/hospitals/${user.id}/update-request`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    changes,
+                    message: 'Submitted via hospital onboarding flow',
+                }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                notify(data?.error || data?.message || 'Unable to submit onboarding answers');
+                return;
+            }
+            setShowProfileCompletionPopup(false);
+            notify('Onboarding answers submitted for admin approval.');
+        } catch (err) {
+            console.error('submit hospital onboarding error', err);
+            notify('Error submitting onboarding answers');
+        } finally {
+            setProfileSaving(false);
+        }
     };
 
     if (loadingMetrics) {
@@ -211,9 +317,26 @@ const HospitalDashboard: React.FC = () => {
             <ProfileCompletionPopup
                 isOpen={showProfileCompletionPopup}
                 roleLabel="Hospital"
-                missingItems={missingProfileItems}
-                onCompleteNow={handleProfileCompleteNow}
+                title="Complete your hospital onboarding"
+                subtitle="Share details now or defer any question. All onboarding fields remain editable in Hospital Settings."
+                fields={HOSPITAL_ONBOARDING_FIELDS.map((field) => ({
+                    key: field.key,
+                    label: field.label,
+                    type: field.type,
+                    placeholder: field.placeholder,
+                    value: profileForm[field.key],
+                }))}
+                skippedFields={skippedOnboardingFields}
+                onFieldChange={handleOnboardingFieldChange}
+                onSkipField={handleSkipOnboardingField}
+                onUnskipField={handleUnskipOnboardingField}
+                onSubmit={handleSubmitOnboarding}
                 onLater={handleProfileLater}
+                onOpenDetails={() => {
+                    setShowProfileCompletionPopup(false);
+                    navigate('/hospital/settings');
+                }}
+                saving={profileSaving}
             />
         </div>
     );

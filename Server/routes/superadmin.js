@@ -71,12 +71,35 @@ router.get('/hospitals/pending', async (req, res) => {
 router.patch('/hospitals/:id/approve', async (req, res) => {
   try {
     const Hospital = (await import('../models/Hospital.js')).default;
+    const { sendHospitalLifecycleEmail } = await import('../utils/emailService.js');
     const id = req.params.id;
+    const { verificationChecklist = {} } = req.body || {};
+
+    const requiredChecklist = [
+      'regNumberVerified',
+      'licenseVerified',
+      'contactVerified',
+      'adminVerified',
+      'documentsVerified',
+    ];
+
+    const missingChecks = requiredChecklist.filter((key) => verificationChecklist[key] !== true);
+    if (missingChecks.length > 0) {
+      return res.status(400).json({ error: 'Document verification checklist must be completed before approval.' });
+    }
+
     const hospital = await Hospital.findById(id);
     if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
     hospital.status = 'approved';
     hospital.active = true;
     await hospital.save();
+
+    await sendHospitalLifecycleEmail({
+      to: hospital.contactEmail || hospital.username,
+      hospitalName: hospital.name,
+      status: 'approved',
+    });
+
     const safe = hospital.toObject();
     if (safe.password) delete safe.password;
     if (safe.salt) delete safe.salt;
@@ -91,6 +114,7 @@ router.patch('/hospitals/:id/approve', async (req, res) => {
 router.patch('/hospitals/:id/reject', async (req, res) => {
   try {
     const Hospital = (await import('../models/Hospital.js')).default;
+    const { sendHospitalLifecycleEmail } = await import('../utils/emailService.js');
     const id = req.params.id;
     const { reason } = req.body || {};
     const hospital = await Hospital.findById(id);
@@ -100,6 +124,14 @@ router.patch('/hospitals/:id/reject', async (req, res) => {
     // store optional rejection reason in a field (if exists) or audit logs
     hospital.rejectionReason = reason || '';
     await hospital.save();
+
+    await sendHospitalLifecycleEmail({
+      to: hospital.contactEmail || hospital.username,
+      hospitalName: hospital.name,
+      status: 'rejected',
+      reason,
+    });
+
     const safe = hospital.toObject();
     if (safe.password) delete safe.password;
     if (safe.salt) delete safe.salt;

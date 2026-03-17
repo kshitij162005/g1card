@@ -89,7 +89,7 @@ const PatientSettings: React.FC = () => {
     const [patient, setPatient] = useState<DetailedPatient | null>(null);
     const [showEdit, setShowEdit] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', dob: '', address: '', emergencyContactName: '', emergencyContactPhone: '' });
+    const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', dob: '', gender: '', address: '', emergencyContactName: '', emergencyContactPhone: '' });
     const [hospitalPermissions, setHospitalPermissions] = useState<HospitalPermissionEntry[]>([]);
     const [permissionSearch, setPermissionSearch] = useState('');
     const [permissionPage, setPermissionPage] = useState(1);
@@ -240,6 +240,7 @@ const PatientSettings: React.FC = () => {
             email: (patient?.email as string) || user?.email || '',
             phone: (patient?.phone as string) || '',
             dob: (patient?.dob as string) || '',
+            gender: (patient?.gender as string) || '',
             address: (patient?.address as string) || '',
             emergencyContactName: (patient?.emergencyContactName as string) || '',
             emergencyContactPhone: (patient?.emergencyContactPhone as string) || '',
@@ -283,6 +284,7 @@ const PatientSettings: React.FC = () => {
                 email: form.email,
                 phone: form.phone,
                 dob: form.dob,
+                gender: form.gender,
                 address: form.address,
                 emergencyContactName: form.emergencyContactName,
                 emergencyContactPhone: form.emergencyContactPhone,
@@ -710,6 +712,10 @@ const PatientSettings: React.FC = () => {
                         <p className="text-sm text-slate-800 dark:text-slate-200"><strong>Email:</strong> <span className="font-semibold text-[var(--app-text)]">{patient?.email || user?.email || '—'}</span> {patient?.email && <span className="text-green-600">(Verified)</span>}</p>
                         <p className="text-sm text-slate-800 dark:text-slate-200"><strong>Phone:</strong> <span className="font-semibold text-[var(--app-text)]">{patient?.phone || '—'}</span></p>
                         <p className="text-sm text-slate-800 dark:text-slate-200"><strong>DOB:</strong> <span className="font-semibold text-[var(--app-text)]">{patient?.dob || '—'}</span></p>
+                        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>Gender:</strong> <span className="font-semibold text-[var(--app-text)]">{(patient as any)?.gender || '—'}</span></p>
+                        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>Address:</strong> <span className="font-semibold text-[var(--app-text)]">{(patient as any)?.address || '—'}</span></p>
+                        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>Emergency Contact:</strong> <span className="font-semibold text-[var(--app-text)]">{(patient as any)?.emergencyContactName || '—'}</span></p>
+                        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>Emergency Contact Phone:</strong> <span className="font-semibold text-[var(--app-text)]">{(patient as any)?.emergencyContactPhone || '—'}</span></p>
                     </div>
                     <div className="flex gap-2 mt-4">
                         <button onClick={openEdit} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">Edit Profile</button>
@@ -921,13 +927,19 @@ const PatientSettings: React.FC = () => {
                                         <input id="edit-dob" type="date" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.dob} onChange={(e)=>updateField('dob', e.target.value)} />
                                     </div>
                                     <div>
+                                        <label htmlFor="edit-gender" className="block text-sm font-medium text-slate-300 mb-1.5">Gender</label>
+                                        <input id="edit-gender" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.gender} onChange={(e)=>updateField('gender', e.target.value)} placeholder="e.g. Female" />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
                                         <label htmlFor="edit-emergencyName" className="block text-sm font-medium text-slate-300 mb-1.5">Emergency Contact Name</label>
                                         <input id="edit-emergencyName" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.emergencyContactName} onChange={(e)=>updateField('emergencyContactName', e.target.value)} />
                                     </div>
-                                </div>
-                                <div>
-                                    <label htmlFor="edit-emergencyPhone" className="block text-sm font-medium text-slate-300 mb-1.5">Emergency Contact Phone</label>
-                                    <input id="edit-emergencyPhone" type="tel" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.emergencyContactPhone} onChange={(e)=>updateField('emergencyContactPhone', e.target.value)} />
+                                    <div>
+                                        <label htmlFor="edit-emergencyPhone" className="block text-sm font-medium text-slate-300 mb-1.5">Emergency Contact Phone</label>
+                                        <input id="edit-emergencyPhone" type="tel" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.emergencyContactPhone} onChange={(e)=>updateField('emergencyContactPhone', e.target.value)} />
+                                    </div>
                                 </div>
                             </div>
                         </div>

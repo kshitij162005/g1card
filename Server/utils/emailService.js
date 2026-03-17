@@ -289,3 +289,68 @@ export async function sendDeletionReviewEmailToPatient({ to, patientName, reques
     text: `${title}\n\nPatient: ${patientName}\nRequest Type: ${requestType}\nDecision: ${decision}\nReview Notes: ${reviewNotes || 'N/A'}\nOpen account settings: ${actionUrl}`,
   });
 }
+
+export async function sendHospitalLifecycleEmail({ to, hospitalName, status, reason }) {
+  const normalizedStatus = String(status || '').toLowerCase();
+  const appUrl = buildAppUrl('/#/login');
+
+  const statusMeta = {
+    pending: {
+      subject: `${APP_NAME}: Registration received and pending verification`,
+      headline: 'Hospital Registration Pending Verification',
+      intro: 'Your registration was received successfully. Our admin team will now verify documents and details before approval.',
+      actionLabel: 'Open G1CARD',
+      extra: [
+        'Status: Pending verification',
+        'You will receive another email once the review is completed.',
+      ],
+    },
+    approved: {
+      subject: `${APP_NAME}: Hospital registration approved`,
+      headline: 'Hospital Registration Approved',
+      intro: 'Your hospital account has been approved by the admin team. You can now log in and start using G1CARD.',
+      actionLabel: 'Login to G1CARD',
+      extra: [
+        'Status: Approved',
+        'Your account is now active.',
+      ],
+    },
+    rejected: {
+      subject: `${APP_NAME}: Hospital registration rejected`,
+      headline: 'Hospital Registration Rejected',
+      intro: 'Your registration request was reviewed but could not be approved at this time.',
+      actionLabel: 'Open G1CARD',
+      extra: [
+        'Status: Rejected',
+        `Reason: ${reason || 'No reason provided.'}`,
+      ],
+    },
+  }[normalizedStatus];
+
+  if (!statusMeta) {
+    return { ok: false, skipped: true, reason: 'Unsupported hospital lifecycle status' };
+  }
+
+  const html = buildEmailShell({
+    preheader: `${hospitalName || 'Hospital'} status update: ${normalizedStatus}`,
+    headline: statusMeta.headline,
+    intro: statusMeta.intro,
+    actionButton: { label: statusMeta.actionLabel, url: appUrl },
+    sections: [
+      {
+        title: 'Review update',
+        lines: [
+          `<strong>Hospital:</strong> ${hospitalName || 'Hospital'}`,
+          ...statusMeta.extra,
+        ],
+      },
+    ],
+  });
+
+  return sendEmail({
+    to,
+    subject: statusMeta.subject,
+    html,
+    text: `${statusMeta.headline}\n\nHospital: ${hospitalName || 'Hospital'}\n${statusMeta.extra.join('\n')}\n\nOpen app: ${appUrl}`,
+  });
+}
