@@ -190,7 +190,10 @@ const AddEditMedicalRecord: React.FC = () => {
             if (!resp.ok) throw new Error(d.error || 'Failed to submit record');
             notify('Record submitted');
             navigate(`/hospital/patients/${patientId}`);
-        } catch (err) { console.error('submit record', err); notify('Error submitting'); }
+        } catch (err: any) {
+            console.error('submit record', err);
+            notify(err?.message || 'Error submitting record');
+        }
         finally { setSubmitting(false); }
     };
 

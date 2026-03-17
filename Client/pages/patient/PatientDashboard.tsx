@@ -8,6 +8,19 @@ import { DetailedPatient } from '../../types';
 import Loader from '../../components/Loader';
 import ProfileCompletionPopup from '../../components/ProfileCompletionPopup';
 
+const ONBOARDING_SNOOZE_MS = 24 * 60 * 60 * 1000;
+
+const PATIENT_ONBOARDING_FIELDS = [
+    { key: 'phone', label: 'Phone Number', type: 'tel' as const, placeholder: 'Add your active phone number' },
+    { key: 'dob', label: 'Date of Birth', type: 'date' as const, placeholder: '' },
+    { key: 'gender', label: 'Gender', type: 'text' as const, placeholder: 'e.g. Female, Male, Non-binary' },
+    { key: 'address', label: 'Address', type: 'text' as const, placeholder: 'Street, city, state' },
+    { key: 'emergencyContactName', label: 'Emergency Contact Name', type: 'text' as const, placeholder: 'Who should we contact in emergencies?' },
+    { key: 'emergencyContactPhone', label: 'Emergency Contact Phone', type: 'tel' as const, placeholder: 'Emergency contact number' },
+];
+
+type PatientOnboardingKey = typeof PATIENT_ONBOARDING_FIELDS[number]['key'];
+
 const HealthSummaryItem: React.FC<{ label: string; value: string }> = ({ label, value }) => (
     <div className="text-center">
         <p className="text-sm text-slate-400 dark:text-slate-400">{label}</p>
@@ -82,18 +95,46 @@ const PatientDashboard: React.FC = () => {
     const [showAccessRequestModal, setShowAccessRequestModal] = useState(false);
     const [processingRequest, setProcessingRequest] = useState(false);
     const [showProfileCompletionPopup, setShowProfileCompletionPopup] = useState(false);
-    const [missingProfileItems, setMissingProfileItems] = useState<string[]>([]);
+    const [skippedOnboardingFields, setSkippedOnboardingFields] = useState<string[]>([]);
+    const [profileSaving, setProfileSaving] = useState(false);
+    const [profileForm, setProfileForm] = useState<Record<PatientOnboardingKey, string>>({
+        phone: '',
+        dob: '',
+        gender: '',
+        address: '',
+        emergencyContactName: '',
+        emergencyContactPhone: '',
+    });
     const profilePromptShownRef = useRef(false);
 
     const getMissingPatientProfileItems = (p: DetailedPatient | null) => {
         if (!p) return [];
+        const anyPatient = p as DetailedPatient & {
+            phone?: string;
+            emergencyContactName?: string;
+            emergencyContactPhone?: string;
+        };
         const missing: string[] = [];
-        const phone = (p as unknown as { phone?: string }).phone || p.contact;
+        const phone = anyPatient.phone || p.contact;
         if (!phone) missing.push('Phone Number');
         if (!p.dob) missing.push('Date of Birth');
         if (!p.gender) missing.push('Gender');
         if (!p.address) missing.push('Address');
+        if (!anyPatient.emergencyContactName) missing.push('Emergency Contact Name');
+        if (!anyPatient.emergencyContactPhone) missing.push('Emergency Contact Phone');
         return missing;
+    };
+
+    const getPatientFieldValue = (p: DetailedPatient, key: PatientOnboardingKey): string => {
+        const anyPatient = p as DetailedPatient & {
+            phone?: string;
+            emergencyContactName?: string;
+            emergencyContactPhone?: string;
+        };
+        if (key === 'phone') return anyPatient.phone || p.contact || '';
+        if (key === 'emergencyContactName') return anyPatient.emergencyContactName || '';
+        if (key === 'emergencyContactPhone') return anyPatient.emergencyContactPhone || '';
+        return String((p as any)[key] || '');
     };
 
     const openModal = () => {
@@ -216,16 +257,30 @@ const PatientDashboard: React.FC = () => {
 
     useEffect(() => {
         if (!patient) return;
+        const formValues: Record<PatientOnboardingKey, string> = {
+            phone: getPatientFieldValue(patient, 'phone'),
+            dob: getPatientFieldValue(patient, 'dob'),
+            gender: getPatientFieldValue(patient, 'gender'),
+            address: getPatientFieldValue(patient, 'address'),
+            emergencyContactName: getPatientFieldValue(patient, 'emergencyContactName'),
+            emergencyContactPhone: getPatientFieldValue(patient, 'emergencyContactPhone'),
+        };
+        setProfileForm(formValues);
+
         if (profilePromptShownRef.current) return;
+
+        const snoozeKey = `g1card:patient-onboarding:snooze:${user?.id || 'anon'}`;
+        const snoozeUntil = Number(window.localStorage.getItem(snoozeKey) || '0');
+        if (Date.now() < snoozeUntil) return;
 
         const missing = getMissingPatientProfileItems(patient);
         if (missing.length === 0) return;
 
         profilePromptShownRef.current = true;
-        setMissingProfileItems(missing);
+        setSkippedOnboardingFields([]);
         setShowProfileCompletionPopup(true);
         notify('Complete your patient profile for a better onboarding experience.');
-    }, [patient]);
+    }, [patient, user?.id]);
 
     const relativeTime = (iso?: string) => {
         if (!iso) return 'N/A';
@@ -283,13 +338,62 @@ const PatientDashboard: React.FC = () => {
         setShowAccessRequestModal(false);
     };
 
-    const handleProfileCompleteNow = () => {
+    const handleProfileLater = () => {
+        const snoozeKey = `g1card:patient-onboarding:snooze:${user?.id || 'anon'}`;
+        window.localStorage.setItem(snoozeKey, String(Date.now() + ONBOARDING_SNOOZE_MS));
         setShowProfileCompletionPopup(false);
-        navigate('/patient/settings');
     };
 
-    const handleProfileLater = () => {
-        setShowProfileCompletionPopup(false);
+    const handleOnboardingFieldChange = (key: string, value: string) => {
+        setProfileForm((prev) => ({ ...prev, [key]: value } as Record<PatientOnboardingKey, string>));
+    };
+
+    const handleSkipOnboardingField = (key: string) => {
+        setSkippedOnboardingFields((prev) => (prev.includes(key) ? prev : [...prev, key]));
+    };
+
+    const handleUnskipOnboardingField = (key: string) => {
+        setSkippedOnboardingFields((prev) => prev.filter((item) => item !== key));
+    };
+
+    const handleSubmitOnboarding = async () => {
+        if (!user?.id) return;
+
+        const body: Record<string, string> = {};
+        PATIENT_ONBOARDING_FIELDS.forEach((field) => {
+            if (skippedOnboardingFields.includes(field.key)) return;
+            const value = (profileForm[field.key] || '').trim();
+            if (!value) return;
+            body[field.key] = value;
+        });
+
+        if (Object.keys(body).length === 0) {
+            notify('No onboarding answers to save yet. You can continue later from Settings.');
+            setShowProfileCompletionPopup(false);
+            return;
+        }
+
+        setProfileSaving(true);
+        try {
+            const resp = await fetch(`${API_URL}/patients/${user.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                notify(data?.error || data?.message || 'Unable to save onboarding answers');
+                return;
+            }
+            setPatient(data.patient as DetailedPatient);
+            setShowProfileCompletionPopup(false);
+            notify('Onboarding answers saved successfully.');
+        } catch (err) {
+            console.error('save patient onboarding error', err);
+            notify('Error saving onboarding answers');
+        } finally {
+            setProfileSaving(false);
+        }
     };
 
     if (initialLoading) {
@@ -412,9 +516,26 @@ const PatientDashboard: React.FC = () => {
             <ProfileCompletionPopup
                 isOpen={showProfileCompletionPopup}
                 roleLabel="Patient"
-                missingItems={missingProfileItems}
-                onCompleteNow={handleProfileCompleteNow}
+                title="Complete your patient onboarding"
+                subtitle="Answer each question now or tap Do later on any field. You can finish everything from Settings."
+                fields={PATIENT_ONBOARDING_FIELDS.map((field) => ({
+                    key: field.key,
+                    label: field.label,
+                    type: field.type,
+                    placeholder: field.placeholder,
+                    value: profileForm[field.key],
+                }))}
+                skippedFields={skippedOnboardingFields}
+                onFieldChange={handleOnboardingFieldChange}
+                onSkipField={handleSkipOnboardingField}
+                onUnskipField={handleUnskipOnboardingField}
+                onSubmit={handleSubmitOnboarding}
                 onLater={handleProfileLater}
+                onOpenDetails={() => {
+                    setShowProfileCompletionPopup(false);
+                    navigate('/patient/settings');
+                }}
+                saving={profileSaving}
             />
 
             {showAccessRequestModal && pendingNotifications.length > 0 && (

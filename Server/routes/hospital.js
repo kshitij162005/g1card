@@ -938,6 +938,7 @@ router.post('/:id/patients/:patientId/records', async (req, res) => {
     const FormTemplate = (await import('../models/FormTemplate.js')).default;
     const Hospital = (await import('../models/Hospital.js')).default;
     const Patient = (await import('../models/Patient.js')).default;
+    const HospitalAccess = (await import('../models/HospitalAccess.js')).default;
     const id = req.params.id;
     const patientId = req.params.patientId;
     if (!id || !patientId) return res.status(400).json({ error: 'Missing hospital id or patient id' });
@@ -946,11 +947,27 @@ router.post('/:id/patients/:patientId/records', async (req, res) => {
     const patient = await Patient.findById(patientId);
     if (!patient) return res.status(404).json({ error: 'Patient not found' });
 
-    // check patient linked to hospital (in hospitals array or legacy field)
+    // Enforce consent status first when an access request record exists.
+    const accessDoc = await HospitalAccess.findOne({
+      hospital: hospital._id,
+      patient: patient._id,
+    })
+      .select('_id status accessLevel')
+      .lean();
+
+    if (accessDoc && accessDoc.status !== 'APPROVED') {
+      return res.status(403).json({
+        error: `Patient access is ${String(accessDoc.status || '').toLowerCase()}. Record submission is allowed only after approval.`,
+      });
+    }
+
+    // Fallback compatibility for legacy linked data without an access record.
     const hospitalIdStr = hospital._id.toString();
     const inHospitalsArray = patient.hospitals && patient.hospitals.some(h => h.toString() === hospitalIdStr);
     const inLegacyField = patient.hospital && patient.hospital.toString() === hospitalIdStr;
-    if (!inHospitalsArray && !inLegacyField) {
+    const approvedAccess = accessDoc && accessDoc.status === 'APPROVED';
+
+    if (!inHospitalsArray && !inLegacyField && !approvedAccess) {
       return res.status(400).json({ error: 'Patient is not linked to this hospital' });
     }
 
@@ -974,7 +991,6 @@ router.post('/:id/patients/:patientId/records', async (req, res) => {
     }
 
     // Get consent information for audit logging
-    const HospitalAccess = (await import('../models/HospitalAccess.js')).default;
     const access = await HospitalAccess.findOne({ hospital: hospital._id, patient: patient._id }).lean();
 
     // Create audit log for record creation

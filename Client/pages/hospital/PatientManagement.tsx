@@ -168,9 +168,8 @@ const PatientManagement: React.FC = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                             {patients.map(patient => {
-                                const isConsentPending = String(patient.status || '').toUpperCase() === 'PENDING';
-                                const isAccessRevoked = String(patient.status || '').toUpperCase() === 'REVOKED';
-                                const canInteract = !isConsentPending && !isAccessRevoked;
+                                const consentStatus = String(patient.status || '').toUpperCase();
+                                const canInteract = consentStatus === 'APPROVED';
                                 return (
                                 <tr key={patient.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-slate-800 dark:text-slate-200">
                                     <td className="py-4 px-6 whitespace-nowrap font-mono text-sm">{(patient as any).patientId || patient.id}</td>

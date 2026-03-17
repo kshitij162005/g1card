@@ -322,6 +322,14 @@ router.post('/auth/otp/verify-signup', async (req, res) => {
       emailVerified: true,
     });
     await doc.save();
+
+    const { sendHospitalLifecycleEmail } = await import('./utils/emailService.js');
+    await sendHospitalLifecycleEmail({
+      to: doc.contactEmail || normalizedEmail,
+      hospitalName: doc.name,
+      status: 'pending',
+    });
+
     otpDoc.usedAt = new Date();
     await otpDoc.save();
     return res.json({ ok: true, id: doc._id, message: 'Hospital registration completed.' });

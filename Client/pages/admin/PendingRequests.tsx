@@ -28,7 +28,15 @@ const PendingRequests: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [selectedHospital, setSelectedHospital] = useState<PendingHospital | null>(null);
     const [showRejectModal, setShowRejectModal] = useState(false);
+    const [showApproveModal, setShowApproveModal] = useState(false);
     const [rejectReason, setRejectReason] = useState('');
+    const [approvalChecklist, setApprovalChecklist] = useState({
+        regNumberVerified: false,
+        licenseVerified: false,
+        contactVerified: false,
+        adminVerified: false,
+        documentsVerified: false,
+    });
     const [processing, setProcessing] = useState(false);
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
@@ -57,17 +65,25 @@ const PendingRequests: React.FC = () => {
     };
 
     const handleApprove = async (hospitalId: string) => {
-        if (!confirm('Are you sure you want to approve this hospital?')) return;
         setProcessing(true);
         try {
             const resp = await fetch(`${API_URL}/superadmin/hospitals/${hospitalId}/approve`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ verificationChecklist: approvalChecklist }),
             });
             const data = await resp.json();
             if (data.ok) {
                 notify('Hospital approved successfully!');
                 setSelectedHospital(null);
+                setShowApproveModal(false);
+                setApprovalChecklist({
+                    regNumberVerified: false,
+                    licenseVerified: false,
+                    contactVerified: false,
+                    adminVerified: false,
+                    documentsVerified: false,
+                });
                 fetchPendingHospitals();
             } else {
                 notify('Failed to approve: ' + (data.error || 'Unknown error'));
@@ -116,6 +132,21 @@ const PendingRequests: React.FC = () => {
             minute: '2-digit',
         });
     };
+
+    const openApproveModal = (hospital: PendingHospital) => {
+        setSelectedHospital(hospital);
+        setShowRejectModal(false);
+        setApprovalChecklist({
+            regNumberVerified: false,
+            licenseVerified: false,
+            contactVerified: false,
+            adminVerified: false,
+            documentsVerified: false,
+        });
+        setShowApproveModal(true);
+    };
+
+    const canApprove = Object.values(approvalChecklist).every(Boolean);
 
     if (loading) {
         return <Loader text="Loading pending requests..." fullScreen />;
@@ -228,7 +259,7 @@ const PendingRequests: React.FC = () => {
                                         View Details
                                     </button>
                                     <button
-                                        onClick={() => handleApprove(hospital._id)}
+                                        onClick={() => openApproveModal(hospital)}
                                         disabled={processing}
                                         className="flex-1 lg:flex-none px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium disabled:opacity-50"
                                     >
@@ -414,8 +445,65 @@ const PendingRequests: React.FC = () => {
                                 Reject
                             </button>
                             <button
-                                onClick={() => handleApprove(selectedHospital._id)}
+                                onClick={() => openApproveModal(selectedHospital)}
                                 disabled={processing}
+                                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                            >
+                                Open Approval Verification
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Approve Modal */}
+            {showApproveModal && selectedHospital && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-md w-full">
+                        <div className="p-6 border-b border-slate-200 dark:border-slate-700">
+                            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200">Verify Before Approval</h2>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{selectedHospital.name}</p>
+                        </div>
+
+                        <div className="p-6 space-y-3">
+                            <p className="text-sm text-slate-700 dark:text-slate-300">Complete all checks to approve this hospital.</p>
+                            <ChecklistItem
+                                label="Hospital registration number is valid"
+                                checked={approvalChecklist.regNumberVerified}
+                                onChange={(checked) => setApprovalChecklist((prev) => ({ ...prev, regNumberVerified: checked }))}
+                            />
+                            <ChecklistItem
+                                label="License number matches official records"
+                                checked={approvalChecklist.licenseVerified}
+                                onChange={(checked) => setApprovalChecklist((prev) => ({ ...prev, licenseVerified: checked }))}
+                            />
+                            <ChecklistItem
+                                label="Address and contact details are accurate"
+                                checked={approvalChecklist.contactVerified}
+                                onChange={(checked) => setApprovalChecklist((prev) => ({ ...prev, contactVerified: checked }))}
+                            />
+                            <ChecklistItem
+                                label="Administrator credentials are verified"
+                                checked={approvalChecklist.adminVerified}
+                                onChange={(checked) => setApprovalChecklist((prev) => ({ ...prev, adminVerified: checked }))}
+                            />
+                            <ChecklistItem
+                                label="All submitted documents are authentic"
+                                checked={approvalChecklist.documentsVerified}
+                                onChange={(checked) => setApprovalChecklist((prev) => ({ ...prev, documentsVerified: checked }))}
+                            />
+                        </div>
+
+                        <div className="p-6 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3">
+                            <button
+                                onClick={() => setShowApproveModal(false)}
+                                className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => handleApprove(selectedHospital._id)}
+                                disabled={processing || !canApprove}
                                 className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
                             >
                                 {processing ? 'Processing...' : 'Approve Hospital'}
@@ -481,9 +569,14 @@ const InfoRow: React.FC<{ label: string; value: string | undefined; fullWidth?: 
     </div>
 );
 
-const ChecklistItem: React.FC<{ label: string }> = ({ label }) => (
+const ChecklistItem: React.FC<{ label: string; checked?: boolean; onChange?: (checked: boolean) => void }> = ({ label, checked = false, onChange }) => (
     <label className="flex items-center space-x-2 cursor-pointer">
-        <input type="checkbox" className="w-4 h-4 rounded text-brand-primary focus:ring-brand-accent" />
+        <input
+            type="checkbox"
+            checked={checked}
+            onChange={(e) => onChange?.(e.target.checked)}
+            className="w-4 h-4 rounded text-brand-primary focus:ring-brand-accent"
+        />
         <span className="text-sm text-slate-700 dark:text-slate-300">{label}</span>
     </label>
 );
