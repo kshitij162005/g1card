@@ -7,6 +7,7 @@ interface AuthContextType {
     user: User | null;
     login: (role: Role, email: string, password: string) => Promise<boolean>;
     loginWithGoogle: (role: Role, idToken: string) => Promise<boolean>;
+    loginSimulation: (role: Role) => Promise<boolean>;
     logout: () => void;
 }
 
@@ -45,6 +46,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 email: u.email,
                 name: u.name,
                 role: role,
+                isSimulation: false,
                 lastLogin: new Date().toISOString(),
                 lastAccess: u.lastAccess || new Date().toISOString(),
             };
@@ -77,6 +79,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 email: u.email,
                 name: u.name,
                 role: role,
+                isSimulation: false,
                 lastLogin: new Date().toISOString(),
                 lastAccess: u.lastAccess || new Date().toISOString(),
             };
@@ -90,6 +93,39 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     };
 
+    const loginSimulation = async (role: Role) => {
+        try {
+            const resp = await fetch(`${API_URL}/auth/simulation-login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ role }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                console.warn('simulation login failed', data);
+                return false;
+            }
+
+            const u = data.user;
+            const newUser: User = {
+                id: u.id,
+                email: u.email,
+                name: u.name,
+                role,
+                isSimulation: true,
+                lastLogin: new Date().toISOString(),
+                lastAccess: u.lastAccess || new Date().toISOString(),
+            };
+
+            setUser(newUser);
+            localStorage.setItem('g1card_user', JSON.stringify(newUser));
+            return true;
+        } catch (err) {
+            console.error('simulation login error', err);
+            return false;
+        }
+    };
+
     const logout = () => {
         setUser(null);
         // Clear from localStorage
@@ -97,7 +133,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, loginWithGoogle, logout }}>
+        <AuthContext.Provider value={{ user, login, loginWithGoogle, loginSimulation, logout }}>
             {children}
         </AuthContext.Provider>
     );

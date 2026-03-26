@@ -509,6 +509,85 @@ router.post('/auth/google', async (req, res) => {
   }
 });
 
+// Auth: simulation login for demos using existing sample data in DB
+router.post('/auth/simulation-login', async (req, res) => {
+  try {
+    const { role } = req.body || {};
+    if (!role) return res.status(400).json({ error: 'role is required' });
+
+    if (role === 'Super Admin' || role === 'Super_Admin' || role === 'SUPER_ADMIN') {
+      const Superadmin = (await import('./models/Superadmin.js')).default;
+      const user = await Superadmin.findOne({}).sort({ _id: 1 });
+      if (!user) return res.status(404).json({ error: 'No Super Admin sample user found' });
+      return res.json({
+        ok: true,
+        simulation: true,
+        user: {
+          id: user._id,
+          email: user.username,
+          name: 'Super Admin',
+          role: 'Super Admin',
+        },
+      });
+    }
+
+    if (role === 'Patient' || role === 'PATIENT') {
+      const Patient = (await import('./models/Patient.js')).default;
+      const user = await Patient.findOne({}).sort({ _id: 1 });
+      if (!user) return res.status(404).json({ error: 'No Patient sample user found' });
+
+      try {
+        user.lastAccess = new Date();
+        await user.save();
+      } catch (e) {
+        console.warn('Could not update lastAccess for simulation patient', e && e.message ? e.message : e);
+      }
+
+      return res.json({
+        ok: true,
+        simulation: true,
+        user: {
+          id: user._id,
+          email: user.email || user.username,
+          name: user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+          role: 'Patient',
+          lastAccess: user.lastAccess,
+        },
+      });
+    }
+
+    if (role === 'Hospital' || role === 'HOSPITAL') {
+      const Hospital = (await import('./models/Hospital.js')).default;
+      const user = await Hospital.findOne({ status: 'approved' }).sort({ _id: 1 }) || await Hospital.findOne({}).sort({ _id: 1 });
+      if (!user) return res.status(404).json({ error: 'No Hospital sample user found' });
+
+      try {
+        user.lastAccess = new Date();
+        await user.save();
+      } catch (e) {
+        console.warn('Could not update lastAccess for simulation hospital', e && e.message ? e.message : e);
+      }
+
+      return res.json({
+        ok: true,
+        simulation: true,
+        user: {
+          id: user._id,
+          email: user.contactEmail || user.username,
+          name: user.name,
+          role: 'Hospital',
+          lastAccess: user.lastAccess,
+        },
+      });
+    }
+
+    return res.status(400).json({ error: 'Unknown role' });
+  } catch (err) {
+    console.error('simulation login error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
 // Auth: login for any role
 router.post('/auth/login', async (req, res) => {
   try {

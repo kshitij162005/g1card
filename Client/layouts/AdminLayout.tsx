@@ -21,6 +21,8 @@ const AdminLayout: React.FC = () => {
     const [showSettingsMenu, setShowSettingsMenu] = useState(false);
     const [showMobileNav, setShowMobileNav] = useState(false);
     const [themeMode, setThemeMode] = useState<ThemeMode>(() => getStoredTheme());
+    const [showSimulationModal, setShowSimulationModal] = useState(false);
+    const [blockedActionLabel, setBlockedActionLabel] = useState('This action');
 
     const handleLogout = () => {
         logout();
@@ -37,6 +39,50 @@ const AdminLayout: React.FC = () => {
 
     const isAdminNotifyContext = location.pathname.includes('/admin/pending') || location.pathname.includes('/admin/update-requests');
     const isAdminSettingsPage = location.pathname.includes('/admin/settings');
+    const isAdminSimulation = Boolean(user?.isSimulation);
+
+    const openSimulationGuard = (label?: string) => {
+        setBlockedActionLabel(label || 'This action');
+        setShowSimulationModal(true);
+    };
+
+    const getActionLabel = (el: HTMLElement | null): string => {
+        if (!el) return 'This action';
+        const aria = el.getAttribute('aria-label');
+        if (aria) return aria;
+        const dataTitle = el.getAttribute('title');
+        if (dataTitle) return dataTitle;
+        const text = (el.textContent || '').trim();
+        return text ? `"${text.slice(0, 40)}"` : 'This action';
+    };
+
+    const handleSimulationMainClickCapture = (e: React.MouseEvent<HTMLElement>) => {
+        if (!isAdminSimulation) return;
+
+        const target = e.target as HTMLElement;
+        const link = target.closest('a[href]') as HTMLAnchorElement | null;
+        if (link) {
+            const href = link.getAttribute('href') || '';
+            if (href.startsWith('/admin') || href.startsWith('#/admin')) {
+                return;
+            }
+        }
+
+        const actionEl = target.closest('button, input[type="button"], input[type="submit"], [role="button"], select, textarea, summary') as HTMLElement | null;
+        if (!actionEl) return;
+        if (actionEl.closest('[data-simulation-allow="true"]')) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        openSimulationGuard(getActionLabel(actionEl));
+    };
+
+    const handleSimulationMainSubmitCapture = (e: React.FormEvent<HTMLElement>) => {
+        if (!isAdminSimulation) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openSimulationGuard('Submitting this form');
+    };
 
     const navLinkClasses = ({ isActive }: { isActive: boolean }): string =>
         `block w-full px-4 py-3 rounded-xl text-sm font-medium leading-snug transition-colors cursor-pointer ${isActive ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-700 dark:text-slate-300 bg-transparent'}`;
@@ -88,6 +134,15 @@ const AdminLayout: React.FC = () => {
                             </div>
 
                             <div className="flex items-center gap-2">
+                                {user?.isSimulation && (
+                                    <span
+                                        data-simulation-allow="true"
+                                        className="inline-flex items-center gap-1.5 h-10 px-3 shrink-0 rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-soft)] text-xs font-semibold text-[var(--app-text)]"
+                                    >
+                                        <span className="h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" />
+                                        <span className="hidden sm:inline">Simulation</span>
+                                    </span>
+                                )}
                                 <button
                                     type="button"
                                     onClick={() => navigate('/admin/pending')}
@@ -178,7 +233,11 @@ const AdminLayout: React.FC = () => {
                         </div>
                     </header>
 
-                    <main className="admin-shell p-4 md:p-6 max-w-[1400px] mx-auto w-full">
+                    <main
+                        className="admin-shell p-4 md:p-6 max-w-[1400px] mx-auto w-full"
+                        onClickCapture={handleSimulationMainClickCapture}
+                        onSubmitCapture={handleSimulationMainSubmitCapture}
+                    >
                         <Outlet />
                     </main>
                 </div>
@@ -203,6 +262,38 @@ const AdminLayout: React.FC = () => {
                         </div>
                         <nav className="space-y-1">{renderNavItems()}</nav>
                     </aside>
+                </div>
+            )}
+
+            {showSimulationModal && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/45 backdrop-blur-[1px]" onClick={() => setShowSimulationModal(false)} />
+                    <div className="relative w-full max-w-md rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-6 shadow-2xl">
+                        <div className="flex items-center gap-3">
+                            <div className="relative h-10 w-10 rounded-full bg-amber-500/15 border border-amber-400/40 flex items-center justify-center">
+                                <span className="absolute h-8 w-8 rounded-full border border-amber-300/40 animate-pulse" />
+                                <span className="text-amber-600 dark:text-amber-300 font-bold">!</span>
+                            </div>
+                            <div>
+                                <p className="text-base font-semibold text-[var(--app-text)]">Read-only simulation</p>
+                                <p className="text-xs text-[var(--app-muted)]">Preview flow is active for admin simulation mode.</p>
+                            </div>
+                        </div>
+
+                        <p className="mt-4 text-sm leading-6 text-[var(--app-text)]">
+                            {blockedActionLabel} is disabled in simulation mode. You can explore screens, tables, and dialogs, but no real updates will be saved.
+                        </p>
+
+                        <div className="mt-5 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setShowSimulationModal(false)}
+                                className="h-10 px-4 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-500"
+                            >
+                                Continue Exploring
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

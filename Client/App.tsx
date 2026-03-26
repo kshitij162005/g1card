@@ -136,6 +136,15 @@ const AppRoutes: React.FC = () => {
     }
 }
 
+const AppShell: React.FC = () => {
+    return (
+        <>
+            <AppRoutes />
+            <AppNotificationCenter />
+        </>
+    );
+};
+
 
 const App: React.FC = () => {
     useEffect(() => {
@@ -151,8 +160,7 @@ const App: React.FC = () => {
   return (
     <AuthProvider>
         <HashRouter>
-            <AppRoutes/>
-                        <AppNotificationCenter />
+                        <AppShell />
         </HashRouter>
     </AuthProvider>
   );
