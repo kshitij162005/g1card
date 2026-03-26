@@ -10,6 +10,7 @@ export interface User {
     email: string;
     name: string;
     role: Role;
+    isSimulation?: boolean;
     lastLogin?: string;
     lastAccess?: string;
 }

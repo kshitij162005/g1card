@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Role } from '../types';
 import Loader from '../components/Loader';
 
-const LOGIN_ROLES = [Role.PATIENT, Role.HOSPITAL] as const;
+const STANDARD_LOGIN_ROLES = [Role.PATIENT, Role.HOSPITAL] as const;
 
 const LoginPage: React.FC = () => {
     const [email, setEmail] = useState('');
@@ -13,24 +13,30 @@ const LoginPage: React.FC = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [isLoggingIn, setIsLoggingIn] = useState(false);
     const [isGoogleSdkReady, setIsGoogleSdkReady] = useState(false);
+    const [isSimulationMode, setIsSimulationMode] = useState(false);
     const googleButtonRef = useRef<HTMLDivElement | null>(null);
     const roleRef = useRef<Role>(role);
     const navigate = useNavigate();
     const location = useLocation();
-    const { login, loginWithGoogle } = useAuth();
+    const { login, loginWithGoogle, loginSimulation } = useAuth();
     const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
     const isAdminLogin = location.pathname === '/admin/login';
-    const emailPlaceholder = role === Role.HOSPITAL ? 'admin@hospital.com' : 'patient@email.com';
+    const availableRoles = STANDARD_LOGIN_ROLES;
+    const emailPlaceholder = role === Role.HOSPITAL
+        ? 'admin@hospital.com'
+        : role === Role.SUPER_ADMIN
+            ? 'superadmin@g1card.com'
+            : 'patient@email.com';
 
     useEffect(() => {
         if (isAdminLogin) {
             setRole(Role.SUPER_ADMIN);
             return;
         }
-        if (role === Role.SUPER_ADMIN) {
+        if (!isSimulationMode && role === Role.SUPER_ADMIN) {
             setRole(Role.PATIENT);
         }
-    }, [isAdminLogin, role]);
+    }, [isAdminLogin, role, isSimulationMode]);
 
     useEffect(() => {
         roleRef.current = role;
@@ -104,7 +110,8 @@ const LoginPage: React.FC = () => {
 
         googleButtonRef.current.innerHTML = '';
 
-        if (!LOGIN_ROLES.includes(role as (typeof LOGIN_ROLES)[number])) return;
+        if (isSimulationMode) return;
+        if (!STANDARD_LOGIN_ROLES.includes(role as (typeof STANDARD_LOGIN_ROLES)[number])) return;
         if (!isGoogleSdkReady || !window.google?.accounts?.id) return;
         if (!googleClientId) return;
 
@@ -122,15 +129,17 @@ const LoginPage: React.FC = () => {
             width: googleButtonRef.current.offsetWidth || 320,
             text: 'continue_with',
         });
-    }, [googleClientId, handleGoogleCredential, isGoogleSdkReady, role]);
+    }, [googleClientId, handleGoogleCredential, isGoogleSdkReady, isSimulationMode, role]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoggingIn(true);
         try {
-            const ok = await login(role, email, password);
+            const ok = isSimulationMode
+                ? await loginSimulation(role)
+                : await login(role, email, password);
             if (!ok) {
-                notify('Login failed. Check credentials.');
+                notify(isSimulationMode ? 'Simulation login failed for selected role.' : 'Login failed. Check credentials.');
                 setIsLoggingIn(false);
                 return;
             }
@@ -149,7 +158,7 @@ const LoginPage: React.FC = () => {
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.2),transparent_42%),radial-gradient(circle_at_bottom,rgba(14,165,233,0.16),transparent_38%)]" />
 
             <div className={`relative z-10 mx-auto w-full ${isAdminLogin ? 'max-w-md' : 'max-w-6xl'}`}>
-                <div className={`grid gap-8 items-center ${isAdminLogin ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
+                <div className={`grid gap-8 items-start ${isAdminLogin ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
                     {!isAdminLogin && (
                         <aside className="hidden lg:block">
                             <div className="rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)]/96 p-8 shadow-[0_10px_30px_rgba(36,50,71,0.14)] dark:shadow-[0_10px_30px_rgba(2,6,23,0.35)]">
@@ -183,11 +192,42 @@ const LoginPage: React.FC = () => {
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-5">
+                        <div className="rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-soft)]/55 p-3 sm:p-3.5">
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <p className="text-sm font-semibold text-[var(--app-text)]">Simulation mode</p>
+                                    <p className="mt-1 text-xs leading-5 text-[var(--app-muted)]">
+                                        {isAdminLogin
+                                            ? 'Preview the admin dashboard with sandbox data. No credentials required.'
+                                            : 'Explore every role with sample data. No credentials needed.'}
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsSimulationMode((prev) => !prev)}
+                                    className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border p-0.5 overflow-hidden transition-colors duration-300 ease-out ${isSimulationMode ? 'bg-blue-600 border-blue-600' : 'bg-[var(--app-surface)] border-[var(--app-border)]'}`}
+                                    aria-pressed={isSimulationMode}
+                                    aria-label="Toggle simulation mode"
+                                >
+                                    <span
+                                        className="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-[0_1px_3px_rgba(15,23,42,0.25)] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                                        style={{ left: isSimulationMode ? 'calc(100% - 18px)' : '2px' }}
+                                    />
+                                </button>
+                            </div>
+                            <p
+                                className={`text-xs font-medium text-[var(--app-accent)] transition-all duration-200 overflow-hidden ${isSimulationMode ? 'mt-2 max-h-10 opacity-100' : 'mt-0 max-h-0 opacity-0'}`}
+                                aria-hidden={!isSimulationMode}
+                            >
+                                Simulation users are loaded directly from seeded sample records.
+                            </p>
+                        </div>
+
                         {!isAdminLogin && (
                             <div>
                                 <span className="text-sm font-medium text-[var(--app-text)]">Sign in as</span>
                                 <div className="mt-2 grid grid-cols-2 gap-1 rounded-xl bg-[var(--app-surface-soft)] p-1">
-                                    {LOGIN_ROLES.map((r) => (
+                                    {availableRoles.map((r) => (
                                         <label
                                             key={r}
                                             className={`login-role-pill flex items-center justify-center h-10 rounded-lg cursor-pointer transition-colors ${role === r ? 'login-role-pill-active !bg-[var(--app-surface)] border border-[var(--app-border)] text-[var(--app-text)] shadow-sm' : 'border border-transparent text-[var(--app-muted)] hover:text-[var(--app-text)] hover:bg-[var(--app-surface)]/70'}`}
@@ -207,9 +247,10 @@ const LoginPage: React.FC = () => {
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
+                                    disabled={isSimulationMode}
                                 className="block h-11 w-full rounded-lg border border-[var(--app-border)] bg-[var(--app-surface)] px-3 text-sm text-[var(--app-text)] placeholder:text-[var(--app-muted)] focus:outline-none focus:ring-2 focus:ring-blue-500/60 focus:border-blue-500/70"
-                                placeholder={emailPlaceholder}
-                                required
+                                    placeholder={isSimulationMode ? 'Not required in simulation mode' : emailPlaceholder}
+                                    required={!isSimulationMode}
                             />
                         </div>
 
@@ -221,8 +262,10 @@ const LoginPage: React.FC = () => {
                                     type={showPassword ? 'text' : 'password'}
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
+                                    disabled={isSimulationMode}
                                     className="block h-11 w-full rounded-lg border border-[var(--app-border)] bg-[var(--app-surface)] px-3 pr-10 text-sm text-[var(--app-text)] placeholder:text-[var(--app-muted)] focus:outline-none focus:ring-2 focus:ring-blue-500/60 focus:border-blue-500/70"
-                                    required
+                                    placeholder={isSimulationMode ? 'Not required in simulation mode' : ''}
+                                    required={!isSimulationMode}
                                 />
                                 <button
                                     type="button"
@@ -253,7 +296,9 @@ const LoginPage: React.FC = () => {
                                 <button
                                     type="button"
                                     onClick={() => navigate(role === Role.HOSPITAL ? '/hospital/register' : '/patient/register')}
-                                    className="font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+                                    className={`font-semibold text-blue-600 dark:text-blue-400 transition-colors ${isSimulationMode ? 'opacity-0 pointer-events-none' : 'hover:text-blue-700 dark:hover:text-blue-300'}`}
+                                    tabIndex={isSimulationMode ? -1 : 0}
+                                    aria-hidden={isSimulationMode}
                                 >
                                     {role === Role.HOSPITAL ? 'Register hospital' : 'Create account'}
                                 </button>
@@ -264,20 +309,26 @@ const LoginPage: React.FC = () => {
                             type="submit"
                             className="h-11 w-full rounded-lg bg-blue-600 text-sm font-semibold text-white transition-colors hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400/70"
                         >
-                            Login
+                            {isSimulationMode ? 'Enter Simulation' : 'Login'}
                         </button>
 
                         {!isAdminLogin && (
-                            <div className="pt-1">
-                                    <div className="flex items-center gap-3">
-                                        <div className="h-px flex-1 bg-[var(--app-border)]"></div>
-                                        <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--app-muted)]">Or continue with</span>
-                                        <div className="h-px flex-1 bg-[var(--app-border)]"></div>
+                            <div className="pt-1 min-h-[78px]">
+                                <div className="flex items-center gap-3">
+                                    <div className="h-px flex-1 bg-[var(--app-border)]"></div>
+                                    <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--app-muted)]">Or continue with</span>
+                                    <div className="h-px flex-1 bg-[var(--app-border)]"></div>
                                 </div>
-                                {!googleClientId && (
+                                {!googleClientId && !isSimulationMode && (
                                     <p className="mt-3 text-xs text-center text-amber-700 dark:text-amber-400">Google login is unavailable. Missing VITE_GOOGLE_CLIENT_ID.</p>
                                 )}
-                                <div ref={googleButtonRef} className="mt-3 min-h-10 w-full flex justify-center"></div>
+                                {isSimulationMode ? (
+                                    <div className="mt-3 min-h-10 w-full rounded-lg border border-dashed border-[var(--app-border)] bg-[var(--app-surface-soft)]/45 px-3 py-2 text-center text-xs text-[var(--app-muted)] flex items-center justify-center">
+                                        Google sign-in is unavailable in simulation mode.
+                                    </div>
+                                ) : (
+                                    <div ref={googleButtonRef} className="mt-3 min-h-10 w-full flex justify-center"></div>
+                                )}
                             </div>
                         )}
                     </form>

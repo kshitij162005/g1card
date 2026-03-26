@@ -84,6 +84,12 @@ const HospitalHeader: React.FC<{
                 </div>
                 <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 min-w-0">
                     <span className="text-[var(--app-muted)] text-sm hidden sm:block">Welcome, {user?.name}</span>
+                    {user?.isSimulation && (
+                        <span className="inline-flex items-center gap-1.5 h-10 px-3 shrink-0 rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-soft)] text-xs font-semibold text-[var(--app-text)]">
+                            <span className="h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" />
+                            <span className="hidden md:inline">Simulation</span>
+                        </span>
+                    )}
                     {isActive && onOpenNotifications && (
                         <button
                             type="button"
