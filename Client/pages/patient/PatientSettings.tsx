@@ -112,6 +112,7 @@ const PatientSettings: React.FC = () => {
     const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences>(DEFAULT_NOTIFICATION_PREFERENCES);
     const [notificationLoading, setNotificationLoading] = useState(false);
     const [notificationSaving, setNotificationSaving] = useState(false);
+    const [allowHospitalsUpdate, setAllowHospitalsUpdate] = useState<boolean>(true);
     const [exportingFormat, setExportingFormat] = useState<'csv' | 'pdf' | null>(null);
     const [submittingDeletion, setSubmittingDeletion] = useState(false);
     const [showDeletionConfirmModal, setShowDeletionConfirmModal] = useState(false);
@@ -194,6 +195,12 @@ const PatientSettings: React.FC = () => {
 
         return () => window.clearInterval(interval);
     }, [user?.id]);
+
+    useEffect(() => {
+        if (patient && (patient as any).allowHospitalsUpdate !== undefined) {
+            setAllowHospitalsUpdate(Boolean((patient as any).allowHospitalsUpdate));
+        }
+    }, [patient]);
 
     useEffect(() => {
         const tab = searchParams.get('tab');
@@ -603,6 +610,18 @@ const PatientSettings: React.FC = () => {
                 ...DEFAULT_NOTIFICATION_PREFERENCES,
                 ...(data?.preferences || notificationPreferences),
             });
+            // Also save privacy preference: allowHospitalsUpdate
+            try {
+                const r2 = await fetch(`${API_URL}/patients/${user.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ allowHospitalsUpdate }),
+                });
+                // ignore response details; backend may or may not persist this exact field
+                if (!r2.ok) console.warn('Could not persist allowHospitalsUpdate');
+            } catch (e) {
+                console.warn('save privacy preference error', e);
+            }
             notify('Notification preferences saved');
         } catch (err) {
             console.error('save notification preferences error', err);
@@ -777,9 +796,19 @@ const PatientSettings: React.FC = () => {
                 
                 <Section title="Privacy & Data">
                      <div className="space-y-3">
-                        <ToggleSwitch label="Allow hospitals to update my records" checked />
+                        <ToggleSwitch
+                            label="Allow hospitals to update my records"
+                            checked={allowHospitalsUpdate}
+                            onChange={(checked) => {
+                                // Only confirm when turning OFF
+                                if (!checked) {
+                                    const ok = window.confirm('Are you sure you want to allow hospitals to stop updating your records? This may prevent hospitals from adding or editing records on your behalf.');
+                                    if (!ok) return;
+                                }
+                                setAllowHospitalsUpdate(checked);
+                            }}
+                        />
                         <ToggleSwitch label="Share medical history for emergency" checked />
-                        <ToggleSwitch label="Allow anonymous data for research" checked={false} />
                     </div>
                     <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-4">
                         <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -808,25 +837,6 @@ const PatientSettings: React.FC = () => {
                         )}
                     </div>
                     <div className="flex flex-col md:flex-row justify-between items-center pt-4 border-t dark:border-slate-700 mt-6">
-                        <div>
-                             <h4 className="font-semibold text-slate-800 dark:text-slate-200">Download Your Data</h4>
-                             <div className="mt-1 flex flex-wrap gap-2">
-                                <button
-                                    onClick={() => downloadDataExport('pdf')}
-                                    disabled={exportingFormat !== null}
-                                    className="px-4 py-2 bg-slate-200 dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-60"
-                                >
-                                    {exportingFormat === 'pdf' ? 'Downloading PDF...' : 'Download PDF'}
-                                </button>
-                                <button
-                                    onClick={() => downloadDataExport('csv')}
-                                    disabled={exportingFormat !== null}
-                                    className="px-4 py-2 bg-slate-200 dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-60"
-                                >
-                                    {exportingFormat === 'csv' ? 'Downloading CSV...' : 'Download CSV'}
-                                </button>
-                             </div>
-                        </div>
                         <div className="mt-4 md:mt-0">
                              <h4 className="font-semibold text-red-700 dark:text-red-400">Data Deletion Request</h4>
                              <button

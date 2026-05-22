@@ -9,11 +9,11 @@ export interface AppNotificationPayload {
 
 const APP_NOTIFICATION_EVENT = 'g1card:notify';
 
-interface WindowWithAlertBridge extends Window {
+type WindowWithAlertBridge = Window & {
     __g1cardAlertBridgeInstalled?: boolean;
-    __g1cardOriginalAlert?: typeof window.alert;
-    notify?: (message?: unknown) => void;
-}
+    __g1cardOriginalAlert?: (message?: unknown) => void;
+    alert?: (message?: unknown) => void;
+};
 
 export const pushAppNotification = (payload: AppNotificationPayload) => {
     window.dispatchEvent(new CustomEvent(APP_NOTIFICATION_EVENT, { detail: payload }));
@@ -54,12 +54,13 @@ export const installAlertNotificationBridge = () => {
         return;
     }
 
-    windowRef.__g1cardOriginalAlert = window.alert.bind(window);
+    windowRef.__g1cardOriginalAlert = typeof windowRef.alert === 'function'
+        ? windowRef.alert.bind(windowRef)
+        : undefined;
     windowRef.__g1cardAlertBridgeInstalled = true;
-    windowRef.notify = notify;
     (globalThis as { notify?: (message?: unknown) => void }).notify = notify;
 
-    window.alert = notify;
+    windowRef.alert = notify;
 };
 
 export { APP_NOTIFICATION_EVENT };
