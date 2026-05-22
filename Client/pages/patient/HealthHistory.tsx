@@ -4,6 +4,8 @@ import React, { useEffect, useState } from 'react';
 import Card from '../../components/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import Loader from '../../components/Loader';
+import { notify } from '../../utils/notifications';
+import { generateMedicalPDF } from '../../utils/pdf/generateMedicalPDF';
 
 interface MedicalRecord {
     _id: string;
@@ -50,6 +52,9 @@ const HealthHistory: React.FC = () => {
     const [hospitalsPagination, setHospitalsPagination] = useState<Pagination | null>(null);
     const [loadingHospitals, setLoadingHospitals] = useState(true);
     const [loadingMoreHospitals, setLoadingMoreHospitals] = useState(false);
+    const [downloadingRecords, setDownloadingRecords] = useState(false);
+    const [downloadingHospitalId, setDownloadingHospitalId] = useState<string | null>(null);
+    const [downloadingRecordId, setDownloadingRecordId] = useState<string | null>(null);
     
     const [hospitalRecords, setHospitalRecords] = useState<Map<string, HospitalRecordsData>>(new Map());
     const [expandedHospitals, setExpandedHospitals] = useState<Set<string>>(new Set());
@@ -207,6 +212,179 @@ const HealthHistory: React.FC = () => {
         });
     };
 
+    const sanitizeFileName = (value: string) => String(value || 'record').replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, ' ').trim();
+
+    const resolvePatientName = () => {
+        const userName = (user as any)?.name || (user as any)?.fullName || (user as any)?.firstName || '';
+        const lastName = (user as any)?.lastName || '';
+        return `${userName} ${lastName}`.trim();
+    };
+
+    const buildPdfFileName = (record: MedicalRecord, hospitalName?: string) => {
+        const recordName = sanitizeFileName(record.form?.name || 'medical-record');
+        const hospitalLabel = sanitizeFileName(hospitalName || record.hospital?.name || 'hospital');
+        return `${hospitalLabel}-${recordName}-${record._id}.pdf`;
+    };
+
+    const downloadBlob = async (blob: Blob, filename: string) => {
+        const { saveAs } = await import('file-saver');
+        saveAs(blob, sanitizeFileName(filename));
+    };
+
+    const fetchAttachmentBlob = async (attachment: any) => {
+        const url = attachment?.url || attachment?.path || attachment;
+        if (!url) {
+            throw new Error('Attachment URL not found');
+        }
+
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error('Unable to download attachment');
+        }
+
+        return response.blob();
+    };
+
+    const downloadAttachment = async (attachment: any) => {
+        try {
+            const blob = await fetchAttachmentBlob(attachment);
+            const fallbackName = attachment?.name || attachment?.fileName || attachment?.url?.split('/')?.pop() || `attachment-${Date.now()}`;
+            await downloadBlob(blob, fallbackName);
+            notify('Attachment downloaded');
+        } catch (error) {
+            console.error('download attachment error', error);
+            notify('Failed to download attachment');
+        }
+    };
+
+    const handleDownloadRecordPdf = async (record: MedicalRecord, hospitalName: string) => {
+        if (!record?._id) return;
+        setDownloadingRecordId(record._id);
+        try {
+            const pdfBlob = await generateMedicalPDF(record, {
+                patientName: resolvePatientName(),
+                branding: { hospitalName },
+                watermarkText: 'G1CARD VERIFIED',
+                watermarkOpacity: 0.06,
+            });
+            await downloadBlob(pdfBlob, buildPdfFileName(record, hospitalName));
+            notify('Prescription PDF downloaded');
+        } catch (error) {
+            console.error('download record pdf error', error);
+            notify('Failed to download prescription PDF');
+        } finally {
+            setDownloadingRecordId(null);
+        }
+    };
+
+    const fetchAllRecordsForHospital = async (hospitalId: string) => {
+        if (!user?.id) return [] as MedicalRecord[];
+
+        const collected: MedicalRecord[] = [];
+        let page = 1;
+        let hasMore = true;
+
+        while (hasMore) {
+            const response = await fetch(`${API_URL}/patients/${user.id}/records/hospital/${hospitalId}?page=${page}&limit=50`);
+            const data = await response.json();
+            if (!response.ok || !data?.records) {
+                throw new Error(data?.error || 'Unable to fetch records');
+            }
+
+            collected.push(...data.records);
+            hasMore = Boolean(data.pagination?.hasMore);
+            page += 1;
+        }
+
+        return collected;
+    };
+
+    const handleDownloadHospital = async (hospitalGroup: HospitalGroup) => {
+        if (!user?.id) {
+            notify('Not signed in');
+            return;
+        }
+
+        setDownloadingHospitalId(hospitalGroup.hospitalId);
+        try {
+            const JSZip = (await import('jszip')).default;
+            const zip = new JSZip();
+            const hospitalFolder = zip.folder(sanitizeFileName(hospitalGroup.hospitalName || 'hospital'));
+            if (!hospitalFolder) throw new Error('Unable to create hospital export folder');
+
+            const records = await fetchAllRecordsForHospital(hospitalGroup.hospitalId);
+            for (const record of records) {
+                const pdfBlob = await generateMedicalPDF(record, {
+                    patientName: resolvePatientName(),
+                    branding: { hospitalName: hospitalGroup.hospitalName },
+                    watermarkText: 'G1CARD VERIFIED',
+                    watermarkOpacity: 0.06,
+                });
+                hospitalFolder.file(buildPdfFileName(record, hospitalGroup.hospitalName), pdfBlob);
+            }
+
+            const content = await zip.generateAsync({ type: 'blob' });
+            await downloadBlob(content, `${sanitizeFileName(hospitalGroup.hospitalName)}-prescriptions.zip`);
+            notify('Hospital prescriptions downloaded');
+        } catch (error) {
+            console.error('download hospital pdf error', error);
+            notify('Failed to download hospital prescriptions');
+        } finally {
+            setDownloadingHospitalId(null);
+        }
+    };
+
+    const handleDownloadAll = async () => {
+        if (!user?.id) {
+            notify('Not signed in');
+            return;
+        }
+
+        if (!hospitals.length) {
+            notify('No records available to download');
+            return;
+        }
+
+        setDownloadingRecords(true);
+        try {
+            const JSZip = (await import('jszip')).default;
+            const zip = new JSZip();
+            const rootFolder = zip.folder('health-history');
+
+            if (!rootFolder) {
+                throw new Error('Unable to create export folder');
+            }
+
+            for (const hospitalGroup of hospitals) {
+                const hospitalFolder = rootFolder.folder(sanitizeFileName(hospitalGroup.hospitalName || 'hospital'));
+                if (!hospitalFolder) continue;
+
+                const records = await fetchAllRecordsForHospital(hospitalGroup.hospitalId);
+                if (!records.length) continue;
+
+                for (const record of records) {
+                    const pdfBlob = await generateMedicalPDF(record, {
+                        patientName: resolvePatientName(),
+                        branding: { hospitalName: hospitalGroup.hospitalName },
+                        watermarkText: 'G1CARD VERIFIED',
+                        watermarkOpacity: 0.06,
+                    });
+                    hospitalFolder.file(buildPdfFileName(record, hospitalGroup.hospitalName), pdfBlob);
+                }
+            }
+
+            const content = await zip.generateAsync({ type: 'blob' });
+            const exportName = `health-history-${user.id}-${new Date().toISOString().slice(0, 10)}.zip`;
+            await downloadBlob(content, exportName);
+            notify('Your records zip is ready');
+        } catch (error) {
+            console.error('download all records error', error);
+            notify('Failed to prepare records for download');
+        } finally {
+            setDownloadingRecords(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -217,11 +395,13 @@ const HealthHistory: React.FC = () => {
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button 
-                        onClick={() => notify('Preparing a zip file with all your records.')} 
-                        className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary text-sm font-medium shadow-sm hover:shadow transition-all"
+                    <button
+                        type="button"
+                        onClick={() => void handleDownloadAll()}
+                        disabled={downloadingRecords}
+                        className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary text-sm font-medium shadow-sm hover:shadow transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                        Download All
+                        {downloadingRecords ? 'Preparing...' : 'Download All PDFs'}
                     </button>
                 </div>
             </div>
@@ -286,6 +466,16 @@ const HealthHistory: React.FC = () => {
                             {expandedHospitals.has(hospitalGroup.hospitalId) && (
                                 <div className="px-4 pb-4 space-y-3">
                                     <div className="border-t border-slate-200 dark:border-slate-700 my-2"></div>
+                                    <div className="flex justify-end">
+                                        <button
+                                            type="button"
+                                            onClick={() => void handleDownloadHospital(hospitalGroup)}
+                                            disabled={downloadingHospitalId === hospitalGroup.hospitalId}
+                                            className="px-3 py-1.5 text-xs font-semibold text-brand-primary border border-brand-primary rounded-md hover:bg-brand-primary hover:text-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                        >
+                                            {downloadingHospitalId === hospitalGroup.hospitalId ? 'Preparing PDFs...' : 'Download Hospital PDFs'}
+                                        </button>
+                                    </div>
                                     
                                     {(() => {
                                         const data = hospitalRecords.get(hospitalGroup.hospitalId);
@@ -350,6 +540,19 @@ const HealthHistory: React.FC = () => {
 
                                                         {expandedRecords.has(record._id) && (
                                                             <div className="border-t border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900">
+                                                                <div className="flex items-center justify-end mb-3">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            void handleDownloadRecordPdf(record, hospitalGroup.hospitalName);
+                                                                        }}
+                                                                        disabled={downloadingRecordId === record._id}
+                                                                        className="px-3 py-1.5 text-xs font-semibold text-brand-primary border border-brand-primary rounded-md hover:bg-brand-primary hover:text-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                                                    >
+                                                                        {downloadingRecordId === record._id ? 'Preparing PDF...' : 'Download Prescription PDF'}
+                                                                    </button>
+                                                                </div>
                                                                 {record.form?.description && (
                                                                     <p className="text-sm text-slate-600 dark:text-slate-400 mb-4 pb-4 border-b border-slate-200 dark:border-slate-700">
                                                                         {record.form.description}
@@ -388,7 +591,16 @@ const HealthHistory: React.FC = () => {
                                                                                         </svg>
                                                                                         <span className="text-sm text-slate-700 dark:text-slate-300">{attachment.name || `Attachment ${idx + 1}`}</span>
                                                                                     </div>
-                                                                                    <button className="text-xs text-brand-accent hover:underline">Download</button>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            void downloadAttachment(attachment);
+                                                                                        }}
+                                                                                        className="text-xs text-brand-accent hover:underline"
+                                                                                    >
+                                                                                        Download
+                                                                                    </button>
                                                                                 </div>
                                                                             ))}
                                                                         </div>
