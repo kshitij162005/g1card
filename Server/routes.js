@@ -47,6 +47,29 @@ function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+// One email belongs to one kind of account. Returns 'Patient' | 'Hospital' | 'Super Admin' | null.
+async function findEmailOwner(email) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return null;
+  const exact = { $regex: `^${escapeRegex(normalized)}$`, $options: 'i' };
+  const [Patient, Hospital, Superadmin] = await Promise.all([
+    import('./models/Patient.js').then(m => m.default),
+    import('./models/Hospital.js').then(m => m.default),
+    import('./models/Superadmin.js').then(m => m.default),
+  ]);
+  if (await Superadmin.exists({ username: exact })) return 'Super Admin';
+  if (await Hospital.exists({ $or: [{ username: exact }, { contactEmail: exact }, { adminEmail: exact }] })) return 'Hospital';
+  if (await Patient.exists({ $or: [{ username: exact }, { email: exact }], accountDeleted: { $ne: true } })) return 'Patient';
+  return null;
+}
+
+function emailInUseMessage(owner, wanted) {
+  const as = owner === 'Hospital' ? 'a hospital' : owner === 'Super Admin' ? 'a G1Card administrator' : 'a patient';
+  const want = wanted === 'Hospital' ? 'hospital' : 'patient';
+  const portal = owner === 'Hospital' ? 'the hospital portal' : owner === 'Super Admin' ? 'the admin portal' : 'the patient portal';
+  return `This email is already registered to ${as} account, so it can't also be used for a ${want} account. Sign in through ${portal} instead, or use a different email.`;
+}
+
 function calculateAgeFromDob(dob) {
   if (!dob) return undefined;
   const d = new Date(dob);
@@ -91,8 +114,8 @@ router.post('/echo', (req, res) => {
 });
 
 // AI readiness endpoint (future role-specific AI features)
-router.get('/ai/readiness', (req, res) => {
-  return res.json({ ok: true, readiness: getAiReadiness() });
+router.get('/ai/readiness', async (req, res) => {
+  return res.json({ ok: true, readiness: await getAiReadiness() });
 });
 
 // Auth: signup for patient
@@ -106,7 +129,11 @@ router.post('/auth/signup/patient', async (req, res) => {
 
     const normalizedEmail = normalizeEmail(email);
     const exists = await Patient.findOne({ username: normalizedEmail });
-    if (exists) return res.status(409).json({ error: 'User already exists' });
+    if (exists) return res.status(409).json({ error: 'An account with this email already exists. Sign in instead.' });
+    const owner = await findEmailOwner(normalizedEmail);
+    if (owner && owner !== 'Patient') {
+      return res.status(409).json({ error: emailInUseMessage(owner, 'Patient'), code: 'EMAIL_IN_USE_OTHER_ROLE' });
+    }
 
     const salt = generateSalt();
     const passwordHash = hashWithSalt(password, salt);
@@ -179,7 +206,14 @@ router.post('/auth/signup/hospital', async (req, res) => {
     }
 
     const exists = await Hospital.findOne({ username: normalizedHospitalEmail });
-    if (exists) return res.status(409).json({ error: 'Hospital already exists' });
+    if (exists) return res.status(409).json({ error: 'A hospital with this email already exists. Sign in instead.' });
+    for (const candidate of [normalizedHospitalEmail, normalizedAdminEmail].filter(Boolean)) {
+      const owner = await findEmailOwner(candidate);
+      if (owner && owner !== 'Hospital') {
+        const which = candidate === normalizedHospitalEmail ? 'Hospital email' : 'Admin email';
+        return res.status(409).json({ error: `${which}: ${emailInUseMessage(owner, 'Hospital')}`, code: 'EMAIL_IN_USE_OTHER_ROLE' });
+      }
+    }
 
     const salt = generateSalt();
     const passwordHash = hashWithSalt(password, salt);
@@ -274,7 +308,13 @@ router.post('/auth/otp/verify-signup', async (req, res) => {
       if (exists) {
         otpDoc.usedAt = new Date();
         await otpDoc.save();
-        return res.status(409).json({ error: 'User already exists' });
+        return res.status(409).json({ error: 'An account with this email already exists. Sign in instead.' });
+      }
+      const owner = await findEmailOwner(normalizedEmail);
+      if (owner && owner !== 'Patient') {
+        otpDoc.usedAt = new Date();
+        await otpDoc.save();
+        return res.status(409).json({ error: emailInUseMessage(owner, 'Patient'), code: 'EMAIL_IN_USE_OTHER_ROLE' });
       }
 
       const payload = otpDoc.payload || {};
@@ -419,6 +459,12 @@ router.post('/auth/google', async (req, res) => {
     if (role === 'Patient' || role === 'PATIENT') {
       const Patient = (await import('./models/Patient.js')).default;
 
+      // A hospital's or admin's Google account must never turn into a patient account
+      const owner = await findEmailOwner(email);
+      if (owner && owner !== 'Patient') {
+        return res.status(409).json({ error: emailInUseMessage(owner, 'Patient'), code: 'EMAIL_IN_USE_OTHER_ROLE' });
+      }
+
       let user = await Patient.findOne({ username: { $regex: `^${escapedEmail}$`, $options: 'i' } });
       if (!user) {
         user = await Patient.findOne({ email: { $regex: `^${escapedEmail}$`, $options: 'i' } });
@@ -447,6 +493,9 @@ router.post('/auth/google', async (req, res) => {
 
       if (user.accountDeleted) {
         return res.status(403).json({ error: 'Account has been deactivated by admin approval of deletion request' });
+      }
+      if (user.suspended) {
+        return res.status(403).json({ error: 'This G1Card account has been suspended by an administrator. Contact support if you think this is a mistake.', code: 'ACCOUNT_SUSPENDED' });
       }
 
       await user.save();
@@ -509,6 +558,53 @@ router.post('/auth/google', async (req, res) => {
   }
 });
 
+// Auth: confirm a stored session still maps to a valid account for its role.
+// The client calls this on load so sessions that should never have existed
+// (e.g. a hospital email used to sign into the patient portal) are signed out.
+router.post('/auth/session', async (req, res) => {
+  try {
+    const { role, id, isSimulation } = req.body || {};
+    if (!role || !id) return res.status(400).json({ error: 'role and id are required' });
+    if (!mongoose.isValidObjectId(id)) return res.status(401).json({ valid: false, error: 'Session is no longer valid' });
+
+    if (role === 'Patient' || role === 'PATIENT') {
+      const Patient = (await import('./models/Patient.js')).default;
+      const user = await Patient.findById(id).select('email username accountDeleted suspended').lean();
+      if (!user || user.accountDeleted) return res.status(401).json({ valid: false, error: 'This account no longer exists.' });
+      if (user.suspended) return res.status(403).json({ valid: false, code: 'ACCOUNT_SUSPENDED', error: 'This G1Card account has been suspended by an administrator.' });
+      if (!isSimulation) {
+        const owner = await findEmailOwner(user.email || user.username);
+        if (owner && owner !== 'Patient') {
+          return res.status(409).json({ valid: false, code: 'EMAIL_IN_USE_OTHER_ROLE', error: emailInUseMessage(owner, 'Patient') });
+        }
+      }
+      return res.json({ valid: true });
+    }
+
+    if (role === 'Hospital' || role === 'HOSPITAL') {
+      const Hospital = (await import('./models/Hospital.js')).default;
+      const user = await Hospital.findById(id).select('status').lean();
+      if (!user) return res.status(401).json({ valid: false, error: 'This hospital account no longer exists.' });
+      if (!isSimulation && user.status && user.status !== 'approved') {
+        return res.status(403).json({ valid: false, status: user.status, error: 'Hospital registration is not approved yet' });
+      }
+      return res.json({ valid: true });
+    }
+
+    if (role === 'Super Admin' || role === 'Super_Admin' || role === 'SUPER_ADMIN') {
+      const Superadmin = (await import('./models/Superadmin.js')).default;
+      const exists = await Superadmin.exists({ _id: id });
+      if (!exists) return res.status(401).json({ valid: false, error: 'Session is no longer valid' });
+      return res.json({ valid: true });
+    }
+
+    return res.status(400).json({ error: 'Unknown role' });
+  } catch (err) {
+    console.error('session check error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
 // Auth: simulation login for demos using existing sample data in DB
 router.post('/auth/simulation-login', async (req, res) => {
   try {
@@ -533,7 +629,7 @@ router.post('/auth/simulation-login', async (req, res) => {
 
     if (role === 'Patient' || role === 'PATIENT') {
       const Patient = (await import('./models/Patient.js')).default;
-      const user = await Patient.findOne({}).sort({ _id: 1 });
+      const user = await Patient.findOne({ suspended: { $ne: true } }).sort({ _id: 1 });
       if (!user) return res.status(404).json({ error: 'No Patient sample user found' });
 
       try {
@@ -612,6 +708,14 @@ router.post('/auth/login', async (req, res) => {
       if (!user) return res.status(401).json({ error: 'User not found' });
       const computed = hashWithSalt(password, user.salt || '');
       if (computed === user.password) {
+        // An email that belongs to a hospital or admin can never be used for a patient session
+        const owner = await findEmailOwner(user.email || user.username);
+        if (owner && owner !== 'Patient') {
+          return res.status(409).json({ error: emailInUseMessage(owner, 'Patient'), code: 'EMAIL_IN_USE_OTHER_ROLE' });
+        }
+        if (user.suspended) {
+          return res.status(403).json({ error: 'This G1Card account has been suspended by an administrator. Contact support if you think this is a mistake.', code: 'ACCOUNT_SUSPENDED' });
+        }
         // update lastAccess timestamp
         try {
           user.lastAccess = new Date();

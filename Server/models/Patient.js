@@ -27,6 +27,11 @@ const PatientSchema = new mongoose.Schema(
     email: { type: String },
     emailVerified: { type: Boolean, default: false },
     accountDeleted: { type: Boolean, default: false },
+    // Set by a G1Card admin; a suspended patient cannot use the portal and is hidden from Golu by default
+    suspended: { type: Boolean, default: false, index: true },
+    suspendedAt: { type: Date },
+    suspendedReason: { type: String, default: '' },
+    suspendedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Superadmin' },
     notificationPreferences: {
       emailWhenHospitalAccessRecords: { type: Boolean, default: true },
       emailForNewPrescriptions: { type: Boolean, default: true },

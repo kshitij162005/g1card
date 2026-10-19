@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { API_URL } from '../config/api';
+import { goHome } from '../utils/home';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { ThemeMode, getStoredTheme, setStoredTheme } from '../utils/theme';
+import AdminAiChat from '../components/AdminAiChat';
 
 const adminNavItems = [
     { to: '/admin/dashboard', label: 'Dashboard' },
@@ -11,8 +14,12 @@ const adminNavItems = [
     { to: '/admin/hospitals', label: 'Hospitals' },
     { to: '/admin/users', label: 'Users' },
     { to: '/admin/settings', label: 'Settings' },
-    { to: '/admin/logs', label: 'Audit Logs' }
+    { to: '/admin/logs', label: 'Audit Logs' },
+    { to: '/admin/notifications', label: 'Notifications' }
 ];
+
+// Words on buttons that change data; everything else is browsing and stays allowed in simulation
+const SIMULATION_BLOCKED_ACTION = /\b(approve|reject|delete|remove|suspend|unsuspend|reinstate|save|add|create|update|submit|confirm|revoke|send|reset|disable|enable|activate|deactivate|restore|deny|grant|upload|import|edit|changes|apply)\b/i;
 
 const AdminLayout: React.FC = () => {
     const { user, logout } = useAuth();
@@ -23,6 +30,28 @@ const AdminLayout: React.FC = () => {
     const [themeMode, setThemeMode] = useState<ThemeMode>(() => getStoredTheme());
     const [showSimulationModal, setShowSimulationModal] = useState(false);
     const [blockedActionLabel, setBlockedActionLabel] = useState('This action');
+    const [showAiAssistant, setShowAiAssistant] = useState(false);
+
+    useEffect(() => {
+        if (!showAiAssistant) {
+            document.body.style.overflow = '';
+            return;
+        }
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setShowAiAssistant(false);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+
+        return () => {
+            document.body.style.overflow = previousOverflow;
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [showAiAssistant]);
 
     const handleLogout = () => {
         logout();
@@ -37,7 +66,23 @@ const AdminLayout: React.FC = () => {
         });
     };
 
-    const isAdminNotifyContext = location.pathname.includes('/admin/pending') || location.pathname.includes('/admin/update-requests');
+    const isAdminNotifyContext = location.pathname.includes('/admin/notifications');
+    const [adminUnread, setAdminUnread] = useState(0);
+
+    // Unread badge on the bell, refreshed when the inbox marks things read
+    useEffect(() => {
+        if (!user?.id) return;
+        const fetchCount = async () => {
+            try {
+                const resp = await fetch(`${API_URL}/superadmin/admins/${user.id}/notifications/count`);
+                const data = await resp.json();
+                if (resp.ok) setAdminUnread(data.unreadCount || 0);
+            } catch { /* ignore */ }
+        };
+        fetchCount();
+        window.addEventListener('g1card:notifications-updated', fetchCount);
+        return () => window.removeEventListener('g1card:notifications-updated', fetchCount);
+    }, [user?.id]);
     const isAdminSettingsPage = location.pathname.includes('/admin/settings');
     const isAdminSimulation = Boolean(user?.isSimulation);
 
@@ -68,9 +113,12 @@ const AdminLayout: React.FC = () => {
             }
         }
 
-        const actionEl = target.closest('button, input[type="button"], input[type="submit"], [role="button"], select, textarea, summary') as HTMLElement | null;
+        const actionEl = target.closest('button, input[type="button"], input[type="submit"], [role="button"]') as HTMLElement | null;
         if (!actionEl) return;
-        if (actionEl.closest('[data-simulation-allow="true"]')) return;
+        if (actionEl.closest('[data-simulation-allow="true"], form[role="search"]')) return;
+        // Browsing stays free in simulation (search, filters, tabs, paging, opening details);
+        // only actions that would change data are stopped
+        if (actionEl.getAttribute('data-simulation-block') !== 'true' && !SIMULATION_BLOCKED_ACTION.test(getActionLabel(actionEl))) return;
 
         e.preventDefault();
         e.stopPropagation();
@@ -79,13 +127,14 @@ const AdminLayout: React.FC = () => {
 
     const handleSimulationMainSubmitCapture = (e: React.FormEvent<HTMLElement>) => {
         if (!isAdminSimulation) return;
+        if ((e.target as HTMLElement).closest('form[role="search"]')) return;
         e.preventDefault();
         e.stopPropagation();
         openSimulationGuard('Submitting this form');
     };
 
     const navLinkClasses = ({ isActive }: { isActive: boolean }): string =>
-        `block w-full px-4 py-3 rounded-xl text-sm font-medium leading-snug transition-colors cursor-pointer ${isActive ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-700 dark:text-slate-300 bg-transparent'}`;
+        `app-nav-link ${isActive ? 'is-active' : ''}`;
 
     const renderNavItems = () => (
         <>
@@ -105,12 +154,11 @@ const AdminLayout: React.FC = () => {
     return (
         <div className="admin-shell min-h-screen bg-[var(--app-bg)]">
             <div className="flex min-h-screen">
-                <aside className="hidden lg:flex w-60 border-r border-[var(--app-border)] bg-[var(--app-surface)]/95 p-4 flex-col">
+                <aside className="hidden lg:flex w-60 border-r border-[var(--app-border)] bg-[var(--app-bg)] p-4 flex-col">
                     <div className="mb-5 px-2">
-                        <h1 className="sidebar-brand-title text-2xl font-bold tracking-wide">G1CARD ADMIN</h1>
-                        <p className="sidebar-brand-subtitle text-xs mt-1">Control Center</p>
+                        <span className="app-logo"><button type="button" className="g1-wordmark" onClick={goHome} title="Go to dashboard">G1Card</button><span className="app-logo-role">Admin</span></span>
                     </div>
-                    <nav className="flex-1 space-y-2">{renderNavItems()}</nav>
+                    <nav className="flex-1 space-y-0.5">{renderNavItems()}</nav>
                 </aside>
 
                 <div className="flex-1 min-w-0 bg-[var(--app-bg)]">
@@ -127,7 +175,8 @@ const AdminLayout: React.FC = () => {
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                                     </svg>
                                 </button>
-                                <div>
+                                <button type="button" className="g1-wordmark lg:hidden" onClick={goHome} title="Go to dashboard">G1Card</button>
+                                <div className="hidden sm:block lg:block">
                                     <p className="text-sm text-[var(--app-muted)]">Welcome</p>
                                     <h2 className="text-base font-semibold text-[var(--app-text)]">{user?.name || 'Super Admin'}</h2>
                                 </div>
@@ -145,10 +194,21 @@ const AdminLayout: React.FC = () => {
                                 )}
                                 <button
                                     type="button"
-                                    onClick={() => navigate('/admin/pending')}
+                                    onClick={() => setShowAiAssistant(true)}
+                                    className="inline-flex items-center gap-2 h-10 px-3 rounded-xl border border-[var(--app-border)] bg-[var(--app-surface)] text-xs font-semibold text-[var(--app-text)] hover:bg-[var(--app-surface-soft)]"
+                                    aria-label="Open G1Card AI Assistant"
+                                >
+                                    <svg className="h-4 w-4 text-[var(--app-muted)]" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                                    </svg>
+                                    Ask Golu
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => navigate('/admin/notifications')}
                                     className={`relative inline-flex items-center justify-center h-10 w-10 rounded-xl border transition-all ${
                                         isAdminNotifyContext
-                                            ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                                            ? 'bg-[var(--role-soft)] border-[color-mix(in_srgb,var(--role)_45%,transparent)] text-[var(--role-ink)]'
                                             : 'border-[var(--app-border)] text-[var(--app-text)] hover:bg-[var(--app-surface-soft)]'
                                     }`}
                                     aria-label="Notifications"
@@ -157,14 +217,16 @@ const AdminLayout: React.FC = () => {
                                         <path d="M10 2a6 6 0 00-6 6v2.586l-.707.707A1 1 0 004 13h12a1 1 0 00.707-1.707L16 10.586V8a6 6 0 00-6-6z" />
                                         <path d="M10 18a3 3 0 01-2.995-2.824L7 15h6a3 3 0 01-2.824 2.995L10 18z" />
                                     </svg>
-                                    {isAdminNotifyContext && <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-blue-200 ring-2 ring-blue-600" />}
+                                    {adminUnread > 0 && (
+                                        <span className="absolute -top-1 -right-1 inline-flex min-w-[18px] items-center justify-center rounded-full bg-[var(--app-danger)] px-1 text-[10px] font-semibold leading-[18px] text-white">{adminUnread > 99 ? '99+' : adminUnread}</span>
+                                    )}
                                 </button>
                                 <div className="relative">
                                     <button
                                         onClick={() => setShowSettingsMenu(!showSettingsMenu)}
                                         className={`relative inline-flex items-center justify-center h-10 w-10 rounded-xl border transition-all ${
                                             isAdminSettingsPage
-                                                ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                                                ? 'bg-[var(--role-soft)] border-[color-mix(in_srgb,var(--role)_45%,transparent)] text-[var(--role-ink)]'
                                                 : 'border-[var(--app-border)] text-[var(--app-text)] hover:bg-[var(--app-surface-soft)]'
                                         }`}
                                         aria-label="Settings"
@@ -173,7 +235,6 @@ const AdminLayout: React.FC = () => {
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                         </svg>
-                                        {isAdminSettingsPage && <span className="absolute -top-1 -left-1 h-2.5 w-2.5 rounded-full bg-blue-200 ring-2 ring-blue-600" />}
                                     </button>
                                     {showSettingsMenu && (
                                         <div className="absolute right-0 mt-2 w-56 bg-[var(--app-surface)] rounded-lg shadow-lg border border-[var(--app-border)] overflow-hidden z-50">
@@ -248,7 +309,7 @@ const AdminLayout: React.FC = () => {
                     <div className="absolute inset-0 bg-black/40 dark:bg-slate-900/50 cursor-pointer" onClick={() => setShowMobileNav(false)} />
                     <aside className="absolute left-0 top-0 h-full w-72 bg-[var(--app-surface)] border-r border-[var(--app-border)] p-5">
                         <div className="flex items-center justify-between mb-6">
-                            <h1 className="sidebar-brand-title text-xl font-bold tracking-wide">G1CARD ADMIN</h1>
+                            <span className="app-logo"><button type="button" className="g1-wordmark" onClick={goHome} title="Go to dashboard">G1Card</button><span className="app-logo-role">Admin</span></span>
                             <button
                                 type="button"
                                 onClick={() => setShowMobileNav(false)}
@@ -293,6 +354,22 @@ const AdminLayout: React.FC = () => {
                                 Continue Exploring
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {showAiAssistant && (
+                <div
+                    className="fixed inset-0 z-[80] flex items-stretch justify-center bg-black/40 golu-backdrop md:p-6"
+                    onClick={() => setShowAiAssistant(false)}
+                    role="dialog"
+                    aria-modal="true"
+                >
+                    <div
+                        className="golu-modal-in h-full w-full max-w-[1280px] overflow-hidden shadow-xl md:rounded-xl md:border md:border-[var(--app-border)]"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <AdminAiChat variant="modal" onClose={() => setShowAiAssistant(false)} />
                     </div>
                 </div>
             )}

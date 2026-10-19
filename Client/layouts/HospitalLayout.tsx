@@ -1,4 +1,5 @@
 import { API_URL } from '../config/api';
+import { goHome } from '../utils/home';
 import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,7 +16,8 @@ const hospitalNavItems = [
     { to: '/hospital/patients', label: 'Patients' },
     { to: '/hospital/forms', label: 'Forms' },
     { to: '/hospital/reports', label: 'Reports' },
-    { to: '/hospital/logs', label: 'Audit Logs' }
+    { to: '/hospital/logs', label: 'Audit Logs' },
+    { to: '/hospital/notifications', label: 'Notifications' }
 ];
 
 const HospitalHeader: React.FC<{
@@ -80,7 +82,7 @@ const HospitalHeader: React.FC<{
                             </svg>
                         </button>
                     )}
-                    <h1 className="text-xl font-bold text-brand-primary dark:text-white tracking-wider">G1CARD</h1>
+                    <button type="button" className="g1-wordmark lg:hidden" onClick={goHome} title="Go to dashboard">G1Card</button>
                 </div>
                 <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 min-w-0">
                     <span className="text-[var(--app-muted)] text-sm hidden sm:block">Welcome, {user?.name}</span>
@@ -96,7 +98,7 @@ const HospitalHeader: React.FC<{
                             onClick={onOpenNotifications}
                             className={`relative inline-flex items-center justify-center h-10 w-10 shrink-0 rounded-xl border transition-all ${
                                 isNotificationsPage
-                                    ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                                    ? 'bg-[var(--role-soft)] border-[color-mix(in_srgb,var(--role)_45%,transparent)] text-[var(--role-ink)]'
                                     : 'border-[var(--app-border)] text-[var(--app-text)] hover:bg-[var(--app-surface-soft)]'
                             }`}
                             aria-label="Notifications"
@@ -115,7 +117,6 @@ const HospitalHeader: React.FC<{
                                     {notificationCount}
                                 </span>
                             )}
-                            {isNotificationsPage && <span className="absolute -top-1 -left-1 h-2.5 w-2.5 rounded-full bg-blue-200 ring-2 ring-blue-600" />}
                         </button>
                     )}
                     <div className="relative">
@@ -123,7 +124,7 @@ const HospitalHeader: React.FC<{
                             onClick={() => setShowSettingsMenu(!showSettingsMenu)}
                             className={`relative inline-flex items-center justify-center h-10 w-10 shrink-0 rounded-xl border transition-all ${
                                 isSettingsPage
-                                    ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                                    ? 'bg-[var(--role-soft)] border-[color-mix(in_srgb,var(--role)_45%,transparent)] text-[var(--role-ink)]'
                                     : 'border-[var(--app-border)] text-[var(--app-text)] hover:bg-[var(--app-surface-soft)]'
                             }`}
                             aria-label="Settings"
@@ -132,7 +133,6 @@ const HospitalHeader: React.FC<{
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
-                            {isSettingsPage && <span className="absolute -top-1 -left-1 h-2.5 w-2.5 rounded-full bg-blue-200 ring-2 ring-blue-600" />}
                         </button>
                         {showSettingsMenu && (
                             <div className="absolute right-0 mt-2 w-56 bg-[var(--app-surface)]/95 backdrop-blur-sm rounded-lg shadow-lg border border-[var(--app-border)] overflow-hidden z-50">
@@ -262,6 +262,8 @@ const HospitalLayout: React.FC = () => {
             }
         };
         fetchCount();
+        window.addEventListener('g1card:notifications-updated', fetchCount);
+        return () => window.removeEventListener('g1card:notifications-updated', fetchCount);
     }, [user?.id, hospitalStatus]);
 
     useEffect(() => {
@@ -309,7 +311,7 @@ const HospitalLayout: React.FC = () => {
     };
 
     const navLinkClasses = ({ isActive }: { isActive: boolean }): string =>
-            `block w-full px-4 py-3 rounded-xl text-sm font-medium transition-colors cursor-pointer ${isActive ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-700 dark:text-slate-300 bg-transparent'}`;
+            `app-nav-link ${isActive ? 'is-active' : ''}`;
 
     const isNotificationsPage = location.pathname.includes('/hospital/notifications');
 
@@ -325,15 +327,6 @@ const HospitalLayout: React.FC = () => {
                     {item.label}
                 </NavLink>
             ))}
-            {isNotificationsPage && (
-                <NavLink
-                    to="/hospital/notifications"
-                    className={() => 'block w-full px-4 py-3 rounded-xl text-sm font-medium transition-colors bg-blue-600 text-white shadow-sm'}
-                    onClick={() => setShowMobileNav(false)}
-                >
-                    Notifications
-                </NavLink>
-            )}
         </>
     );
 
@@ -463,12 +456,11 @@ const HospitalLayout: React.FC = () => {
     return (
         <div className="hospital-shell min-h-screen bg-[var(--app-bg)]">
             <div className="flex min-h-screen">
-                <aside className={`hidden lg:flex sticky top-0 h-screen overflow-y-auto border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex-col transition-[width,padding,border-color,box-shadow] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${isDesktopNavCollapsed ? 'w-0 px-0 py-0 overflow-hidden border-r-0 shadow-none' : 'w-60 p-4 shadow-sm'}`}>
+                <aside className={`hidden lg:flex sticky top-0 h-screen overflow-y-auto border-r border-[var(--app-border)] bg-[var(--app-bg)] flex-col transition-[width,padding,border-color,box-shadow] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${isDesktopNavCollapsed ? 'w-0 px-0 py-0 overflow-hidden border-r-0 shadow-none' : 'w-60 p-4 shadow-sm'}`}>
                     <div className={`mb-5 px-2 transition-all duration-300 ${isDesktopNavCollapsed ? 'opacity-0 -translate-x-2' : 'opacity-100 translate-x-0'}`}>
-                        <h1 className="sidebar-brand-title text-2xl font-bold tracking-wide">G1CARD HOSPITAL</h1>
-                        <p className="sidebar-brand-subtitle text-xs mt-1">Clinical Operations</p>
+                        <span className="app-logo"><button type="button" className="g1-wordmark" onClick={goHome} title="Go to dashboard">G1Card</button><span className="app-logo-role">Hospital</span></span>
                     </div>
-                    <nav className={`flex-1 space-y-2 transition-all duration-300 ${isDesktopNavCollapsed ? 'opacity-0 -translate-x-2' : 'opacity-100 translate-x-0'}`}>{renderNavItems()}</nav>
+                    <nav className={`flex-1 space-y-0.5 transition-all duration-300 ${isDesktopNavCollapsed ? 'opacity-0 -translate-x-2' : 'opacity-100 translate-x-0'}`}>{renderNavItems()}</nav>
                 </aside>
 
                 <div className="flex-1 min-w-0">
@@ -491,7 +483,7 @@ const HospitalLayout: React.FC = () => {
                     <div className="absolute inset-0 bg-slate-900/50 cursor-pointer" onClick={() => setShowMobileNav(false)} />
                     <aside className="absolute left-0 top-0 h-full w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 p-5">
                         <div className="flex items-center justify-between mb-6">
-                            <h1 className="sidebar-brand-title text-xl font-bold tracking-wide">G1CARD HOSPITAL</h1>
+                            <span className="app-logo"><button type="button" className="g1-wordmark" onClick={goHome} title="Go to dashboard">G1Card</button><span className="app-logo-role">Hospital</span></span>
                             <button
                                 type="button"
                                 onClick={() => setShowMobileNav(false)}
@@ -503,7 +495,7 @@ const HospitalLayout: React.FC = () => {
                                 </svg>
                             </button>
                         </div>
-                        <nav className="space-y-2">{renderNavItems()}</nav>
+                        <nav className="space-y-0.5">{renderNavItems()}</nav>
                     </aside>
                 </div>
             )}

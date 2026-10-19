@@ -1,5 +1,6 @@
 import { API_URL } from '../../config/api';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { SettingRow, Switch } from '../../components/settings/Settings';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
@@ -164,46 +165,109 @@ const move = <T,>(arr: T[], from: number, to: number) => {
     return next;
 };
 
-const TypePickerModal: React.FC<{
-    open: boolean;
-    onClose: () => void;
-    onSelect: (type: FieldType) => void;
-}> = ({ open, onClose, onSelect }) => {
-    if (!open) return null;
-    return (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
-            <div className="mx-auto mt-4 w-full max-w-3xl max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl bg-slate-900 border border-slate-700 p-6 shadow-2xl shadow-black/40" onClick={e => e.stopPropagation()}>
-                <div className="flex items-start justify-between mb-6">
-                    <div>
-                        <h3 className="text-[28px] font-bold text-slate-100">Add Question Type</h3>
-                        <p className="text-[15px] text-slate-400 mt-1">Pick the field type that best matches the answer you want.</p>
-                    </div>
-                    <button type="button" onClick={onClose} className="px-3 py-1.5 rounded-md text-[15px] text-slate-300 hover:bg-slate-800">Close</button>
-                </div>
-                <div className="space-y-6">
-                    {FIELD_PICKER_GROUPS.map(group => (
-                        <section key={group.title}>
-                            <p className="text-[15px] font-semibold text-slate-200 mb-3">{group.title}</p>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {group.items.map(item => (
-                                    <button
-                                        key={item.type}
-                                        type="button"
-                                        onClick={() => {
-                                            onSelect(item.type);
-                                            onClose();
-                                        }}
-                                        className="text-left px-4 py-3 rounded-xl text-[15px] border border-slate-700 bg-slate-800/40 text-slate-100 hover:border-blue-400 hover:bg-slate-800 hover:-translate-y-0.5 transition-all duration-200"
-                                    >
-                                        <p className="font-semibold">{item.label}</p>
-                                        <p className="text-[13px] text-slate-400 mt-1">{item.hint}</p>
-                                    </button>
-                                ))}
-                            </div>
-                        </section>
-                    ))}
-                </div>
+// Icons and one-line hints for every question type, used by the palette, outline and editor
+const TYPE_META: Record<FieldType, { label: string; hint: string; icon: React.ReactNode }> = {
+    text: { label: 'Short answer', hint: 'One line of text', icon: <path d="M4 7h16M4 12h10" /> },
+    textarea: { label: 'Paragraph', hint: 'Longer notes', icon: <path d="M4 6h16M4 10h16M4 14h16M4 18h10" /> },
+    number: { label: 'Number', hint: 'Readings like pulse or dose', icon: <path d="M9 4 7 20M17 4l-2 16M4 9h16M3 15h16" /> },
+    email: { label: 'Email', hint: 'Checked for a valid address', icon: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></> },
+    tel: { label: 'Phone', hint: 'Phone number', icon: <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z" /> },
+    date: { label: 'Date', hint: 'Calendar picker', icon: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 11h18" /></> },
+    time: { label: 'Time', hint: 'Clock time', icon: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></> },
+    select: { label: 'Dropdown', hint: 'Pick one from a list', icon: <><rect x="3" y="6" width="18" height="12" rx="2" /><path d="m9 11 3 3 3-3" /></> },
+    radio: { label: 'Single choice', hint: 'Pick one, all options visible', icon: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="3.5" /></> },
+    checkbox: { label: 'Multiple choice', hint: 'Tick any that apply', icon: <><rect x="4" y="4" width="16" height="16" rx="3" /><path d="m8.5 12 2.5 2.5 4.5-5" /></> },
+    file: { label: 'File upload', hint: 'Reports, scans, photos', icon: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M17 8l-5-5-5 5M12 3v12" /></> },
+    section: { label: 'Section heading', hint: 'Group related questions', icon: <path d="M6 4v16M18 4v16M6 12h12" /> },
+    pageBreak: { label: 'Page break', hint: 'Split into steps', icon: <path d="M3 12h3m4 0h4m4 0h3M8 4v4h8V4M8 20v-4h8v4" /> },
+};
+
+const TypeIcon: React.FC<{ type: FieldType; size?: number }> = ({ type, size = 16 }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>{TYPE_META[type].icon}</svg>
+);
+
+const FILE_TYPES = ['PDF', 'Image', 'Word', 'Excel', 'DICOM'];
+
+// Quick starting points so a new form isn't a blank page
+const STARTERS: Array<{ name: string; description: string; fields: Array<[FieldType, string, Partial<FieldItem>?]> }> = [
+    { name: 'Visit notes', description: 'Complaint, findings and plan for an outpatient visit.', fields: [
+        ['textarea', 'Chief complaint', { required: true, placeholder: 'What brought the patient in today?' }],
+        ['textarea', 'Examination findings'],
+        ['text', 'Diagnosis', { required: true }],
+        ['textarea', 'Plan and advice'],
+        ['date', 'Follow-up date'],
+    ] },
+    { name: 'Prescription', description: 'Medicines with dosage and duration.', fields: [
+        ['text', 'Diagnosis', { required: true }],
+        ['textarea', 'Medicines', { required: true, placeholder: 'One per line: name, strength, dose, frequency, days' }],
+        ['textarea', 'Instructions', { placeholder: 'e.g. After food, avoid driving' }],
+        ['date', 'Review on'],
+    ] },
+    { name: 'Vitals', description: 'Quick observations taken at triage.', fields: [
+        ['text', 'Blood pressure', { placeholder: '120/80', description: 'mmHg' }],
+        ['number', 'Pulse', { description: 'beats per minute' }],
+        ['number', 'Temperature', { description: '°F' }],
+        ['number', 'SpO₂', { description: '%' }],
+        ['radio', 'Pain level', { options: ['None', 'Mild', 'Moderate', 'Severe'] }],
+    ] },
+];
+
+/** The form exactly as staff will fill it in, with working inputs */
+const LiveField: React.FC<{ field: FieldItem; index: number; active: boolean; onSelect: () => void }> = ({ field, index, active, onSelect }) => {
+    if (field.type === 'pageBreak') {
+        return <div className={`fb-pv-break ${active ? 'is-active' : ''}`} onClick={onSelect}><span>{field.label && field.label !== 'Page Break' ? field.label : 'Next page'}</span></div>;
+    }
+    if (field.type === 'section') {
+        return (
+            <div className={`fb-pv-section ${active ? 'is-active' : ''}`} onClick={onSelect}>
+                <h3>{field.label || 'Untitled section'}</h3>
+                {field.description && <p>{field.description}</p>}
             </div>
+        );
+    }
+    const id = `pv-${field.id}`;
+    const options = field.options.filter(o => o.trim());
+    const v = field.validation;
+    let control: React.ReactNode;
+    switch (field.type) {
+        case 'textarea':
+            control = <textarea id={id} rows={3} placeholder={field.placeholder} minLength={v.minLength} maxLength={v.maxLength} />;
+            break;
+        case 'select':
+            control = (
+                <select id={id} defaultValue="">
+                    <option value="" disabled>{field.placeholder || 'Choose…'}</option>
+                    {options.map(o => <option key={o}>{o}</option>)}
+                </select>
+            );
+            break;
+        case 'radio':
+        case 'checkbox':
+            control = (
+                <div className="fb-pv-choices" role={field.type === 'radio' ? 'radiogroup' : 'group'}>
+                    {options.length ? options.map(o => (
+                        <label key={o}><input type={field.type} name={id} /> <span>{o}</span></label>
+                    )) : <span className="fb-pv-empty">Add options to see them here</span>}
+                </div>
+            );
+            break;
+        case 'file':
+            control = (
+                <div className="fb-pv-file">
+                    <TypeIcon type="file" size={18} />
+                    <span>{field.placeholder || 'Drop files or click to upload'}</span>
+                    <small>{field.fileSettings.allowedTypes.join(', ')} · up to {field.fileSettings.maxFileSizeMB} MB{field.fileSettings.maxFiles > 1 ? ` · ${field.fileSettings.maxFiles} files` : ''}</small>
+                </div>
+            );
+            break;
+        default:
+            control = <input id={id} type={field.type} placeholder={field.placeholder} min={v.min || undefined} max={v.max || undefined} minLength={v.minLength} maxLength={v.maxLength} />;
+    }
+    return (
+        <div className={`fb-pv-field ${active ? 'is-active' : ''}`} onClick={onSelect}>
+            <label htmlFor={id}><span className="fb-pv-num">{index}.</span> {field.label || 'Untitled question'}{field.required && <em aria-label="required">*</em>}</label>
+            {field.description && <p className="fb-pv-help">{field.description}</p>}
+            {control}
         </div>
     );
 };
@@ -221,10 +285,10 @@ const CreateForm: React.FC = () => {
     const [activeField, setActiveField] = useState(0);
     const [dragFrom, setDragFrom] = useState<number | null>(null);
     const [loading, setLoading] = useState(false);
-    const [previewOpen, setPreviewOpen] = useState(false);
-    const [pickerOpen, setPickerOpen] = useState(false);
     const [theme] = useState<ThemeSettings>(DEFAULT_THEME);
     const [draftHydrated, setDraftHydrated] = useState(false);
+    // True once the form being edited/cloned has loaded, so "unsaved changes" compares against it
+    const [baselineReady, setBaselineReady] = useState(false);
 
     const currentField = fields[activeField] || null;
     const params = useMemo(() => new URLSearchParams(loc.search), [loc.search]);
@@ -280,6 +344,7 @@ const CreateForm: React.FC = () => {
                 setFields([]);
             } finally {
                 setLoading(false);
+                setBaselineReady(true);
             }
         })();
     }, [user, targetId]);
@@ -452,308 +517,398 @@ const CreateForm: React.FC = () => {
             navigate('/hospital/forms');
         } catch (err) {
             console.error(err);
-            notify('Unable to save form');
+            notify(err instanceof Error && err.message ? err.message : 'Unable to save form');
         }
     };
 
-    const renderInputPreview = (field: FieldItem) => {
-        if (field.type === 'section') return null;
-        if (field.type === 'pageBreak') {
-            return <div className="border-t-2 border-dashed border-slate-600 pt-2 text-sm text-slate-400">Page Break</div>;
+    // ---------- Builder state that only affects the UI ----------
+    // Field ids are generated on load, so they're left out when checking for unsaved changes
+    const snapshot = JSON.stringify({ name, description, fields: fields.map(({ id: _id, ...rest }) => rest) });
+    const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
+    const [saving, setSaving] = useState<null | 'draft' | 'publish'>(null);
+    const [paletteOpen, setPaletteOpen] = useState(false);
+    const [previewWidth, setPreviewWidth] = useState<'desktop' | 'phone'>('desktop');
+    const optionRefs = useRef<Array<HTMLInputElement | null>>([]);
+    const focusOption = useRef<number | null>(null);
+
+    // Baseline for "unsaved changes": what was loaded (or the empty form) once loading settles
+    useEffect(() => {
+        if (loading || savedSnapshot !== null) return;
+        const ready = isCreateFresh ? draftHydrated : baselineReady;
+        // A new form's baseline is the empty form, so a restored local draft counts as unsaved
+        if (ready) setSavedSnapshot(isCreateFresh ? JSON.stringify({ name: '', description: '', fields: [] }) : snapshot);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [loading, draftHydrated, baselineReady]);
+    const dirty = savedSnapshot !== null && snapshot !== savedSnapshot;
+
+    useEffect(() => {
+        if (!dirty) return;
+        const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+        window.addEventListener('beforeunload', warn);
+        return () => window.removeEventListener('beforeunload', warn);
+    }, [dirty]);
+
+    // What still blocks saving, in plain words, each linked to the question to fix
+    const issues = useMemo(() => {
+        const list: Array<{ text: string; index: number }> = [];
+        if (!name.trim()) list.push({ text: 'Give the form a title', index: -1 });
+        if (fields.length === 0) list.push({ text: 'Add at least one question', index: -1 });
+        fields.forEach((f, i) => {
+            if (f.type !== 'pageBreak' && !f.label.trim()) list.push({ text: `Question ${i + 1} needs a label`, index: i });
+            if (isChoiceType(f.type) && f.options.filter(o => o.trim()).length === 0) list.push({ text: `“${f.label || `Question ${i + 1}`}” needs at least one option`, index: i });
+        });
+        return list;
+    }, [name, fields]);
+
+    const runSave = async (publish: boolean) => {
+        setSaving(publish ? 'publish' : 'draft');
+        try {
+            await saveForm(publish);
+        } finally {
+            setSaving(null);
         }
-        if (field.type === 'textarea') {
-            return (
-                <div className="h-16 rounded-md bg-slate-900/80 shadow-inner px-3 py-2 text-[15px] text-slate-500">
-                    {field.placeholder || 'Long answer text'}
-                </div>
-            );
-        }
-        if (field.type === 'select') {
-            return (
-                <div className="h-11 rounded-md bg-slate-900/80 shadow-inner flex items-center px-3 text-[15px] text-slate-500">
-                    {field.placeholder || 'Select an option'}
-                </div>
-            );
-        }
-        if (field.type === 'radio' || field.type === 'checkbox') {
-            return (
-                <div className="space-y-2 text-[15px] text-slate-300">
-                    {field.options.map(opt => (
-                        <div key={opt} className="flex items-center gap-2">
-                            <span className="text-slate-400">{field.type === 'radio' ? '○' : '☐'}</span>
-                            <span>{opt}</span>
-                        </div>
-                    ))}
-                </div>
-            );
-        }
-        if (field.type === 'file') return <div className="h-11 rounded-md bg-slate-900/80 shadow-inner flex items-center px-3 text-[15px] text-slate-500">{field.placeholder || 'Choose file'}</div>;
-        return (
-            <div className="h-11 rounded-md bg-slate-900/80 shadow-inner flex items-center px-3 text-[15px] text-slate-500">
-                {field.placeholder || 'Enter value'}
-            </div>
-        );
     };
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+                e.preventDefault();
+                if (canSave && !saving) runSave(false);
+                else if (!canSave) notify(issues[0]?.text || 'Finish the form first');
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    });
+
+    useEffect(() => {
+        if (focusOption.current === null) return;
+        optionRefs.current[focusOption.current]?.focus();
+        focusOption.current = null;
+    });
+
+    const leave = () => {
+        if (dirty && !window.confirm('Leave without saving? Your changes to this form will be lost.')) return;
+        if (dirty && localDraftKey && isCreateFresh) localStorage.removeItem(localDraftKey);
+        navigate('/hospital/forms');
+    };
+
+    const applyStarter = (starter: typeof STARTERS[number]) => {
+        const keys: string[] = [];
+        const built = starter.fields.map(([type, label, extra], i) => {
+            const f = createField(type, i, keys);
+            const key = ensureUniqueKey(slugify(label), keys);
+            keys.push(key);
+            return { ...f, id: `${f.id}_${i}`, label, key, ...extra, options: extra?.options || f.options };
+        });
+        if (!name.trim()) setName(starter.name);
+        if (!description.trim()) setDescription(starter.description);
+        setFields(built);
+        setActiveField(0);
+    };
+
+    const addOf = (type: FieldType) => {
+        addField(type);
+        setPaletteOpen(false);
+    };
+
+    const setOptions = (opts: string[]) => updateField(activeField, { options: opts });
+    const requiredCount = fields.filter(f => f.required).length;
+    const questionCount = fields.filter(f => !isStructural(f.type)).length;
+    let questionNumber = 0;
+
+    const palette = (
+        <div className="fb-palette" role="menu">
+            {FIELD_PICKER_GROUPS.map(group => (
+                <div key={group.title} className="fb-palette-group">
+                    <p>{group.title === 'Basic Fields' ? 'Answers' : group.title}</p>
+                    <div>
+                        {group.items.map(item => (
+                            <button key={item.type} type="button" role="menuitem" onClick={() => addOf(item.type)}>
+                                <TypeIcon type={item.type} />
+                                <span>{TYPE_META[item.type].label}<small>{TYPE_META[item.type].hint}</small></span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+
+    const preview = (
+        <div className={`fb-pv ${previewWidth === 'phone' ? 'is-phone' : ''}`}>
+            <div className="fb-pv-page">
+                <h2>{name || 'Untitled form'}</h2>
+                {description && <p className="fb-pv-desc">{description}</p>}
+                {fields.length === 0 ? (
+                    <p className="fb-pv-empty">Questions you add will appear here, exactly as staff will fill them in.</p>
+                ) : (
+                    <form className="fb-pv-fields" onSubmit={e => e.preventDefault()}>
+                        {fields.map((f, i) => {
+                            if (!isStructural(f.type)) questionNumber++;
+                            return <LiveField key={f.id} field={f} index={questionNumber} active={i === activeField} onSelect={() => setActiveField(i)} />;
+                        })}
+                        <button type="button" className="fb-pv-submit" disabled>Save record</button>
+                    </form>
+                )}
+            </div>
+        </div>
+    );
+
+    if (loading) {
+        return <div className="fb-loading"><div className="at-skeleton">{[0, 1, 2].map(n => <div key={n} style={{ height: 90 }} />)}</div></div>;
+    }
 
     return (
-        <div className="min-h-screen p-8 form-builder-shell" style={{ backgroundColor: 'var(--app-bg)' }}>
-            <div className="mx-auto max-w-[1500px] space-y-6">
-                <header className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6 pb-4 border-b border-slate-700/60">
-                    <div>
-                        <h1 className="text-[28px] font-bold text-slate-100">Form Builder</h1>
-                        <p className="text-[15px] text-slate-400 mt-1">Design forms with a focused, content-first editing flow.</p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <button type="button" onClick={() => setPreviewOpen(true)} className="px-4 py-2 rounded-lg text-[15px] text-slate-200 hover:bg-slate-800/70 hover:text-white transition-all duration-200">Preview</button>
-                        <button type="button" onClick={() => saveForm(false)} disabled={!canSave || loading} className="px-4 py-2 rounded-lg text-[15px] text-slate-200 border border-slate-700 hover:bg-slate-800/70 hover:text-white disabled:opacity-50 transition-all duration-200">Save Draft</button>
-                        <button type="button" onClick={() => saveForm(true)} className="px-5 py-2 rounded-lg text-[15px] text-white shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200" style={{ backgroundColor: '#3b82f6' }}>Publish</button>
-                    </div>
-                </header>
-
-                <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6">
-                    <main className="space-y-6">
-                        <div className="mx-auto max-w-[760px] rounded-2xl p-6 border border-slate-700/70 shadow-sm shadow-black/20" style={{ backgroundColor: 'var(--app-surface)' }}>
-                            <input
-                                value={name}
-                                onChange={e => setName(e.target.value)}
-                                placeholder="Form Title"
-                                className="w-full text-[28px] font-bold bg-transparent text-slate-100 placeholder:text-slate-500 outline-none"
-                            />
-                            <textarea
-                                value={description}
-                                onChange={e => setDescription(e.target.value)}
-                                placeholder="Describe what this form is for"
-                                rows={2}
-                                className="mt-3 w-full text-[15px] bg-transparent text-slate-300 placeholder:text-slate-500 outline-none resize-none"
-                            />
-                        </div>
-
-                        <div className="mx-auto max-w-[760px]">
-                            {fields.length === 0 ? (
-                                <div className="text-center py-20 rounded-2xl border border-slate-700/70 shadow-sm shadow-black/20" style={{ backgroundColor: 'var(--app-surface)' }}>
-                                    <p className="text-[18px] font-semibold text-slate-100">Start building your form</p>
-                                    <button
-                                        type="button"
-                                        onClick={() => setPickerOpen(true)}
-                                        className="mt-4 px-5 py-2.5 rounded-full text-white text-[15px] hover:-translate-y-0.5 transition-all duration-200"
-                                        style={{ backgroundColor: '#3b82f6' }}
-                                    >
-                                        + Add your first question
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="space-y-6">
-                                    {fields.map((field, idx) => (
-                                        <article
-                                            key={field.id}
-                                            draggable
-                                            onDragStart={() => setDragFrom(idx)}
-                                            onDragOver={e => e.preventDefault()}
-                                            onDrop={() => handleDrop(idx)}
-                                            onClick={() => setActiveField(idx)}
-                                                className={`group rounded-[14px] p-5 border border-slate-700/60 transition-all duration-200 ${
-                                                idx === activeField
-                                                    ? 'ring-1 ring-blue-400 shadow-lg shadow-blue-950/20'
-                                                    : 'hover:-translate-y-0.5 hover:shadow-md hover:shadow-black/30 hover:border-slate-500'
-                                            }`}
-                                            style={{ backgroundColor: 'var(--app-surface)', marginBottom: 24 }}
-                                        >
-                                            {field.type === 'section' ? (
-                                                <div>
-                                                    <p className="text-[18px] font-semibold text-slate-100">{field.label || 'Section Title'}</p>
-                                                    <p className="text-[15px] text-slate-400 mt-1">{field.description || 'Section description'}</p>
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    <div className="flex items-start justify-between gap-3">
-                                                        <div className="flex-1">
-                                                            <p className="text-[18px] font-semibold text-slate-100">{field.label || 'Untitled question'}</p>
-                                                            {field.description && <p className="text-[15px] text-slate-400 mt-1">{field.description}</p>}
-                                                        </div>
-                                                        <span className="opacity-0 group-hover:opacity-100 text-slate-400 transition-opacity">⋮⋮</span>
-                                                    </div>
-                                                    <div className="mt-4">{renderInputPreview(field)}</div>
-                                                    <div className="mt-4 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-2 text-sm text-slate-400">
-                                                        <button type="button" onClick={() => moveField(idx, 'up')} disabled={idx === 0} className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-slate-600 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed" title="Move up" aria-label="Move up">
-                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
-                                                        </button>
-                                                        <button type="button" onClick={() => moveField(idx, 'down')} disabled={idx === fields.length - 1} className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-slate-600 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed" title="Move down" aria-label="Move down">
-                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                                                        </button>
-                                                        <button type="button" onClick={() => duplicateField(idx)} className="h-8 px-2 inline-flex items-center gap-1 rounded-md border border-slate-600 hover:bg-slate-800 hover:text-slate-100 transition-colors" title="Duplicate" aria-label="Duplicate">
-                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2M10 8h8a2 2 0 012 2v8a2 2 0 01-2 2h-8a2 2 0 01-2-2v-8a2 2 0 012-2z" /></svg>
-                                                            <span>Duplicate</span>
-                                                        </button>
-                                                        <button type="button" onClick={() => removeField(idx)} className="h-8 px-2 inline-flex items-center gap-1 rounded-md border border-rose-700/70 text-rose-300 hover:bg-rose-900/20 transition-colors" title="Delete" aria-label="Delete">
-                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3M4 7h16" /></svg>
-                                                            <span>Delete</span>
-                                                        </button>
-                                                    </div>
-                                                </>
-                                            )}
-                                        </article>
-                                    ))}
-
-                                    <div className="flex justify-center pt-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => setPickerOpen(true)}
-                                            className="w-12 h-12 rounded-full text-white text-2xl shadow-lg ring-4 ring-blue-500/20 hover:scale-105 hover:-translate-y-0.5 transition-all duration-200"
-                                            style={{ backgroundColor: '#3b82f6' }}
-                                        >
-                                            +
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </main>
-
-                    <aside className="builder-scrollbar sticky top-24 self-start max-h-[calc(100vh-7.5rem)] overflow-y-auto space-y-6 rounded-2xl p-6 border border-slate-700/70 shadow-sm shadow-black/20" style={{ backgroundColor: 'var(--app-surface)' }}>
-                        <h3 className="text-[18px] font-semibold text-slate-100">Field Settings</h3>
-                        {!currentField ? (
-                            <p className="text-[15px] text-slate-400">Select a question to edit its settings.</p>
-                        ) : (
-                            <div className="space-y-6">
-                                <section className="space-y-4">
-                                    <p className="text-[18px] font-semibold text-slate-100">Basic</p>
-                                    <div className="space-y-4">
-                                        <div>
-                                            <label className="text-[15px] text-slate-300">Field Type</label>
-                                            <select
-                                                value={currentField.type}
-                                                onChange={e => updateField(activeField, { type: e.target.value as FieldType })}
-                                                className="mt-1 w-full px-3 py-3 text-[15px] rounded-lg border border-slate-700 bg-slate-900 text-slate-100 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-500/40 transition-colors"
-                                            >
-                                                {FIELD_TYPE_OPTIONS.map(opt => (
-                                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="text-[15px] text-slate-300">Label</label>
-                                            <input value={currentField.label} onChange={e => updateField(activeField, { label: e.target.value })} className="mt-1 w-full px-3 py-3 text-[15px] rounded-lg border border-slate-700 bg-slate-900 text-slate-100 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-500/40 transition-colors" />
-                                        </div>
-                                        {!isStructural(currentField.type) && (
-                                            <>
-                                                <div>
-                                                    <label className="text-[15px] text-slate-300">Placeholder</label>
-                                                    <input value={currentField.placeholder} onChange={e => updateField(activeField, { placeholder: e.target.value })} className="mt-1 w-full px-3 py-3 text-[15px] rounded-lg border border-slate-700 bg-slate-900 text-slate-100 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-500/40 transition-colors" />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[15px] text-slate-300">Help Text</label>
-                                                    <textarea rows={2} value={currentField.description} onChange={e => updateField(activeField, { description: e.target.value })} className="mt-1 w-full px-3 py-3 text-[15px] rounded-lg border border-slate-700 bg-slate-900 text-slate-100 resize-none outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-500/40 transition-colors" />
-                                                </div>
-                                                <label className="flex items-center justify-between text-[15px] text-slate-300">
-                                                    Required
-                                                    <input type="checkbox" checked={currentField.required} onChange={e => updateField(activeField, { required: e.target.checked })} />
-                                                </label>
-                                            </>
-                                        )}
-                                    </div>
-                                </section>
-
-                                {isChoiceType(currentField.type) && (
-                                    <section className="space-y-4 pt-6 border-t border-slate-700">
-                                        <p className="text-[18px] font-semibold text-slate-100">Options</p>
-                                        <div className="space-y-3">
-                                            {currentField.options.map((opt, i) => (
-                                                <div key={i} className="flex items-center gap-2">
-                                                    <input
-                                                        value={opt}
-                                                        onChange={e => {
-                                                            const next = [...currentField.options];
-                                                            next[i] = e.target.value;
-                                                            updateField(activeField, { options: next });
-                                                        }}
-                                                        className="flex-1 px-3 py-3 text-[15px] rounded-lg border border-slate-700 bg-slate-900 text-slate-100 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-500/40 transition-colors"
-                                                    />
-                                                    <button type="button" onClick={() => updateField(activeField, { options: currentField.options.filter((_, idx) => idx !== i) })} className="px-2 py-2 text-xs rounded border border-rose-700 text-rose-300">X</button>
-                                                </div>
-                                            ))}
-                                            <button type="button" onClick={() => updateField(activeField, { options: [...currentField.options, `Option ${currentField.options.length + 1}`] })} className="w-full px-3 py-2 text-[15px] rounded-lg text-slate-200 hover:bg-slate-800 transition-colors">+ Add Option</button>
-                                        </div>
-                                    </section>
-                                )}
-
-                                {!isStructural(currentField.type) && (
-                                    <section className="space-y-4 pt-6 border-t border-slate-700">
-                                        <p className="text-[18px] font-semibold text-slate-100">Validation</p>
-                                        <div className="space-y-3">
-                                            {isLengthType(currentField.type) && (
-                                                <>
-                                                    <input type="number" min={0} placeholder="Min length" value={currentField.validation.minLength ?? ''} onChange={e => updateField(activeField, { validation: { ...currentField.validation, minLength: e.target.value ? Number(e.target.value) : undefined } })} className="w-full px-3 py-3 text-[15px] rounded-lg border border-slate-700 bg-slate-900 text-slate-100 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-500/40 transition-colors" />
-                                                    <input type="number" min={0} placeholder="Max length" value={currentField.validation.maxLength ?? ''} onChange={e => updateField(activeField, { validation: { ...currentField.validation, maxLength: e.target.value ? Number(e.target.value) : undefined } })} className="w-full px-3 py-3 text-[15px] rounded-lg border border-slate-700 bg-slate-900 text-slate-100 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-500/40 transition-colors" />
-                                                </>
-                                            )}
-                                            {isRangeType(currentField.type) && (
-                                                <>
-                                                    <input placeholder="Min" value={currentField.validation.min || ''} onChange={e => updateField(activeField, { validation: { ...currentField.validation, min: e.target.value } })} className="w-full px-3 py-3 text-[15px] rounded-lg border border-slate-700 bg-slate-900 text-slate-100 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-500/40 transition-colors" />
-                                                    <input placeholder="Max" value={currentField.validation.max || ''} onChange={e => updateField(activeField, { validation: { ...currentField.validation, max: e.target.value } })} className="w-full px-3 py-3 text-[15px] rounded-lg border border-slate-700 bg-slate-900 text-slate-100 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-500/40 transition-colors" />
-                                                </>
-                                            )}
-                                        </div>
-                                    </section>
-                                )}
-
-                                {!isStructural(currentField.type) && (
-                                    <section className="pt-6 border-t border-slate-700">
-                                        <details>
-                                            <summary className="cursor-pointer text-[18px] font-semibold text-slate-100">Advanced</summary>
-                                            <div className="mt-3 space-y-3">
-                                                <input placeholder="Regex validation" value={currentField.validation.pattern || ''} onChange={e => updateField(activeField, { validation: { ...currentField.validation, pattern: e.target.value } })} className="w-full px-3 py-3 text-[15px] rounded-lg border border-slate-700 bg-slate-900 text-slate-100 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-500/40 transition-colors" />
-                                                <input placeholder="Custom error message" value={currentField.validation.customError || ''} onChange={e => updateField(activeField, { validation: { ...currentField.validation, customError: e.target.value } })} className="w-full px-3 py-3 text-[15px] rounded-lg border border-slate-700 bg-slate-900 text-slate-100 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-500/40 transition-colors" />
-                                            </div>
-                                        </details>
-                                    </section>
-                                )}
-                            </div>
-                        )}
-
-                        <div className="pt-4 border-t border-slate-700">
-                            <button
-                                type="button"
-                                onClick={() => setPickerOpen(true)}
-                                className="w-full py-2.5 rounded-xl text-[15px] font-medium border border-slate-600 text-slate-100 bg-slate-800/50 hover:bg-slate-700/70 transition-all duration-200"
-                            >
-                                + Add Block
-                            </button>
-                        </div>
-                    </aside>
+        <div className="fb">
+            <header className="fb-bar">
+                <button type="button" className="fb-back" onClick={leave} aria-label="Back to forms">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="m15 18-6-6 6-6" /></svg>
+                    Forms
+                </button>
+                <div className="fb-bar-title">
+                    <p>{isEditing ? 'Editing form' : cloneId ? 'New form from a copy' : 'New form'}</p>
+                    <span>
+                        {questionCount} question{questionCount === 1 ? '' : 's'}{requiredCount ? ` · ${requiredCount} required` : ''}
+                        {' · '}
+                        {saving ? 'Saving…' : dirty ? (isCreateFresh ? 'Draft kept on this device' : 'Unsaved changes') : 'All changes saved'}
+                    </span>
                 </div>
-
-                <div className="flex justify-end gap-2">
-                    <button type="button" onClick={() => navigate('/hospital/forms')} className="px-4 py-2 rounded-lg text-[15px] text-slate-200 hover:bg-slate-800 transition-colors duration-200">Cancel</button>
+                <div className="fb-bar-actions">
+                    <button type="button" className="nt-btn" onClick={() => runSave(false)} disabled={!canSave || Boolean(saving)} title="Save as draft (⌘/Ctrl + S)">
+                        {saving === 'draft' ? 'Saving…' : 'Save draft'}
+                    </button>
+                    <button type="button" className="nt-btn nt-btn--primary" onClick={() => runSave(true)} disabled={!canSave || Boolean(saving)} title={canSave ? 'Make this form available when adding records' : issues[0]?.text}>
+                        {saving === 'publish' ? 'Publishing…' : isEditing ? 'Save & publish' : 'Publish'}
+                    </button>
                 </div>
-            </div>
+            </header>
 
-            <TypePickerModal open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={addField} />
-
-            {previewOpen && (
-                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm p-4" onClick={() => setPreviewOpen(false)}>
-                    <div className="mx-auto h-full max-w-5xl rounded-2xl border border-slate-700 bg-slate-900 overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-                        <div className="px-5 py-4 border-b border-slate-700 flex items-center justify-between">
-                            <h3 className="text-lg font-semibold text-slate-100">Preview</h3>
-                            <button type="button" onClick={() => setPreviewOpen(false)} className="px-3 py-1.5 rounded-md text-sm text-slate-300 hover:bg-slate-800">Close</button>
-                        </div>
-                        <div className="flex-1 overflow-auto p-8" style={{ backgroundColor: 'var(--app-bg)' }}>
-                            <div className="mx-auto max-w-[760px] rounded-2xl p-6 border border-[var(--app-border)]" style={{ backgroundColor: 'var(--app-surface)' }}>
-                                <h2 className="text-[28px] font-bold text-slate-100">{name || 'Form Title'}</h2>
-                                <p className="text-[15px] text-slate-300 mt-2">{description || 'Form Description'}</p>
-                                <div className="mt-6 space-y-6">
-                                    {fields.map(f => (
-                                        <div key={f.id} className="space-y-2">
-                                            <p className="text-[15px] font-semibold text-slate-100">{f.label}</p>
-                                            {renderInputPreview(f)}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+            {issues.length > 0 && fields.length > 0 && (
+                <div className="fb-issues" role="status">
+                    <b>Before you can save:</b>
+                    {issues.slice(0, 4).map((issue, i) => (
+                        <button key={i} type="button" onClick={() => issue.index >= 0 ? setActiveField(issue.index) : document.getElementById('fb-title')?.focus()}>{issue.text}</button>
+                    ))}
+                    {issues.length > 4 && <span>+{issues.length - 4} more</span>}
                 </div>
             )}
 
+            <div className="fb-grid">
+                {/* Outline: every question in order, drag to reorder */}
+                <aside className="fb-outline">
+                    <div className="fb-meta">
+                        <input id="fb-title" className="fb-title-input" value={name} onChange={e => setName(e.target.value)} placeholder="Form title" aria-label="Form title" />
+                        <textarea className="fb-desc-input" value={description} onChange={e => setDescription(e.target.value)} placeholder="What is this form for? (shown to staff)" rows={2} aria-label="Form description" />
+                    </div>
+                    <p className="fb-label">Questions</p>
+                    {fields.length > 0 && (
+                        <ol className="fb-list">
+                            {fields.map((f, idx) => {
+                                const bad = issues.some(x => x.index === idx);
+                                return (
+                                    <li
+                                        key={f.id}
+                                        draggable
+                                        onDragStart={() => setDragFrom(idx)}
+                                        onDragOver={e => e.preventDefault()}
+                                        onDrop={() => handleDrop(idx)}
+                                        onDragEnd={() => setDragFrom(null)}
+                                        className={`${idx === activeField ? 'is-active' : ''} ${dragFrom === idx ? 'is-dragging' : ''} ${f.type === 'section' ? 'is-section' : ''}`}
+                                    >
+                                        <button type="button" onClick={() => setActiveField(idx)}>
+                                            <span className="fb-grip" aria-hidden>⋮⋮</span>
+                                            <TypeIcon type={f.type} />
+                                            <span className="fb-list-text">{f.type === 'pageBreak' ? 'Page break' : (f.label || 'Untitled')}</span>
+                                            {f.required && <em title="Required">*</em>}
+                                            {bad && <i className="fb-bad" title="Needs attention" />}
+                                        </button>
+                                    </li>
+                                );
+                            })}
+                        </ol>
+                    )}
+                    <div className="fb-add">
+                        <button type="button" className={`fb-add-btn ${paletteOpen ? 'is-open' : ''}`} onClick={() => setPaletteOpen(v => !v)} aria-expanded={paletteOpen}>
+                            <span aria-hidden>+</span> Add question
+                        </button>
+                        {paletteOpen && palette}
+                    </div>
+                </aside>
+
+                {/* Editor for the selected question */}
+                <main className="fb-editor">
+                    {fields.length === 0 ? (
+                        <div className="fb-start">
+                            <h2>Start your form</h2>
+                            <p>Pick a starting point or add questions one by one. You can change everything later.</p>
+                            <div className="fb-starters">
+                                {STARTERS.map(s => (
+                                    <button key={s.name} type="button" onClick={() => applyStarter(s)}>
+                                        <b>{s.name}</b>
+                                        <span>{s.description}</span>
+                                        <small>{s.fields.length} questions</small>
+                                    </button>
+                                ))}
+                            </div>
+                            <p className="fb-label">Or add a single question</p>
+                            {palette}
+                        </div>
+                    ) : currentField ? (
+                        <div className="fb-card" key={currentField.id}>
+                            <div className="fb-card-head">
+                                <span className="fb-card-step">{isStructural(currentField.type) ? TYPE_META[currentField.type].label : `Question ${fields.slice(0, activeField + 1).filter(f => !isStructural(f.type)).length} of ${questionCount}`}</span>
+                                <div className="fb-tools">
+                                    <button type="button" onClick={() => moveField(activeField, 'up')} disabled={activeField === 0} title="Move up" aria-label="Move up">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="m18 15-6-6-6 6" /></svg>
+                                    </button>
+                                    <button type="button" onClick={() => moveField(activeField, 'down')} disabled={activeField === fields.length - 1} title="Move down" aria-label="Move down">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="m6 9 6 6 6-6" /></svg>
+                                    </button>
+                                    <button type="button" onClick={() => duplicateField(activeField)} title="Duplicate" aria-label="Duplicate">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></svg>
+                                    </button>
+                                    <button type="button" className="is-danger" onClick={() => removeField(activeField)} disabled={fields.length <= 1} title={fields.length <= 1 ? 'A form needs at least one question' : 'Delete'} aria-label="Delete question">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></svg>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="fb-types" role="radiogroup" aria-label="Question type">
+                                {FIELD_TYPE_OPTIONS.map(opt => (
+                                    <button key={opt.value} type="button" role="radio" aria-checked={currentField.type === opt.value} className={currentField.type === opt.value ? 'is-on' : ''} onClick={() => updateField(activeField, { type: opt.value })} title={TYPE_META[opt.value].hint}>
+                                        <TypeIcon type={opt.value} size={15} /> {TYPE_META[opt.value].label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {currentField.type !== 'pageBreak' && (
+                                <div className="st-field">
+                                    <label htmlFor="fb-q-label">{currentField.type === 'section' ? 'Heading' : 'Question'}</label>
+                                    <input id="fb-q-label" className="st-input fb-q-label" value={currentField.label} onChange={e => updateField(activeField, { label: e.target.value })} placeholder={currentField.type === 'section' ? 'e.g. Examination' : 'e.g. Chief complaint'} autoFocus />
+                                </div>
+                            )}
+                            {currentField.type === 'pageBreak' && (
+                                <p className="fb-hint">Everything after this point appears on the next step when staff fill the form.</p>
+                            )}
+
+                            {currentField.type !== 'pageBreak' && (
+                                <div className="st-field">
+                                    <label htmlFor="fb-q-help">{currentField.type === 'section' ? 'Description' : 'Help text'} <small>optional</small></label>
+                                    <input id="fb-q-help" className="st-input" value={currentField.description} onChange={e => updateField(activeField, { description: e.target.value })} placeholder={currentField.type === 'section' ? 'A line about this group of questions' : 'Shown under the question, e.g. units or an example'} />
+                                </div>
+                            )}
+
+                            {!isStructural(currentField.type) && !isChoiceType(currentField.type) && (
+                                <div className="st-field">
+                                    <label htmlFor="fb-q-ph">Placeholder <small>optional</small></label>
+                                    <input id="fb-q-ph" className="st-input" value={currentField.placeholder} onChange={e => updateField(activeField, { placeholder: e.target.value })} placeholder="Faint example text inside the box" />
+                                </div>
+                            )}
+
+                            {isChoiceType(currentField.type) && (
+                                <div className="st-field">
+                                    <label>Options <small>press Enter for the next one</small></label>
+                                    <div className="fb-options">
+                                        {currentField.options.map((opt, i) => (
+                                            <div key={i} className="fb-option">
+                                                <span className="fb-option-mark" aria-hidden>{currentField.type === 'radio' ? '○' : currentField.type === 'checkbox' ? '☐' : `${i + 1}.`}</span>
+                                                <input
+                                                    ref={el => { optionRefs.current[i] = el; }}
+                                                    className="st-input"
+                                                    value={opt}
+                                                    aria-label={`Option ${i + 1}`}
+                                                    onChange={e => { const next = [...currentField.options]; next[i] = e.target.value; setOptions(next); }}
+                                                    onKeyDown={e => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            const next = [...currentField.options];
+                                                            next.splice(i + 1, 0, '');
+                                                            focusOption.current = i + 1;
+                                                            setOptions(next);
+                                                        } else if (e.key === 'Backspace' && !opt && currentField.options.length > 1) {
+                                                            e.preventDefault();
+                                                            focusOption.current = Math.max(0, i - 1);
+                                                            setOptions(currentField.options.filter((_, j) => j !== i));
+                                                        }
+                                                    }}
+                                                />
+                                                <button type="button" onClick={() => setOptions(currentField.options.filter((_, j) => j !== i))} disabled={currentField.options.length <= 1} aria-label={`Remove option ${i + 1}`}>×</button>
+                                            </div>
+                                        ))}
+                                        <button type="button" className="fb-option-add" onClick={() => { focusOption.current = currentField.options.length; setOptions([...currentField.options, '']); }}>+ Add option</button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {currentField.type === 'file' && (
+                                <div className="st-field">
+                                    <label>Accepted files</label>
+                                    <div className="fb-chips">
+                                        {FILE_TYPES.map(t => {
+                                            const on = currentField.fileSettings.allowedTypes.includes(t);
+                                            return (
+                                                <button key={t} type="button" className={on ? 'is-on' : ''} aria-pressed={on} onClick={() => {
+                                                    const list = on ? currentField.fileSettings.allowedTypes.filter(x => x !== t) : [...currentField.fileSettings.allowedTypes, t];
+                                                    if (list.length) updateField(activeField, { fileSettings: { ...currentField.fileSettings, allowedTypes: list } });
+                                                }}>{t}</button>
+                                            );
+                                        })}
+                                    </div>
+                                    <div className="fb-pair">
+                                        <div className="hd-suffix"><input className="st-input" inputMode="numeric" aria-label="Max size per file" value={currentField.fileSettings.maxFileSizeMB} onChange={e => updateField(activeField, { fileSettings: { ...currentField.fileSettings, maxFileSizeMB: Math.max(1, Number(e.target.value.replace(/\D/g, '')) || 1) } })} /><span>MB max</span></div>
+                                        <div className="hd-suffix"><input className="st-input" inputMode="numeric" aria-label="Max number of files" value={currentField.fileSettings.maxFiles} onChange={e => updateField(activeField, { fileSettings: { ...currentField.fileSettings, maxFiles: Math.max(1, Number(e.target.value.replace(/\D/g, '')) || 1) } })} /><span>files</span></div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {!isStructural(currentField.type) && (
+                                <SettingRow title="Required" description="Staff can’t save the record until this is answered.">
+                                    <Switch label="Required" checked={currentField.required} onChange={v => updateField(activeField, { required: v })} />
+                                </SettingRow>
+                            )}
+
+                            {!isStructural(currentField.type) && (isLengthType(currentField.type) || isRangeType(currentField.type)) && (
+                                <details className="fb-more">
+                                    <summary>Limits and validation</summary>
+                                    <div className="fb-pair">
+                                        {isLengthType(currentField.type) ? (
+                                            <>
+                                                <div className="st-field"><label htmlFor="fb-minl">Min characters</label><input id="fb-minl" className="st-input" type="number" min={0} value={currentField.validation.minLength ?? ''} onChange={e => updateField(activeField, { validation: { ...currentField.validation, minLength: e.target.value ? Number(e.target.value) : undefined } })} /></div>
+                                                <div className="st-field"><label htmlFor="fb-maxl">Max characters</label><input id="fb-maxl" className="st-input" type="number" min={0} value={currentField.validation.maxLength ?? ''} onChange={e => updateField(activeField, { validation: { ...currentField.validation, maxLength: e.target.value ? Number(e.target.value) : undefined } })} /></div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="st-field"><label htmlFor="fb-min">Lowest allowed</label><input id="fb-min" className="st-input" type={currentField.type === 'number' ? 'number' : currentField.type} value={currentField.validation.min || ''} onChange={e => updateField(activeField, { validation: { ...currentField.validation, min: e.target.value } })} /></div>
+                                                <div className="st-field"><label htmlFor="fb-max">Highest allowed</label><input id="fb-max" className="st-input" type={currentField.type === 'number' ? 'number' : currentField.type} value={currentField.validation.max || ''} onChange={e => updateField(activeField, { validation: { ...currentField.validation, max: e.target.value } })} /></div>
+                                            </>
+                                        )}
+                                    </div>
+                                    {isLengthType(currentField.type) && (
+                                        <div className="st-field"><label htmlFor="fb-rx">Pattern <small>regular expression, for advanced use</small></label><input id="fb-rx" className="st-input" value={currentField.validation.pattern || ''} onChange={e => updateField(activeField, { validation: { ...currentField.validation, pattern: e.target.value } })} placeholder="e.g. ^[A-Z]{2}[0-9]{4}$" /></div>
+                                    )}
+                                    <div className="st-field"><label htmlFor="fb-err">Message when the answer isn’t valid</label><input id="fb-err" className="st-input" value={currentField.validation.customError || ''} onChange={e => updateField(activeField, { validation: { ...currentField.validation, customError: e.target.value } })} placeholder="e.g. Enter a value between 30 and 45" /></div>
+                                </details>
+                            )}
+
+                            {!isStructural(currentField.type) && <p className="fb-key">Stored as <code>{currentField.key || '—'}</code></p>}
+                        </div>
+                    ) : null}
+                </main>
+
+                {/* Live preview */}
+                <section className="fb-preview" aria-label="Live preview">
+                    <div className="fb-preview-head">
+                        <p className="fb-label">Live preview</p>
+                        <div className="hd-seg" role="radiogroup" aria-label="Preview width">
+                            {(['desktop', 'phone'] as const).map(w => (
+                                <button key={w} type="button" role="radio" aria-checked={previewWidth === w} className={previewWidth === w ? 'is-on' : ''} onClick={() => setPreviewWidth(w)}>{w === 'desktop' ? 'Desktop' : 'Phone'}</button>
+                            ))}
+                        </div>
+                    </div>
+                    {preview}
+                </section>
+            </div>
         </div>
     );
 };

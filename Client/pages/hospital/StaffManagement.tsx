@@ -7,6 +7,7 @@ import { Staff, StaffRole } from '../../types';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import Loader from '../../components/Loader';
+import SearchBox from '../../components/SearchBox';
 
 interface ApiStaff { _id: string; staffId?: string; name: string; email: string; role?: string; status?: string }
 
@@ -48,8 +49,6 @@ const StaffManagement: React.FC = () => {
     // server provides search results; only apply role filter on the client
     const filteredStaff = staff.filter(s => filterRole === 'All' || s.role === filterRole);
 
-    // debounce search
-    const searchTimer = React.useRef<number | null>(null);
     
     const getStatusChip = (status: 'Active' | 'Inactive') => {
         return status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300';
@@ -63,23 +62,11 @@ const StaffManagement: React.FC = () => {
         <Card title="Staff Management">
             <div className="space-y-4">
                  <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-                    <input
-                        type="text"
-                        placeholder="Search staff..."
-                        className="w-full md:w-1/3 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-brand-accent focus:border-brand-accent bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-400"
-                        value={searchTerm}
-                        onChange={e => {
-                            const v = e.target.value;
-                            setSearchTerm(v);
-                            // debounce server call and reset to page 1
-                            if (searchTimer.current) window.clearTimeout(searchTimer.current);
-                            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                            // @ts-ignore
-                            searchTimer.current = window.setTimeout(() => {
-                                setPage(1);
-                                fetchStaff(v, 1);
-                            }, 300);
-                        }}
+                    <SearchBox
+                        className="w-full md:w-96"
+                        placeholder="Search staff by name or email"
+                        live
+                        onSearch={q => { setSearchTerm(q); setPage(1); fetchStaff(q, 1); }}
                     />
                     <select
                         className="w-full md:w-1/4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-brand-accent focus:border-brand-accent bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"

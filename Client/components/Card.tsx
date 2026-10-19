@@ -4,17 +4,20 @@ interface CardProps {
     children: React.ReactNode;
     className?: string;
     title?: string;
+    /** Optional control shown at the right of the title row (e.g. an Edit button) */
+    action?: React.ReactNode;
 }
 
-const Card: React.FC<CardProps> = ({ children, className = '', title }) => {
+const Card: React.FC<CardProps> = ({ children, className = '', title, action }) => {
     return (
-        <div className={`bg-[var(--app-surface)] rounded-2xl shadow-[0_10px_30px_rgba(36,50,71,0.14)] dark:shadow-[0_10px_30px_rgba(2,6,23,0.45)] border border-[var(--app-border)] overflow-hidden transition-shadow hover:shadow-[0_14px_34px_rgba(36,50,71,0.2)] dark:hover:shadow-[0_14px_34px_rgba(2,6,23,0.52)] ${className}`}>
+        <div className={`bg-[var(--app-surface)] rounded-xl border border-[var(--app-border)] shadow-[var(--app-shadow)] overflow-hidden ${className}`}>
             {title && (
-                <div className="p-4 md:px-6 border-b border-[var(--app-border)]">
-                    <h3 className="text-lg font-semibold text-[var(--app-text)]">{title}</h3>
+                <div className="flex items-center gap-3 px-5 pt-5 pb-3 md:px-6">
+                    <h3 className="app-card-title text-[15px] font-semibold tracking-[-0.005em] text-[var(--app-text)]">{title}</h3>
+                    {action}
                 </div>
             )}
-            <div className="p-4 md:p-6">
+            <div className={title ? 'px-5 pb-5 md:px-6 md:pb-6' : 'p-5 md:p-6'}>
                 {children}
             </div>
         </div>

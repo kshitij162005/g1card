@@ -1,70 +1,110 @@
-import React from 'react';
-import Card from '../../components/Card';
+import React, { useEffect, useState } from 'react';
+import { API_URL } from '../../config/api';
+import { useAuth } from '../../contexts/AuthContext';
+import { SettingsPage, SettingsSection, SettingRow, InfoGrid, Switch, StatusPill } from '../../components/settings/Settings';
+import { DialogButton } from '../../components/AppDialog';
+import { ThemeMode, getStoredTheme, setStoredTheme } from '../../utils/theme';
 
-const SettingInput: React.FC<{ label: string; id: string; type?: string; value: string | number }> = ({ label, id, type = 'text', value }) => (
-    <div>
-        <label htmlFor={id} className="block text-sm font-medium text-slate-700 dark:text-slate-300">{label}</label>
-        <input type={type} id={id} defaultValue={value} className="mt-1 block w-full border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-accent focus:border-brand-accent"/>
-    </div>
-);
+interface SystemInfo {
+    environment: string;
+    appUrl: string;
+    database: { connected: boolean; name: string };
+    email: { configured: boolean; via: string; sender: string };
+    googleSignIn: { configured: boolean };
+    ai: { routing: string; providers: Array<{ name: string; configured: boolean; models: number }> };
+    otp: { length: number; validityMinutes: number; resendCooldownSeconds: number };
+    uptimeSeconds: number;
+}
 
-const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-    <div className="space-y-6">
-        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {children}
-        </div>
-    </div>
-);
+const uptime = (s: number) => {
+    const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+    return d ? `${d} d ${h} h` : h ? `${h} h ${m} min` : `${m} min`;
+};
 
+// Live view of how the platform is configured. Values come from the server's environment, so they
+// are read-only here; change them in the server's .env and restart.
 const SystemSettings: React.FC = () => {
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        notify('System settings saved');
+    const { user } = useAuth();
+    const [info, setInfo] = useState<SystemInfo | null>(null);
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [theme, setTheme] = useState<ThemeMode>(() => getStoredTheme());
+
+    const load = async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const resp = await fetch(`${API_URL}/superadmin/system`);
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data?.error || 'Could not load configuration');
+            setInfo(data.system);
+        } catch (err: any) {
+            setError(err?.message || 'Could not load configuration');
+        } finally {
+            setLoading(false);
+        }
     };
 
+    useEffect(() => { load(); }, []);
+
+    const ok = (v: boolean, yes = 'Connected', no = 'Not set up') => <StatusPill tone={v ? 'ok' : 'bad'}>{v ? yes : no}</StatusPill>;
+    const configuredAi = info?.ai.providers.filter(p => p.configured) || [];
+
     return (
-        <Card title="System Settings & Configuration">
-            <form onSubmit={handleSubmit} className="space-y-8 divide-y divide-slate-200 dark:divide-slate-700">
-                <Section title="General Settings">
-                   <SettingInput label="System Name" id="system-name" value="G1CARD" />
-                   <SettingInput label="Support Email" id="support-email" type="email" value="kotechakshitij@gmail.com" />
-                   <SettingInput label="Timezone" id="timezone" value="IST (UTC+5:30)" />
-                   <SettingInput label="Language" id="language" value="English" />
-                </Section>
+        <SettingsPage
+            kicker="Control centre"
+            title="Settings"
+            subtitle="How G1Card is set up right now. Platform values come from the server environment."
+            actions={<DialogButton onClick={load} disabled={loading}>{loading ? 'Checking…' : 'Check again'}</DialogButton>}
+        >
+            {error && <p className="st-note st-note--bad">{error}</p>}
 
-                <div className="pt-8">
-                    <Section title="Email Configuration">
-                        <SettingInput label="Email Service" id="email-service" value="Nodemailer" />
-                        <SettingInput label="SMTP Host" id="smtp-host" value="smtp.gmail.com" />
-                        <SettingInput label="Sender Email" id="sender-email" value="noreply@g1card.com" />
-                    </Section>
-                </div>
-                
-                 <div className="pt-8">
-                    <Section title="OTP Settings">
-                        <SettingInput label="OTP Length" id="otp-length" type="number" value={6} />
-                        <SettingInput label="OTP Validity (minutes)" id="otp-validity" type="number" value={10} />
-                        <SettingInput label="Resend Cooldown (seconds)" id="resend-cooldown" type="number" value={30} />
-                        <SettingInput label="Max Attempts" id="max-attempts" type="number" value={5} />
-                    </Section>
-                </div>
+            <SettingsSection title="Your admin account" description="How the admin portal looks for you on this device.">
+                <InfoGrid items={[{ label: 'Signed in as', value: user?.email }, { label: 'Role', value: 'Super admin' }]} />
+                <SettingRow title="Dark mode" description="Saved on this device.">
+                    <Switch
+                        label="Dark mode"
+                        checked={theme === 'dark'}
+                        onChange={(on) => { const next: ThemeMode = on ? 'dark' : 'light'; setStoredTheme(next); setTheme(next); }}
+                    />
+                </SettingRow>
+            </SettingsSection>
 
-                 <div className="pt-8">
-                     <Section title="Security Settings">
-                        <SettingInput label="Session Timeout (minutes)" id="session-timeout" type="number" value={30} />
-                        <SettingInput label="JWT Expiry (hours)" id="jwt-expiry" type="number" value={24} />
-                        <SettingInput label="Password Min Length" id="password-min-length" type="number" value={6} />
-                    </Section>
-                </div>
+            <SettingsSection title="Services" description="If something here isn’t set up, the matching feature (emails, Google sign-in, Golu) won’t work.">
+                <SettingRow title="Database" description={info?.database.name ? `MongoDB · ${info.database.name}` : 'MongoDB'}>
+                    {info ? ok(info.database.connected) : <StatusPill tone="muted">…</StatusPill>}
+                </SettingRow>
+                <SettingRow title="Email delivery" description={info?.email.configured ? `Sends from ${info.email.sender} via ${info.email.via}` : 'OTP codes and alerts can’t be emailed until SMTP is configured.'}>
+                    {info ? ok(info.email.configured) : <StatusPill tone="muted">…</StatusPill>}
+                </SettingRow>
+                <SettingRow title="Google sign-in" description="Lets patients and hospitals sign in with Google.">
+                    {info ? ok(info.googleSignIn.configured, 'Enabled', 'Off') : <StatusPill tone="muted">…</StatusPill>}
+                </SettingRow>
+                <SettingRow
+                    title="AI assistant (Golu)"
+                    description={info ? (configuredAi.length ? `${configuredAi.map(p => p.name).join(', ')} · ${info.ai.routing} routing` : 'No AI provider key is set.') : ''}
+                >
+                    {info ? ok(configuredAi.length > 0, `${configuredAi.length} provider${configuredAi.length === 1 ? '' : 's'}`, 'Off') : <StatusPill tone="muted">…</StatusPill>}
+                </SettingRow>
+            </SettingsSection>
 
-                <div className="pt-8 flex justify-end">
-                    <button type="submit" className="px-6 py-2 bg-brand-primary text-white font-semibold rounded-lg hover:bg-brand-secondary transition-transform transform hover:scale-105">
-                        Save Changes
-                    </button>
-                </div>
-            </form>
-        </Card>
+            <SettingsSection title="Sign-in codes" description="One-time codes for registration and password changes.">
+                <InfoGrid items={[
+                    { label: 'Code length', value: info ? `${info.otp.length} digits` : '' },
+                    { label: 'Valid for', value: info ? `${info.otp.validityMinutes} minutes` : '' },
+                    { label: 'Resend after', value: info ? `${info.otp.resendCooldownSeconds} seconds` : '' },
+                ]} />
+            </SettingsSection>
+
+            <SettingsSection title="Deployment">
+                <InfoGrid items={[
+                    { label: 'Environment', value: info?.environment },
+                    { label: 'Links in emails point to', value: info?.appUrl },
+                    { label: 'Server running for', value: info ? uptime(info.uptimeSeconds) : '' },
+                    { label: 'Support email', value: 'kotechakshitij@gmail.com' },
+                ]} />
+            </SettingsSection>
+        </SettingsPage>
     );
 };
 
