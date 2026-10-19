@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { goHome } from '../utils/home';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Role } from '../types';
@@ -41,6 +42,15 @@ const LoginPage: React.FC = () => {
     useEffect(() => {
         roleRef.current = role;
     }, [role]);
+
+    // Explain why a stored session was signed out (see AuthContext session check)
+    useEffect(() => {
+        const reason = sessionStorage.getItem('g1card_signout_reason');
+        if (reason) {
+            sessionStorage.removeItem('g1card_signout_reason');
+            notify(reason);
+        }
+    }, []);
 
     const navigateByRole = useCallback((currentRole: Role) => {
         switch (currentRole) {
@@ -145,6 +155,7 @@ const LoginPage: React.FC = () => {
             }
             navigateByRole(role);
         } catch (err) {
+            notify(err instanceof Error && err.message ? err.message : 'Login failed. Please try again.');
             setIsLoggingIn(false);
         }
     };
@@ -154,28 +165,27 @@ const LoginPage: React.FC = () => {
     }
 
     return (
-        <div className="min-h-screen bg-[var(--app-bg)] relative overflow-hidden px-4 py-10 sm:py-14">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.2),transparent_42%),radial-gradient(circle_at_bottom,rgba(14,165,233,0.16),transparent_38%)]" />
+        <div className="h-[100dvh] overflow-y-auto overflow-x-hidden bg-[var(--app-bg)] relative px-4 flex">
 
-            <div className={`relative z-10 mx-auto w-full ${isAdminLogin ? 'max-w-md' : 'max-w-6xl'}`}>
-                <div className={`grid gap-8 items-start ${isAdminLogin ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
+            <div className={`relative z-10 m-auto w-full py-4 ${isAdminLogin ? 'max-w-md' : 'max-w-5xl'}`}>
+                <div className={`grid gap-8 lg:gap-12 items-center ${isAdminLogin ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
                     {!isAdminLogin && (
                         <aside className="hidden lg:block">
-                            <div className="rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)]/96 p-8 shadow-[0_10px_30px_rgba(36,50,71,0.14)] dark:shadow-[0_10px_30px_rgba(2,6,23,0.35)]">
+                            <div className="px-1">
                                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--app-accent)]">Why G1CARD</p>
-                                <h2 className="mt-4 text-3xl font-semibold leading-tight text-[var(--app-text)]">Unified records for patients, hospitals, and administrators</h2>
-                                <p className="mt-4 text-sm leading-7 text-[var(--app-muted)]">G1CARD gives each stakeholder a clear, secure workflow: faster access for clinicians, better visibility for patients, and reliable governance for admins.</p>
+                                <h2 className="mt-3 font-serif text-[30px] font-semibold leading-tight tracking-[-0.015em] text-[var(--app-text)]">One medical history, shared only with the hospitals you approve</h2>
+                                <p className="mt-3 text-sm leading-6 text-[var(--app-muted)]">Faster access for clinicians, full visibility for patients, and an audit trail on every record that is opened.</p>
 
-                                <div className="mt-8 space-y-3">
-                                    <div className="rounded-xl border border-[var(--app-border)] bg-[var(--app-surface)] p-4">
+                                <div className="mt-6 space-y-2.5">
+                                    <div className="rounded-xl border border-[var(--app-border)] bg-[var(--app-surface)] px-4 py-3">
                                         <p className="text-xs uppercase tracking-[0.16em] text-[var(--app-muted)]">Patient Experience</p>
                                         <p className="mt-1 text-sm text-[var(--app-text)]">Health history, notifications, and profile updates in one place.</p>
                                     </div>
-                                    <div className="rounded-xl border border-[var(--app-border)] bg-[var(--app-surface)] p-4">
+                                    <div className="rounded-xl border border-[var(--app-border)] bg-[var(--app-surface)] px-4 py-3">
                                         <p className="text-xs uppercase tracking-[0.16em] text-[var(--app-muted)]">Hospital Workflow</p>
-                                        <p className="mt-1 text-sm text-[var(--app-text)]">Patient records, templates, reports, and audit logs with role-based controls.</p>
+                                        <p className="mt-1 text-sm text-[var(--app-text)]">Patient records, your own record forms, and audit logs.</p>
                                     </div>
-                                    <div className="rounded-xl border border-[var(--app-border)] bg-[var(--app-surface)] p-4">
+                                    <div className="rounded-xl border border-[var(--app-border)] bg-[var(--app-surface)] px-4 py-3">
                                         <p className="text-xs uppercase tracking-[0.16em] text-[var(--app-muted)]">Platform Trust</p>
                                         <p className="mt-1 text-sm text-[var(--app-text)]">Every sensitive action is monitored to keep access accountable.</p>
                                     </div>
@@ -184,28 +194,28 @@ const LoginPage: React.FC = () => {
                         </aside>
                     )}
 
-                    <section className="rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)]/96 backdrop-blur-sm p-6 sm:p-8 shadow-[0_10px_30px_rgba(36,50,71,0.18)] dark:shadow-[0_10px_30px_rgba(2,6,23,0.45)] lg:max-w-md lg:justify-self-end w-full">
-                    <div className="mb-7">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--app-accent)]">G1CARD</p>
-                        <h1 className="mt-3 text-3xl font-semibold text-[var(--app-text)]">{isAdminLogin ? 'Admin sign in' : 'Welcome back'}</h1>
-                        <p className="mt-2 text-sm leading-6 text-[var(--app-muted)]">{isAdminLogin ? 'Sign in to access super admin controls.' : 'Sign in to continue securely to your healthcare workspace.'}</p>
+                    <section className="rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-6 sm:p-7 shadow-[var(--app-shadow)] lg:max-w-[420px] lg:justify-self-end w-full">
+                    <div className="mb-5">
+                        <button type="button" onClick={goHome} className="g1-wordmark" title="Go to dashboard">G1Card</button>
+                        <h1 className="mt-4 font-serif text-[26px] font-semibold tracking-[-0.01em] text-[var(--app-text)]">{isAdminLogin ? 'Admin sign in' : 'Welcome back'}</h1>
+                        <p className="mt-1 text-sm text-[var(--app-muted)]">{isAdminLogin ? 'Sign in to access super admin controls.' : 'Sign in to your healthcare workspace.'}</p>
                     </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-5">
-                        <div className="rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-soft)]/55 p-3 sm:p-3.5">
-                            <div className="flex items-start justify-between gap-3">
-                                <div>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div className="rounded-xl border border-[var(--app-border)] bg-[var(--app-surface-soft)]/55 px-3 py-2.5">
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
                                     <p className="text-sm font-semibold text-[var(--app-text)]">Simulation mode</p>
-                                    <p className="mt-1 text-xs leading-5 text-[var(--app-muted)]">
+                                    <p className="text-xs leading-5 text-[var(--app-muted)] truncate">
                                         {isAdminLogin
-                                            ? 'Preview the admin dashboard with sandbox data. No credentials required.'
-                                            : 'Explore every role with sample data. No credentials needed.'}
+                                            ? 'Preview the admin dashboard without signing in.'
+                                            : 'Explore with sample data, no sign-in.'}
                                     </p>
                                 </div>
                                 <button
                                     type="button"
                                     onClick={() => setIsSimulationMode((prev) => !prev)}
-                                    className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border p-0.5 overflow-hidden transition-colors duration-300 ease-out ${isSimulationMode ? 'bg-blue-600 border-blue-600' : 'bg-[var(--app-surface)] border-[var(--app-border)]'}`}
+                                    className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border p-0.5 overflow-hidden transition-colors duration-300 ease-out ${isSimulationMode ? 'bg-[var(--app-primary)] border-[var(--app-primary)]' : 'bg-[var(--app-surface)] border-[var(--app-border-strong)]'}`}
                                     aria-pressed={isSimulationMode}
                                     aria-label="Toggle simulation mode"
                                 >
@@ -216,7 +226,7 @@ const LoginPage: React.FC = () => {
                                 </button>
                             </div>
                             <p
-                                className={`text-xs font-medium text-[var(--app-accent)] transition-all duration-200 overflow-hidden ${isSimulationMode ? 'mt-2 max-h-10 opacity-100' : 'mt-0 max-h-0 opacity-0'}`}
+                                className={`text-xs font-medium text-[var(--app-accent)] transition-all duration-200 overflow-hidden ${isSimulationMode ? 'mt-1.5 max-h-10 opacity-100' : 'mt-0 max-h-0 opacity-0'}`}
                                 aria-hidden={!isSimulationMode}
                             >
                                 Simulation users are loaded directly from seeded sample records.
@@ -226,11 +236,11 @@ const LoginPage: React.FC = () => {
                         {!isAdminLogin && (
                             <div>
                                 <span className="text-sm font-medium text-[var(--app-text)]">Sign in as</span>
-                                <div className="mt-2 grid grid-cols-2 gap-1 rounded-xl bg-[var(--app-surface-soft)] p-1">
+                                <div className="mt-1.5 grid grid-cols-2 gap-1 rounded-xl bg-[var(--app-surface-soft)] p-1">
                                     {availableRoles.map((r) => (
                                         <label
                                             key={r}
-                                            className={`login-role-pill flex items-center justify-center h-10 rounded-lg cursor-pointer transition-colors ${role === r ? 'login-role-pill-active !bg-[var(--app-surface)] border border-[var(--app-border)] text-[var(--app-text)] shadow-sm' : 'border border-transparent text-[var(--app-muted)] hover:text-[var(--app-text)] hover:bg-[var(--app-surface)]/70'}`}
+                                            className={`login-role-pill flex items-center justify-center h-9 rounded-lg cursor-pointer transition-colors ${role === r ? 'login-role-pill-active !bg-[var(--app-surface)] border border-[var(--app-border)] text-[var(--app-text)] shadow-sm' : 'border border-transparent text-[var(--app-muted)] hover:text-[var(--app-text)] hover:bg-[var(--app-surface)]/70'}`}
                                         >
                                             <input type="radio" name="role" value={r} checked={role === r} onChange={() => setRole(r)} className="sr-only" />
                                             <span className="text-sm font-medium">{r}</span>
@@ -240,7 +250,7 @@ const LoginPage: React.FC = () => {
                             </div>
                         )}
 
-                        <div className="space-y-1.5">
+                        <div className="space-y-1">
                             <label htmlFor="email" className="text-sm font-medium text-[var(--app-text)]">Email</label>
                             <input
                                 id="email"
@@ -248,13 +258,13 @@ const LoginPage: React.FC = () => {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                     disabled={isSimulationMode}
-                                className="block h-11 w-full rounded-lg border border-[var(--app-border)] bg-[var(--app-surface)] px-3 text-sm text-[var(--app-text)] placeholder:text-[var(--app-muted)] focus:outline-none focus:ring-2 focus:ring-blue-500/60 focus:border-blue-500/70"
+                                className="block h-10 w-full rounded-lg border border-[var(--app-border)] bg-[var(--app-surface)] px-3 text-sm text-[var(--app-text)] placeholder:text-[var(--app-muted)] focus:outline-none focus:ring-2 focus:ring-blue-500/60 focus:border-blue-500/70"
                                     placeholder={isSimulationMode ? 'Not required in simulation mode' : emailPlaceholder}
                                     required={!isSimulationMode}
                             />
                         </div>
 
-                        <div className="space-y-1.5">
+                        <div className="space-y-1">
                             <label htmlFor="password" className="text-sm font-medium text-[var(--app-text)]">Password</label>
                             <div className="relative">
                                 <input
@@ -263,7 +273,7 @@ const LoginPage: React.FC = () => {
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     disabled={isSimulationMode}
-                                    className="block h-11 w-full rounded-lg border border-[var(--app-border)] bg-[var(--app-surface)] px-3 pr-10 text-sm text-[var(--app-text)] placeholder:text-[var(--app-muted)] focus:outline-none focus:ring-2 focus:ring-blue-500/60 focus:border-blue-500/70"
+                                    className="block h-10 w-full rounded-lg border border-[var(--app-border)] bg-[var(--app-surface)] px-3 pr-10 text-sm text-[var(--app-text)] placeholder:text-[var(--app-muted)] focus:outline-none focus:ring-2 focus:ring-blue-500/60 focus:border-blue-500/70"
                                     placeholder={isSimulationMode ? 'Not required in simulation mode' : ''}
                                     required={!isSimulationMode}
                                 />
@@ -296,7 +306,7 @@ const LoginPage: React.FC = () => {
                                 <button
                                     type="button"
                                     onClick={() => navigate(role === Role.HOSPITAL ? '/hospital/register' : '/patient/register')}
-                                    className={`font-semibold text-blue-600 dark:text-blue-400 transition-colors ${isSimulationMode ? 'opacity-0 pointer-events-none' : 'hover:text-blue-700 dark:hover:text-blue-300'}`}
+                                    className={`font-semibold text-[var(--app-accent)] transition-colors ${isSimulationMode ? 'opacity-0 pointer-events-none' : 'hover:opacity-80'}`}
                                     tabIndex={isSimulationMode ? -1 : 0}
                                     aria-hidden={isSimulationMode}
                                 >
@@ -307,38 +317,38 @@ const LoginPage: React.FC = () => {
 
                         <button
                             type="submit"
-                            className="h-11 w-full rounded-lg bg-blue-600 text-sm font-semibold text-white transition-colors hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400/70"
+                            className="h-10 w-full rounded-lg bg-[var(--app-primary)] text-sm font-semibold text-[var(--app-primary-text)] transition-colors hover:bg-[var(--app-primary-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--app-accent-soft)]"
                         >
                             {isSimulationMode ? 'Enter Simulation' : 'Login'}
                         </button>
 
                         {!isAdminLogin && (
-                            <div className="pt-1 min-h-[78px]">
+                            <div className="min-h-[68px]">
                                 <div className="flex items-center gap-3">
                                     <div className="h-px flex-1 bg-[var(--app-border)]"></div>
-                                    <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--app-muted)]">Or continue with</span>
+                                    <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--app-muted)]">Or</span>
                                     <div className="h-px flex-1 bg-[var(--app-border)]"></div>
                                 </div>
                                 {!googleClientId && !isSimulationMode && (
-                                    <p className="mt-3 text-xs text-center text-amber-700 dark:text-amber-400">Google login is unavailable. Missing VITE_GOOGLE_CLIENT_ID.</p>
+                                    <p className="mt-2 text-xs text-center text-amber-700 dark:text-amber-400">Google login is unavailable. Missing VITE_GOOGLE_CLIENT_ID.</p>
                                 )}
                                 {isSimulationMode ? (
-                                    <div className="mt-3 min-h-10 w-full rounded-lg border border-dashed border-[var(--app-border)] bg-[var(--app-surface-soft)]/45 px-3 py-2 text-center text-xs text-[var(--app-muted)] flex items-center justify-center">
+                                    <div className="mt-2 min-h-10 w-full rounded-lg border border-dashed border-[var(--app-border)] bg-[var(--app-surface-soft)]/45 px-3 py-2 text-center text-xs text-[var(--app-muted)] flex items-center justify-center">
                                         Google sign-in is unavailable in simulation mode.
                                     </div>
                                 ) : (
-                                    <div ref={googleButtonRef} className="mt-3 min-h-10 w-full flex justify-center"></div>
+                                    <div ref={googleButtonRef} className="mt-2 min-h-10 w-full flex justify-center"></div>
                                 )}
                             </div>
                         )}
                     </form>
 
-                    <div className="mt-6 text-center space-y-2">
-                        <p className="text-xs text-[var(--app-muted)]">Protected health data access is monitored and audited.</p>
+                    <div className="mt-4 flex items-center justify-between gap-3 text-xs text-[var(--app-muted)]">
+                        <span>Every access is audited.</span>
                         <button
                             type="button"
                             onClick={() => navigate(isAdminLogin ? '/login' : '/admin/login')}
-                            className="text-xs font-medium text-[var(--app-muted)] hover:text-[var(--app-text)] transition-colors"
+                            className="font-medium hover:text-[var(--app-text)] transition-colors"
                         >
                             {isAdminLogin ? 'Back to user login' : 'Admin login'}
                         </button>

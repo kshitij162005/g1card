@@ -1,4 +1,5 @@
 import { API_URL } from '../../config/api';
+import SearchBox from '../../components/SearchBox';
 import React, { useEffect, useMemo, useState } from 'react';
 import Card from '../../components/Card';
 import Loader from '../../components/Loader';
@@ -77,7 +78,8 @@ const DeletionRequests: React.FC = () => {
 
     useEffect(() => {
         fetchRequests();
-    }, [statusFilter]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [statusFilter, search]);
 
     const pendingCount = useMemo(() => requests.filter((r) => r.status === 'PENDING').length, [requests]);
 
@@ -142,13 +144,10 @@ const DeletionRequests: React.FC = () => {
 
             <Card>
                 <div className="flex flex-col lg:flex-row gap-3">
-                    <input
-                        type="text"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && fetchRequests()}
+                    <SearchBox
+                        className="flex-1"
                         placeholder="Search by patient name or email"
-                        className="flex-1 px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                        onSearch={q => setSearch(q)}
                     />
                     <div className="flex gap-2">
                         {(['ALL', 'PENDING', 'APPROVED', 'REJECTED'] as const).map((status) => (

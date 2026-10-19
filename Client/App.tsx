@@ -4,6 +4,8 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Role } from './types';
 import LoginPage from './pages/LoginPage';
+import LandingPage from './pages/LandingPage';
+import GetStartedPage from './pages/GetStartedPage';
 import OtpPage from './pages/OtpPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
@@ -25,6 +27,7 @@ import HospitalUpdateRequestsAdmin from './pages/admin/HospitalUpdateRequests';
 import AddHospitalPage from './pages/admin/AddHospitalPage';
 import PendingRequests from './pages/admin/PendingRequests';
 import DeletionRequests from './pages/admin/DeletionRequests';
+import AdminNotifications from './pages/admin/AdminNotifications';
 
 import HospitalLayout from './layouts/HospitalLayout';
 import HospitalDashboard from './pages/hospital/HospitalDashboard';
@@ -47,6 +50,7 @@ import PatientDashboard from './pages/patient/PatientDashboard';
 import HealthHistory from './pages/patient/HealthHistory';
 import PatientSettings from './pages/patient/PatientSettings';
 import PatientNotifications from './pages/patient/PatientNotifications.tsx';
+import PatientActivity from './pages/patient/PatientActivity';
 import AppNotificationCenter from './components/AppNotificationCenter';
 import { installAlertNotificationBridge } from './utils/notifications';
 import { applyTheme, getStoredTheme } from './utils/theme';
@@ -59,6 +63,8 @@ const AppRoutes: React.FC = () => {
     if (!user) {
         return (
             <Routes>
+                <Route path="/" element={<LandingPage />} />
+                <Route path="/get-started" element={<GetStartedPage />} />
                 <Route element={<AuthLayout />}>
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/admin/login" element={<LoginPage />} />
@@ -69,8 +75,9 @@ const AppRoutes: React.FC = () => {
                     <Route path="/hospital/verify-otp" element={<HospitalOtpPage />} />
                     <Route path="/patient/register" element={<PatientRegistrationPage />} />
                     <Route path="/patient/verify-otp" element={<PatientOtpPage />} />
-                    <Route path="*" element={<Navigate to="/login" />} />
                 </Route>
+                {/* Anything unknown goes to the landing page */}
+                <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
         );
     }
@@ -91,6 +98,7 @@ const AppRoutes: React.FC = () => {
                         <Route path="update-requests" element={<HospitalUpdateRequestsAdmin />} />
                         <Route path="settings" element={<SystemSettings />} />
                         <Route path="logs" element={<AuditLogs />} />
+                        <Route path="notifications" element={<AdminNotifications />} />
                     </Route>
                     <Route path="*" element={<Navigate to="/admin/dashboard" />} />
                 </Routes>
@@ -127,6 +135,7 @@ const AppRoutes: React.FC = () => {
                         <Route path="health-history" element={<HealthHistory />} />
                         <Route path="settings" element={<PatientSettings />} />
                         <Route path="notifications" element={<PatientNotifications />} />
+                        <Route path="activity" element={<PatientActivity />} />
                     </Route>
                     <Route path="*" element={<Navigate to="/patient/dashboard" />} />
                 </Routes>

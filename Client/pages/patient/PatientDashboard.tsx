@@ -7,6 +7,9 @@ import { useNavigate } from 'react-router-dom';
 import { DetailedPatient } from '../../types';
 import Loader from '../../components/Loader';
 import ProfileCompletionPopup from '../../components/ProfileCompletionPopup';
+import { timeOfDayGreeting, firstName } from '../../utils/greeting';
+import HealthDetailsDialog, { HealthSection } from '../../components/HealthDetailsDialog';
+import { normaliseBloodGroup, formatHeight, computeBmi, bmiCategory } from '../../utils/health';
 
 const ONBOARDING_SNOOZE_MS = 24 * 60 * 60 * 1000;
 
@@ -21,43 +24,44 @@ const PATIENT_ONBOARDING_FIELDS = [
 
 type PatientOnboardingKey = typeof PATIENT_ONBOARDING_FIELDS[number]['key'];
 
-const HealthSummaryItem: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-    <div className="text-center">
-        <p className="text-sm text-slate-400 dark:text-slate-400">{label}</p>
-        <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{value}</p>
+const HealthSummaryItem: React.FC<{ label: string; value: string; hint?: React.ReactNode; tone: string; onAdd?: () => void }> = ({ label, value, hint, tone, onAdd }) => (
+    <div className={`app-metric app-tone--${tone}`}>
+        <p className="app-metric-label">{label}</p>
+        {value ? (
+            <p className="app-metric-value">{value}</p>
+        ) : (
+            <button type="button" className="app-metric-add" onClick={onAdd}>+ Add</button>
+        )}
+        {value && hint ? <p className="app-metric-hint">{hint}</p> : null}
     </div>
 );
 
-const QuickInfoItem: React.FC<{ icon: 'allergy' | 'condition' | 'medication' | 'consultation'; label: string; value: string; color: string }> = ({ icon, label, value, color }) => {
-    const iconMap = {
-        allergy: (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M12 4l9 16H3l9-16z" />
-            </svg>
-        ),
-        condition: (
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" />
-            </svg>
-        ),
-        medication: (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14m-7-7h14" />
-            </svg>
-        ),
-        consultation: (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-        ),
-    } as const;
+const toItems = (v: unknown): string[] => (Array.isArray(v) ? v : String(v || '').split(','))
+    .map((x) => String(x).trim())
+    .filter((x) => x && !/^(n\/?a|none|nil|-)$/i.test(x));
 
+const QuickInfoGroup: React.FC<{ icon: 'allergy' | 'condition' | 'medication'; label: string; items: string[]; empty: string; onEdit: () => void }> = ({ icon, label, items, empty, onEdit }) => {
+    const iconMap = {
+        allergy: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />,
+        condition: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z" />,
+        medication: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7zM8.5 8.5l7 7" />,
+    } as const;
+    const tone = icon === 'allergy' ? 'rose' : icon === 'condition' ? 'violet' : 'amber';
     return (
-    <div className="flex items-center py-2">
-        <span className={`text-xl ${color}`}>{iconMap[icon]}</span>
-        <span className="ml-3 text-sm font-medium text-slate-700 dark:text-slate-300">{label}:</span>
-        <span className="ml-auto text-sm text-slate-900 dark:text-slate-100 font-semibold">{value}</span>
-    </div>
+        <div className={`qhi-group app-tone--${tone}`}>
+            <div className="qhi-head">
+                <span className="qhi-icon"><svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>{iconMap[icon]}</svg></span>
+                <span className="qhi-label">{label}</span>
+                {items.length > 0 && <span className="qhi-count">{items.length}</span>}
+            </div>
+            {items.length ? (
+                <div className="qhi-chips">
+                    {items.map((item) => <span key={item} className="qhi-chip">{item}</span>)}
+                </div>
+            ) : (
+                <button type="button" className="qhi-empty" onClick={onEdit}>{empty} <span>+ Add</span></button>
+            )}
+        </div>
     );
 };
 
@@ -87,8 +91,7 @@ const PatientDashboard: React.FC = () => {
     const navigate = useNavigate();
     const [patient, setPatient] = useState<DetailedPatient | null>(null);
     const [initialLoading, setInitialLoading] = useState(true);
-    const [showModal, setShowModal] = useState(false);
-    const [form, setForm] = useState({ bloodGroup: '', age: '', height: '', weight: '', bmi: '' });
+    const [healthDialog, setHealthDialog] = useState<HealthSection | null>(null);
     const [saving, setSaving] = useState(false);
     const [hospitalAccess, setHospitalAccess] = useState<HospitalAccessEntry[]>([]);
     const [pendingNotifications, setPendingNotifications] = useState<Notification[]>([]);
@@ -137,43 +140,30 @@ const PatientDashboard: React.FC = () => {
         return String((p as any)[key] || '');
     };
 
-    const openModal = () => {
-        setForm({
-            bloodGroup: patient?.bloodGroup || '',
-            age: patient?.age ? String(patient.age) : '',
-            height: patient?.height || '',
-            weight: patient?.weight ? String(patient.weight) : '',
-            bmi: patient?.bmi ? String(patient.bmi) : '',
-        });
-        setShowModal(true);
-    };
+    const heightDisplay = formatHeight(patient?.height);
+    // Always derive BMI from the current height/weight so a stale stored value never shows
+    const bmiValue = computeBmi(patient?.height, patient?.weight) ?? (Number(patient?.bmi) || null);
 
-    const closeModal = () => setShowModal(false);
+    const openModal = () => setHealthDialog('summary');
+    const openInfoModal = () => setHealthDialog('info');
 
-    const updateField = (k: string, v: string) => setForm(prev => ({ ...prev, [k]: v }));
-
-    const saveHealthSummary = async () => {
+    const saveHealthDetails = async (updates: Record<string, unknown>) => {
         if (!user?.id) return notify('User not identified');
+        if (!Object.keys(updates).length) { setHealthDialog(null); return; }
         setSaving(true);
         try {
-            const body: any = {};
-            if (form.bloodGroup) body.bloodGroup = form.bloodGroup;
-            if (form.age) body.age = Number(form.age);
-            if (form.height) body.height = form.height;
-            if (form.weight) body.weight = Number(form.weight);
-            if (form.bmi) body.bmi = Number(form.bmi);
-
             const resp = await fetch(`${API_URL}/patients/${user.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
+                body: JSON.stringify(updates),
             });
             const data = await resp.json();
             if (!resp.ok) return notify('Save failed: ' + (data?.error || data?.message || 'unknown'));
             setPatient(data.patient as DetailedPatient);
-            setShowModal(false);
+            setHealthDialog(null);
+            notify('Health details saved');
         } catch (err) {
-            console.error('save health summary error', err);
+            console.error('save health details error', err);
             notify('Error saving health details');
         } finally {
             setSaving(false);
@@ -402,31 +392,31 @@ const PatientDashboard: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <div className="dashboard-hero rounded-2xl border border-[var(--app-border)] p-5 bg-[var(--app-surface-soft)] dark:bg-gradient-to-r dark:from-slate-800 dark:to-slate-800">
-                <h2 className="text-2xl font-bold text-[var(--app-text)]">Welcome Back, {user?.name}!</h2>
-                <p className="text-sm text-[var(--app-muted)]">Last Access: {relativeTime(user?.lastLogin || patient?.lastUpdated)}</p>
+            <div className="dashboard-hero">
+                <p className="app-hero-kicker">{timeOfDayGreeting()}</p>
+                <h2 className="text-2xl font-bold text-[var(--app-text)]">{firstName(user?.name) || 'Welcome back'}</h2>
+                <p className="text-sm text-[var(--app-muted)] mt-1">Your records from every hospital, in one place. Last signed in {relativeTime(user?.lastLogin || patient?.lastUpdated)}.</p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
-                    <Card title="Your Health Summary">
-                        <div className="flex justify-around items-center">
-                            <HealthSummaryItem label="Blood Group" value={patient?.bloodGroup || 'Not provided'} />
-                            <HealthSummaryItem label="Age" value={patient ? `${patient.age || '—'} years` : '—'} />
-                            <HealthSummaryItem label="Height" value={patient?.height || '—'} />
-                            <HealthSummaryItem label="Weight" value={patient?.weight || '—'} />
-                            <HealthSummaryItem label="BMI" value={patient?.bmi || '—'} />
+                    <Card title="Your Health Summary" action={<button type="button" className="app-card-edit" onClick={openModal}>Edit measurements</button>}>
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                            <HealthSummaryItem label="Blood group" value={normaliseBloodGroup(patient?.bloodGroup)} tone="rose" onAdd={openModal} />
+                            <HealthSummaryItem label="Age" value={patient?.age ? `${patient.age} yrs` : ''} tone="violet" onAdd={openModal} />
+                            <HealthSummaryItem label="Height" value={heightDisplay.main} hint={heightDisplay.hint} tone="blue" onAdd={openModal} />
+                            <HealthSummaryItem label="Weight" value={patient?.weight ? `${patient.weight} kg` : ''} hint={patient?.weight ? `${Math.round(Number(patient.weight) / 0.453592)} lb` : ''} tone="amber" onAdd={openModal} />
+                            <HealthSummaryItem
+                                label="BMI"
+                                value={bmiValue ? String(bmiValue) : ''}
+                                hint={bmiValue ? <span style={{ color: bmiCategory(bmiValue).tone }}>{bmiCategory(bmiValue).label}</span> : ''}
+                                tone="teal"
+                                onAdd={openModal}
+                            />
                         </div>
-                        <div className="mt-4 text-center">
-                            {!patient?.allergies?.length && !patient?.conditions?.length ? (
-                                <>
-                                    <p className="text-sm text-gray-500">No health details found.</p>
-                                    <button onClick={openModal} className="mt-2 px-3 py-1 text-sm bg-brand-primary text-white rounded">Add Details</button>
-                                </>
-                            ) : (
-                                <button onClick={openModal} className="mt-2 px-3 py-1 text-sm border border-brand-primary text-brand-primary rounded">Edit Details</button>
-                            )}
-                        </div>
+                        {!patient?.bloodGroup && !patient?.height && !patient?.weight && (
+                            <p className="mt-4 text-sm text-[var(--app-muted)]">Add your blood group, height and weight so hospitals have the basics. <button type="button" onClick={openModal} className="font-semibold text-[var(--app-accent)] hover:underline">Add details</button></p>
+                        )}
                     </Card>
                     <Card title="Quick Actions">
                         <div className="flex flex-wrap gap-4">
@@ -439,11 +429,12 @@ const PatientDashboard: React.FC = () => {
                 </div>
 
                 <div className="space-y-6">
-                    <Card title="Quick Health Info">
-                        <QuickInfoItem icon="allergy" label="Allergies" value={patient?.allergies?.length ? (Array.isArray(patient.allergies) ? (patient.allergies as any).join(', ') : String(patient.allergies)) : 'None'} color="text-red-500" />
-                        <QuickInfoItem icon="condition" label="Chronic Conditions" value={patient?.conditions?.length ? (patient.conditions as any).join(', ') : 'None'} color="text-red-600" />
-                        <QuickInfoItem icon="medication" label="Active Medications" value={patient?.medications?.length ? `${patient.medications.length} medicines` : 'None'} color="text-yellow-500" />
-                        <QuickInfoItem icon="consultation" label="Recent Consultations" value={patient && (patient.consultationHistory as any)?.length ? `${(patient.consultationHistory as any).length} (Last: ${(patient.consultationHistory as any)[0]?.date || 'N/A'})` : 'None'} color="text-blue-500" />
+                    <Card title="Quick Health Info" action={<button type="button" className="app-card-edit" onClick={openInfoModal}>Edit info</button>}>
+                        <div className="qhi">
+                            <QuickInfoGroup icon="allergy" label="Allergies" items={toItems(patient?.allergies)} empty="No allergies recorded." onEdit={openInfoModal} />
+                            <QuickInfoGroup icon="condition" label="Ongoing conditions" items={toItems(patient?.conditions)} empty="No conditions recorded." onEdit={openInfoModal} />
+                            <QuickInfoGroup icon="medication" label="Medicines" items={toItems(patient?.medications)} empty="No medicines recorded." onEdit={openInfoModal} />
+                        </div>
                     </Card>
                     <Card title="Hospital Access History">
                         {hospitalAccess.length === 0 ? (
@@ -474,44 +465,14 @@ const PatientDashboard: React.FC = () => {
                     </Card>
                 </div>
             </div>
-            {showModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/60">
-                    <div className="bg-white dark:bg-slate-900 rounded-lg p-6 w-full max-w-md ring-1 ring-slate-200 dark:ring-slate-800">
-                        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Health Summary</h3>
-                        <p className="text-sm text-slate-500 mb-4">Add or edit your basic health details.</p>
-                        <div className="space-y-3">
-                            <div>
-                                <label className="block text-sm text-slate-700">Blood Group</label>
-                                <input value={form.bloodGroup} onChange={(e)=>updateField('bloodGroup', e.target.value)} className="mt-1 block w-full p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="B+ / O-" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-sm text-slate-700">Age</label>
-                                    <input type="number" value={form.age} onChange={(e)=>updateField('age', e.target.value)} className="mt-1 block w-full p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm text-slate-700">Height</label>
-                                    <input value={form.height} onChange={(e)=>updateField('height', e.target.value)} placeholder={"e.g. 5'10\""} className="mt-1 block w-full p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-sm text-slate-700">Weight (kg)</label>
-                                    <input type="number" value={form.weight} onChange={(e)=>updateField('weight', e.target.value)} className="mt-1 block w-full p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm text-slate-700">BMI</label>
-                                    <input type="number" step="0.1" value={form.bmi} onChange={(e)=>updateField('bmi', e.target.value)} className="mt-1 block w-full p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
-                                </div>
-                            </div>
-                        </div>
-                        <div className="mt-6 flex justify-end gap-3">
-                            <button onClick={closeModal} className="px-4 py-2 border rounded bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200">Cancel</button>
-                            <button onClick={saveHealthSummary} disabled={saving} className="px-4 py-2 bg-brand-primary text-white rounded">{saving ? 'Saving...' : 'Save'}</button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <HealthDetailsDialog
+                open={Boolean(healthDialog)}
+                section={healthDialog || 'summary'}
+                values={patient as any || {}}
+                saving={saving}
+                onClose={() => setHealthDialog(null)}
+                onSave={saveHealthDetails}
+            />
 
             <ProfileCompletionPopup
                 isOpen={showProfileCompletionPopup}

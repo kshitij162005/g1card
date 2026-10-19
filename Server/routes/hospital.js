@@ -1,7 +1,12 @@
 import express from 'express';
 import { logAccessRequestCreation, logRecordCreation, logPHIAccess } from '../utils/auditLogger.js';
 import { sendEventToUser } from './sse.js';
-import { callRoleModel } from '../utils/aiClient.js';
+import { callModel } from '../utils/aiClient.js';
+import { buildRecordEmbeddingPayload, generateEmbedding } from '../utils/embedding.js';
+import { markAllRead } from '../utils/notificationFeed.js';
+
+// Treat user search text literally inside Mongo regex queries
+const escapeRegex = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const router = express.Router();
 
@@ -19,40 +24,64 @@ function extractJsonBlock(text) {
   return null;
 }
 
-function normalizeAiSummary(rawText) {
-  const fallback = {
-    overview: 'AI summary generated. Please review full records for clinical decisions.',
-    bulletPoints: rawText
-      .split('\n')
-      .map(line => line.replace(/^[-*\d.\s]+/, '').trim())
-      .filter(Boolean)
-      .slice(0, 20),
-    criticalAlerts: [],
-    ongoingTreatments: [],
-    surgeries: [],
-    allergies: [],
-    medications: [],
-    timeline: [],
-  };
+const SUMMARY_SECTIONS = ['criticalAlerts', 'allergies', 'medications', 'ongoingTreatments', 'conditions', 'surgeries', 'keyFindings'];
 
+// Turn the model's JSON into a summary where every point carries numbered citations.
+// refs are validated against the source map, so a model can never cite a record that does not exist.
+function buildCitedSummary(rawText, sourceMap) {
+  let parsed = null;
   try {
     const jsonText = extractJsonBlock(rawText);
-    if (!jsonText) return fallback;
-    const parsed = JSON.parse(jsonText);
-    const arrayOrEmpty = value => (Array.isArray(value) ? value.filter(Boolean).map(String) : []);
-    return {
-      overview: String(parsed.overview || fallback.overview),
-      bulletPoints: arrayOrEmpty(parsed.bulletPoints),
-      criticalAlerts: arrayOrEmpty(parsed.criticalAlerts),
-      ongoingTreatments: arrayOrEmpty(parsed.ongoingTreatments),
-      surgeries: arrayOrEmpty(parsed.surgeries),
-      allergies: arrayOrEmpty(parsed.allergies),
-      medications: arrayOrEmpty(parsed.medications),
-      timeline: arrayOrEmpty(parsed.timeline),
-    };
-  } catch (err) {
-    return fallback;
+    parsed = jsonText ? JSON.parse(jsonText) : null;
+  } catch {
+    parsed = null;
   }
+
+  const references = [];
+  const numberFor = new Map();
+  const cite = refs => [...new Set((Array.isArray(refs) ? refs : [refs]).map(r => String(r || '').trim().toUpperCase()))]
+    .filter(ref => sourceMap.has(ref))
+    .map(ref => {
+      if (!numberFor.has(ref)) {
+        numberFor.set(ref, references.length + 1);
+        references.push({ n: references.length + 1, ref, ...sourceMap.get(ref) });
+      }
+      return numberFor.get(ref);
+    });
+  const item = value => {
+    if (!value) return null;
+    if (typeof value === 'string') return value.trim() ? { text: value.trim(), cites: [] } : null;
+    const text = String(value.text || value.summary || value.item || '').trim();
+    if (!text || /^not documented\.?$/i.test(text)) return null;
+    return { text, cites: cite(value.refs || value.sources || []), ...(value.date ? { date: String(value.date) } : {}) };
+  };
+  const list = value => (Array.isArray(value) ? value.map(item).filter(Boolean) : []);
+
+  if (!parsed) {
+    // Model ignored the format: keep its text, uncited, so the doctor still gets something
+    const lines = String(rawText || '').split('\n').map(l => l.replace(/^[-*\d.\s]+/, '').trim()).filter(Boolean);
+    return {
+      overview: { text: lines[0] || 'The AI response could not be structured. Review the records below.', cites: [] },
+      sections: { keyFindings: lines.slice(1, 20).map(text => ({ text, cites: [] })) },
+      timeline: [],
+      references,
+      structured: false,
+    };
+  }
+
+  const sections = {};
+  for (const key of SUMMARY_SECTIONS) {
+    const items = list(parsed[key]);
+    if (items.length) sections[key] = items;
+  }
+  const timeline = list(parsed.timeline).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  return {
+    overview: item(parsed.overview) || { text: 'Summary generated from the available records.', cites: [] },
+    sections,
+    timeline,
+    references,
+    structured: true,
+  };
 }
 
 // Placeholder: fetch hospital by id (safe view)
@@ -88,7 +117,7 @@ router.get('/:id/dashboard-metrics', async (req, res) => {
       HospitalAccess.countDocuments({ hospital: id, status: 'PENDING' }),
       Record.countDocuments({ hospital: id }),
       HospitalAccess.find({ hospital: id, status: 'APPROVED' })
-        .populate('patient', 'name firstName lastName email phone gender patientId')
+        .populate('patient', 'name firstName lastName email phone gender patientId suspended')
         .sort({ createdAt: -1 })
         .limit(5)
         .lean(),
@@ -106,6 +135,7 @@ router.get('/:id/dashboard-metrics', async (req, res) => {
           phone: p.phone || '',
           gender: p.gender || '',
           createdAt: access.createdAt,
+          suspended: Boolean(p.suspended),
         };
       });
 
@@ -558,7 +588,7 @@ router.get('/:id/patients', async (req, res) => {
 
     const baseFilter = { hospital: id };
     const accessDocs = await HospitalAccess.find(baseFilter)
-      .populate('patient', 'name firstName lastName email dob patientId')
+      .populate('patient', 'name firstName lastName email dob patientId suspended')
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
@@ -592,6 +622,7 @@ router.get('/:id/patients', async (req, res) => {
           status: doc.status,
           accessLevel: doc.accessLevel,
           requestedAt: doc.createdAt,
+          suspended: Boolean(p.suspended),
         };
       });
 
@@ -832,7 +863,7 @@ router.get('/:id/forms/check-name', async (req, res) => {
     const name = (req.query.name || '').toString().trim();
     const excludeId = req.query.excludeId;
     if (!id || !name) return res.status(400).json({ error: 'Missing hospital id or name' });
-    const filter = { hospital: id, name: { $regex: new RegExp(`^${name}$`, 'i') } };
+    const filter = { hospital: id, name: { $regex: new RegExp(`^${escapeRegex(name)}$`, 'i') } };
     if (excludeId) filter._id = { $ne: excludeId };
     const exists = await FormTemplate.findOne(filter).lean();
     return res.json({ ok: true, exists: !!exists });
@@ -1004,6 +1035,43 @@ router.post('/:id/patients/:patientId/records', async (req, res) => {
       consentId: access?._id,
       req
     });
+
+    try {
+      const RecordEmbedding = (await import('../models/RecordEmbedding.js')).default;
+      const payload = buildRecordEmbeddingPayload({
+        patient,
+        record: rec,
+        formName,
+        hospitalName: hospital.name,
+      });
+      const embedding = await generateEmbedding(payload.text);
+
+      await RecordEmbedding.updateOne(
+        { recordId: rec._id },
+        {
+          $set: {
+            recordId: rec._id,
+            patientId: patient._id,
+            hospitalId: hospital._id,
+            hospitalName: hospital.name,
+            formName,
+            admissionDate: payload.admissionDate,
+            patientName: payload.patientName,
+            patientEmail: payload.patientEmail,
+            patientAge: payload.patientAge,
+            patientGender: payload.patientGender,
+            patientConditions: payload.patientConditions,
+            patientMedications: payload.patientMedications,
+            notes: payload.notes,
+            text: payload.text,
+            embedding,
+          },
+        },
+        { upsert: true }
+      );
+    } catch (err) {
+      console.warn('record embedding creation failed:', err?.message || err);
+    }
 
     // Notify patient about new medical record
     const Notification = (await import('../models/Notification.js')).default;
@@ -1213,6 +1281,8 @@ router.get('/:id/patients/:patientId/summary', async (req, res) => {
       address: patient.address,
       lastUpdated: patient.updatedAt,
       created: patient.createdAt,
+      suspended: Boolean(patient.suspended),
+      suspendedAt: patient.suspendedAt || null,
     };
 
     const clinicalSummary = {
@@ -1250,6 +1320,7 @@ router.post('/:id/patients/:patientId/ai-summary', async (req, res) => {
     const Patient = (await import('../models/Patient.js')).default;
     const HospitalAccess = (await import('../models/HospitalAccess.js')).default;
     const Record = (await import('../models/Record.js')).default;
+    await import('../models/FormTemplate.js'); // registers the schema used by populate('form')
 
     const id = req.params.id;
     const patientId = req.params.patientId;
@@ -1310,27 +1381,46 @@ router.post('/:id/patients/:patientId/ai-summary', async (req, res) => {
       })),
     }));
 
-    const aiInput = {
-      hospitalName: hospital.name,
-      accessLevel: access.accessLevel,
-      patient: safePatientData,
-      records: safeRecordData,
-    };
+    // Every source the model may cite: P = patient profile, R1..Rn = records (newest first)
+    const sourceMap = new Map([['P', { kind: 'profile', title: 'Patient profile' }]]);
+    const recordLines = safeRecordData.map((record, index) => {
+      const ref = `R${index + 1}`;
+      sourceMap.set(ref, {
+        kind: 'record',
+        recordId: String(record.recordId),
+        title: record.formName,
+        hospital: record.hospital,
+        date: record.timestamp ? new Date(record.timestamp).toISOString() : null,
+      });
+      const data = JSON.stringify(record.data || {});
+      return `${ref} | ${record.timestamp ? new Date(record.timestamp).toISOString().slice(0, 10) : 'undated'} | ${record.hospital} | ${record.formName}${record.formDescription ? ` (${record.formDescription})` : ''}\n${data.length > 1800 ? `${data.slice(0, 1800)}…` : data}`;
+    });
 
     const systemPrompt = [
-      'You are a clinical summarization assistant for hospital staff.',
-      'Use ONLY the provided data. Do not invent facts.',
-      'This output may influence real clinical decisions, so include every material detail that appears in the data.',
-      'Prioritize allergies, current medications, surgeries/procedures, chronic conditions, and active treatments.',
-      'When data is missing, explicitly state "Not documented".',
-      'Return strict JSON only with keys:',
-      'overview, bulletPoints, criticalAlerts, ongoingTreatments, surgeries, allergies, medications, timeline',
-      'Each list key must be an array of short strings.',
-    ].join(' ');
+      'You summarize a patient\'s medical history for the treating clinician at a hospital.',
+      'Use ONLY the provided sources. Never invent diagnoses, drugs, doses, dates or values.',
+      'Every statement must cite the sources it comes from using their ids: "P" for the patient profile, "R1", "R2"... for records.',
+      'Return ONLY JSON in exactly this shape (omit nothing, use [] when nothing is documented):',
+      '{"overview":{"text":"2-3 sentence clinical picture","refs":["P","R1"]},',
+      ' "criticalAlerts":[{"text":"","refs":[]}],      // severe allergies, dangerous interactions, red-flag findings',
+      ' "allergies":[{"text":"","refs":[]}],',
+      ' "medications":[{"text":"drug, dose, frequency, status if stated","refs":[]}],',
+      ' "ongoingTreatments":[{"text":"","refs":[]}],',
+      ' "conditions":[{"text":"","refs":[]}],',
+      ' "surgeries":[{"text":"procedure and date if stated","refs":[]}],',
+      ' "keyFindings":[{"text":"vitals, lab results, diagnoses worth knowing","refs":[]}],',
+      ' "timeline":[{"date":"YYYY-MM-DD","text":"what happened","refs":["R1"]}]}',
+      'Each item is one short clinical statement (under 25 words). Merge duplicates across records and cite all of them.',
+      'Do not write "Not documented" items; leave the list empty instead.',
+    ].join('\n');
 
-    const userPrompt = `Summarize this patient medical history as a concise but complete nutshell. Input JSON:\n${JSON.stringify(aiInput)}`;
+    const userPrompt = [
+      `Hospital: ${hospital.name} (access level: ${access.accessLevel})`,
+      `P | Patient profile\n${JSON.stringify(safePatientData)}`,
+      ...recordLines,
+    ].join('\n\n').slice(0, 60000);
 
-    const aiRaw = await callRoleModel({
+    const ai = await callModel({
       role: 'hospital',
       messages: [
         { role: 'system', content: systemPrompt },
@@ -1338,9 +1428,10 @@ router.post('/:id/patients/:patientId/ai-summary', async (req, res) => {
       ],
       temperature: 0.05,
       maxTokens: 2200,
+      jsonMode: true,
     });
 
-    const summary = normalizeAiSummary(aiRaw);
+    const summary = buildCitedSummary(ai.content, sourceMap);
 
     return res.json({
       ok: true,
@@ -1349,12 +1440,13 @@ router.post('/:id/patients/:patientId/ai-summary', async (req, res) => {
         generatedAt: new Date().toISOString(),
         recordCount: records.length,
         accessLevel: access.accessLevel,
+        model: { provider: ai.provider, providerLabel: ai.providerLabel, model: ai.model },
       },
     });
   } catch (err) {
     console.error('generate ai summary error:', err);
     const message = err?.message || String(err);
-    if (message.includes('MISTRAL_API_KEY_HOSPITAL')) {
+    if (message.includes('No AI provider configured')) {
       return res.status(503).json({ error: 'Hospital AI is not configured on server yet' });
     }
     return res.status(500).json({ error: message });
@@ -1521,8 +1613,8 @@ router.get('/:id/notifications', async (req, res) => {
     // Apply search (search in title, message, or sender name)
     if (searchQuery) {
       query.$or = [
-        { title: { $regex: searchQuery, $options: 'i' } },
-        { message: { $regex: searchQuery, $options: 'i' } }
+        { title: { $regex: escapeRegex(searchQuery), $options: 'i' } },
+        { message: { $regex: escapeRegex(searchQuery), $options: 'i' } }
       ];
     }
 
@@ -1632,6 +1724,9 @@ router.get('/:id/patients/:patientId/records/:recordId', async (req, res) => {
 });
 
 // Mark hospital notification as read
+// Mark every notification read in one request
+router.patch('/:id/notifications/read-all', (req, res) => markAllRead(req, res, 'Hospital'));
+
 router.patch('/:id/notifications/:notificationId/read', async (req, res) => {
   try {
     const Notification = (await import('../models/Notification.js')).default;

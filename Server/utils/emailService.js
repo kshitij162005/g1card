@@ -2,7 +2,8 @@ import nodemailer from 'nodemailer';
 
 const ADMIN_SENDER_EMAIL = 'kotechakshitij@gmail.com';
 const APP_NAME = 'G1CARD';
-const DEFAULT_WEB_APP_URL = 'http://localhost:5173';
+// Links in emails must always point to the live site; override with APP_BASE_URL (e.g. http://localhost:5173 for local testing).
+const DEFAULT_WEB_APP_URL = 'https://g1card.vercel.app';
 
 let cachedTransporter = null;
 let cachedTransporterKey = null;
@@ -136,6 +137,17 @@ function buildEmailShell({ preheader = '', headline, intro, sections = [], foote
     </table>
   </body>
 </html>`;
+}
+
+/** What the admin settings page shows about email delivery. Never includes credentials. */
+export function describeEmailSetup() {
+  const cfg = getSmtpConfig();
+  const configured = Boolean((cfg.host || cfg.service) && cfg.user && cfg.pass);
+  return {
+    configured,
+    via: cfg.service ? cfg.service : cfg.host ? `${cfg.host}:${cfg.port}` : '',
+    sender: configured ? cfg.from : '',
+  };
 }
 
 export async function sendEmail({ to, subject, html, text }) {

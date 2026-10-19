@@ -1,4 +1,5 @@
 import { API_URL } from '../../config/api';
+import SearchBox from '../../components/SearchBox';
 import React, { useEffect, useState } from 'react';
 import Card from '../../components/Card';
 import Loader from '../../components/Loader';
@@ -44,7 +45,7 @@ const PendingRequests: React.FC = () => {
 
     useEffect(() => {
         fetchPendingHospitals();
-    }, [page]);
+    }, [page, search]);
 
     const fetchPendingHospitals = async () => {
         setLoading(true);
@@ -133,18 +134,29 @@ const PendingRequests: React.FC = () => {
         });
     };
 
-    const openApproveModal = (hospital: PendingHospital) => {
-        setSelectedHospital(hospital);
-        setShowRejectModal(false);
-        setApprovalChecklist({
+    const resetChecklist = () => setApprovalChecklist({
             regNumberVerified: false,
             licenseVerified: false,
             contactVerified: false,
             adminVerified: false,
             documentsVerified: false,
         });
+
+    const openDetails = (hospital: PendingHospital) => {
+        if (selectedHospital?._id !== hospital._id) resetChecklist();
+        setSelectedHospital(hospital);
+    };
+
+    // Ticks made while reviewing details carry over to the approval step
+    const openApproveModal = (hospital: PendingHospital) => {
+        if (selectedHospital?._id !== hospital._id) resetChecklist();
+        setSelectedHospital(hospital);
+        setShowRejectModal(false);
         setShowApproveModal(true);
     };
+
+    const toggleCheck = (key: ChecklistKey, checked: boolean) =>
+        setApprovalChecklist((prev) => ({ ...prev, [key]: checked }));
 
     const canApprove = Object.values(approvalChecklist).every(Boolean);
 
@@ -169,23 +181,11 @@ const PendingRequests: React.FC = () => {
             {/* Search */}
             <Card>
                 <div className="flex gap-4">
-                    <input
-                        type="text"
-                        placeholder="Search by hospital name, email, city..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && fetchPendingHospitals()}
-                        className="flex-1 px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                    <SearchBox
+                        className="flex-1"
+                        placeholder="Search by hospital name, email or city"
+                        onSearch={q => { setPage(1); setSearch(q); }}
                     />
-                    <button
-                        onClick={() => {
-                            setPage(1);
-                            fetchPendingHospitals();
-                        }}
-                        className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary transition-colors"
-                    >
-                        Search
-                    </button>
                 </div>
             </Card>
 
@@ -253,7 +253,7 @@ const PendingRequests: React.FC = () => {
 
                                 <div className="flex flex-row lg:flex-col gap-2 lg:min-w-[140px]">
                                     <button
-                                        onClick={() => setSelectedHospital(hospital)}
+                                        onClick={() => openDetails(hospital)}
                                         className="flex-1 lg:flex-none px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors text-sm font-medium"
                                     >
                                         View Details
@@ -420,11 +420,9 @@ const PendingRequests: React.FC = () => {
                                         Please verify the following before approving:
                                     </p>
                                     <div className="space-y-2">
-                                        <ChecklistItem label="Hospital registration number is valid" />
-                                        <ChecklistItem label="License number matches official records" />
-                                        <ChecklistItem label="Address and contact details are accurate" />
-                                        <ChecklistItem label="Administrator credentials are verified" />
-                                        <ChecklistItem label="All submitted documents are authentic" />
+                                        {APPROVAL_CHECKS.map(({ key, label }) => (
+                                            <ChecklistItem key={key} label={label} checked={approvalChecklist[key]} onChange={(checked) => toggleCheck(key, checked)} />
+                                        ))}
                                     </div>
                                 </div>
                             </div>
@@ -467,31 +465,9 @@ const PendingRequests: React.FC = () => {
 
                         <div className="p-6 space-y-3">
                             <p className="text-sm text-slate-700 dark:text-slate-300">Complete all checks to approve this hospital.</p>
-                            <ChecklistItem
-                                label="Hospital registration number is valid"
-                                checked={approvalChecklist.regNumberVerified}
-                                onChange={(checked) => setApprovalChecklist((prev) => ({ ...prev, regNumberVerified: checked }))}
-                            />
-                            <ChecklistItem
-                                label="License number matches official records"
-                                checked={approvalChecklist.licenseVerified}
-                                onChange={(checked) => setApprovalChecklist((prev) => ({ ...prev, licenseVerified: checked }))}
-                            />
-                            <ChecklistItem
-                                label="Address and contact details are accurate"
-                                checked={approvalChecklist.contactVerified}
-                                onChange={(checked) => setApprovalChecklist((prev) => ({ ...prev, contactVerified: checked }))}
-                            />
-                            <ChecklistItem
-                                label="Administrator credentials are verified"
-                                checked={approvalChecklist.adminVerified}
-                                onChange={(checked) => setApprovalChecklist((prev) => ({ ...prev, adminVerified: checked }))}
-                            />
-                            <ChecklistItem
-                                label="All submitted documents are authentic"
-                                checked={approvalChecklist.documentsVerified}
-                                onChange={(checked) => setApprovalChecklist((prev) => ({ ...prev, documentsVerified: checked }))}
-                            />
+                            {APPROVAL_CHECKS.map(({ key, label }) => (
+                                <ChecklistItem key={key} label={label} checked={approvalChecklist[key]} onChange={(checked) => toggleCheck(key, checked)} />
+                            ))}
                         </div>
 
                         <div className="p-6 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3">
@@ -569,15 +545,20 @@ const InfoRow: React.FC<{ label: string; value: string | undefined; fullWidth?: 
     </div>
 );
 
-const ChecklistItem: React.FC<{ label: string; checked?: boolean; onChange?: (checked: boolean) => void }> = ({ label, checked = false, onChange }) => (
-    <label className="flex items-center space-x-2 cursor-pointer">
-        <input
-            type="checkbox"
-            checked={checked}
-            onChange={(e) => onChange?.(e.target.checked)}
-            className="w-4 h-4 rounded text-brand-primary focus:ring-brand-accent"
-        />
-        <span className="text-sm text-slate-700 dark:text-slate-300">{label}</span>
+type ChecklistKey = 'regNumberVerified' | 'licenseVerified' | 'contactVerified' | 'adminVerified' | 'documentsVerified';
+
+const APPROVAL_CHECKS: { key: ChecklistKey; label: string }[] = [
+    { key: 'regNumberVerified', label: 'Hospital registration number is valid' },
+    { key: 'licenseVerified', label: 'License number matches official records' },
+    { key: 'contactVerified', label: 'Address and contact details are accurate' },
+    { key: 'adminVerified', label: 'Administrator credentials are verified' },
+    { key: 'documentsVerified', label: 'All submitted documents are authentic' },
+];
+
+const ChecklistItem: React.FC<{ label: string; checked: boolean; onChange: (checked: boolean) => void }> = ({ label, checked, onChange }) => (
+    <label className={`app-check-row ${checked ? 'is-checked' : ''}`}>
+        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+        <span>{label}</span>
     </label>
 );
 

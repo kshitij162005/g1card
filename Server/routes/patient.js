@@ -2,8 +2,27 @@ import express from 'express';
 import mongoose from 'mongoose';
 import { logAccessApproval, logAccessDenial } from '../utils/auditLogger.js';
 import { sendEventToUser } from './sse.js';
+import { markAllRead } from '../utils/notificationFeed.js';
+
+// Treat user search text literally inside Mongo regex queries
+const escapeRegex = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const router = express.Router();
+
+// A suspended patient is locked out of every portal endpoint, including sessions that were already open
+router.param('id', async (req, res, next, id) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(id)) return next();
+    const Patient = (await import('../models/Patient.js')).default;
+    const patient = await Patient.findById(id).select('suspended').lean();
+    if (patient?.suspended) {
+      return res.status(403).json({ error: 'This G1Card account has been suspended by an administrator. Contact support if you think this is a mistake.', code: 'ACCOUNT_SUSPENDED' });
+    }
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+});
 
 const DEFAULT_NOTIFICATION_PREFERENCES = {
   emailWhenHospitalAccessRecords: true,
@@ -1626,8 +1645,8 @@ router.get('/:id/notifications', async (req, res) => {
     }
     if (searchQuery) {
       query.$or = [
-        { title: { $regex: searchQuery, $options: 'i' } },
-        { message: { $regex: searchQuery, $options: 'i' } },
+        { title: { $regex: escapeRegex(searchQuery), $options: 'i' } },
+        { message: { $regex: escapeRegex(searchQuery), $options: 'i' } },
       ];
     }
 
@@ -1851,6 +1870,9 @@ router.post('/:id/notifications/:notificationId/upgrade-decision', async (req, r
 });
 
 // Mark notification as read
+// Mark every notification read in one request
+router.patch('/:id/notifications/read-all', (req, res) => markAllRead(req, res, 'Patient'));
+
 router.patch('/:id/notifications/:notificationId/read', async (req, res) => {
   try {
     const Notification = (await import('../models/Notification.js')).default;

@@ -1,6 +1,6 @@
 import { API_URL } from '../config/api';
 
-import React, { createContext, useState, useContext, ReactNode } from 'react';
+import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { User, Role } from '../types';
 
 interface AuthContextType {
@@ -28,6 +28,35 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return null;
     });
 
+    // Re-check the stored session once per load. Accounts that were deleted, suspended,
+    // or that share an email with another role (hospital/admin) get signed out here.
+    useEffect(() => {
+        if (!user?.id) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const resp = await fetch(`${API_URL}/auth/session`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ role: user.role, id: user.id, isSimulation: user.isSimulation }),
+                });
+                if (cancelled || resp.ok) return;
+                const data = await resp.json().catch(() => ({}));
+                // Only an explicit "this session is not valid" signs people out; a missing endpoint
+                // (older server), a server error or anything unexpected keeps the session
+                if (data?.valid !== false || ![401, 403, 409].includes(resp.status)) return;
+                setUser(null);
+                localStorage.removeItem('g1card_user');
+                if (data?.error) sessionStorage.setItem('g1card_signout_reason', data.error);
+                window.location.assign('/#/login');
+            } catch {
+                // Offline or server down: keep the session rather than signing people out
+            }
+        })();
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const login = async (role: Role, email: string, password: string) => {
         try {
             const resp = await fetch(`${API_URL}/auth/login`, {
@@ -38,6 +67,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const data = await resp.json();
             if (!resp.ok) {
                 console.warn('login failed', data);
+                // Account-level refusals get their own message; wrong credentials stay generic
+                if (data?.code === 'ACCOUNT_SUSPENDED' || data?.code === 'EMAIL_IN_USE_OTHER_ROLE' || resp.status === 403) {
+                    throw new Error(data?.error || 'This account cannot sign in right now.');
+                }
                 return false;
             }
             const u = data.user;
@@ -56,6 +89,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return true;
         } catch (err) {
             console.error('login error', err);
+            if (err instanceof Error && err.message && !/fetch|network/i.test(err.message)) throw err;
             return false;
         }
     };

@@ -1,6 +1,7 @@
 import { API_URL } from '../../config/api';
 import React, { useEffect, useState } from 'react';
-import Card from '../../components/Card';
+import AppDialog, { DialogButton } from '../../components/AppDialog';
+import { SettingsPage, SettingsSection, InfoGrid, SettingRow, Field, StatusPill } from '../../components/settings/Settings';
 import { useAuth } from '../../contexts/AuthContext';
 import Loader from '../../components/Loader';
 import { useSSE } from '../../hooks/useSSE';
@@ -54,76 +55,59 @@ interface ConfirmModalProps {
     isDeactivate: boolean;
 }
 
-const ConfirmModal: React.FC<ConfirmModalProps> = ({ isOpen, onClose, onConfirm, title, message, consequences, confirmText, isDeactivate }) => {
-    if (!isOpen) return null;
+const ConfirmModal: React.FC<ConfirmModalProps> = ({ isOpen, onClose, onConfirm, title, message, consequences, confirmText, isDeactivate }) => (
+    <AppDialog
+        open={isOpen}
+        onClose={onClose}
+        size="sm"
+        tone={isDeactivate ? 'danger' : 'accent'}
+        eyebrow="Account status"
+        title={title}
+        subtitle={message}
+        footer={<>
+            <DialogButton onClick={onClose}>Cancel</DialogButton>
+            <DialogButton variant={isDeactivate ? 'danger' : 'primary'} onClick={() => { onConfirm(); onClose(); }}>{confirmText}</DialogButton>
+        </>}
+    >
+        <p className="st-form-divider !mt-0">{isDeactivate ? 'What happens' : 'What comes back'}</p>
+        <ul className="st-list">
+            {consequences.map((c, i) => <li key={i}>{c}</li>)}
+        </ul>
+    </AppDialog>
+);
 
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-                <div className="p-6">
-                    <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200 mb-2">{title}</h3>
-                    <p className="text-slate-600 dark:text-slate-400 mb-4">{message}</p>
-                    
-                    <div className={`${isDeactivate ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'} border rounded-lg p-4 mb-4`}>
-                        <div className="flex items-start mb-2">
-                            <svg className={`w-5 h-5 ${isDeactivate ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'} mt-0.5 mr-2 flex-shrink-0`} fill="currentColor" viewBox="0 0 20 20">
-                                {isDeactivate ? (
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                                ) : (
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                )}
-                            </svg>
-                            <p className={`text-sm font-semibold ${isDeactivate ? 'text-red-800 dark:text-red-200' : 'text-green-800 dark:text-green-200'}`}>
-                                {isDeactivate ? 'This will have the following effects:' : 'This will restore the following:'}
-                            </p>
-                        </div>
-                        <ul className="space-y-2 ml-7">
-                            {consequences.map((consequence, idx) => (
-                                <li key={idx} className={`text-sm ${isDeactivate ? 'text-red-700 dark:text-red-300' : 'text-green-700 dark:text-green-300'} flex items-start`}>
-                                    <span className="mr-2">•</span>
-                                    <span>{consequence}</span>
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
+const FIELD_GROUPS: Array<{ title: string; fields: Array<{ key: string; label: string; type?: string; wide?: boolean }> }> = [
+    { title: 'Hospital', fields: [
+        { key: 'name', label: 'Hospital name', wide: true },
+        { key: 'regNumber', label: 'Registration number' },
+        { key: 'license', label: 'License number' },
+    ] },
+    { title: 'Location', fields: [
+        { key: 'address', label: 'Address', wide: true },
+        { key: 'city', label: 'City' },
+        { key: 'state', label: 'State' },
+        { key: 'pin', label: 'PIN code' },
+    ] },
+    { title: 'Contact', fields: [
+        { key: 'username', label: 'Sign-in email', type: 'email' },
+        { key: 'contactEmail', label: 'Contact email', type: 'email' },
+        { key: 'phone', label: 'Phone', type: 'tel' },
+        { key: 'website', label: 'Website', type: 'url' },
+    ] },
+    { title: 'Administrator', fields: [
+        { key: 'adminName', label: 'Name' },
+        { key: 'designation', label: 'Designation' },
+        { key: 'adminEmail', label: 'Email', type: 'email' },
+        { key: 'adminPhone', label: 'Phone', type: 'tel' },
+    ] },
+];
+const FIELD_LABELS: Record<string, string> = Object.fromEntries(FIELD_GROUPS.flatMap(g => g.fields.map(f => [f.key, `${g.title === 'Administrator' ? 'Admin ' + f.label.toLowerCase() : f.label}`])));
 
-                    <div className="flex gap-3 justify-end">
-                        <button
-                            onClick={onClose}
-                            className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={() => {
-                                onConfirm();
-                                onClose();
-                            }}
-                            className={`px-4 py-2 text-white rounded-lg transition-colors ${isDeactivate ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`}
-                        >
-                            {confirmText}
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// Helper function to get status color classes
-const statusColor = (status: string) => {
-    switch (status) {
-        case 'PENDING':
-            return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-200';
-        case 'APPROVED':
-            return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-200';
-        case 'REJECTED':
-            return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-200';
-        case 'CHANGES_REQUESTED':
-            return 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-200';
-        default:
-            return 'bg-slate-100 text-slate-800 dark:bg-slate-900/20 dark:text-slate-200';
-    }
+const STATUS_LABEL: Record<string, { label: string; tone: 'ok' | 'warn' | 'bad' | 'muted' }> = {
+    PENDING: { label: 'Waiting for admin review', tone: 'warn' },
+    CHANGES_REQUESTED: { label: 'Admin asked for changes', tone: 'warn' },
+    APPROVED: { label: 'Approved', tone: 'ok' },
+    REJECTED: { label: 'Rejected', tone: 'bad' },
 };
 
 const HospitalSettingsPage: React.FC = () => {
@@ -389,9 +373,12 @@ const HospitalSettingsPage: React.FC = () => {
         );
     }
 
+    const changedKeys = FIELD_GROUPS.flatMap(g => g.fields.map(f => f.key)).filter(k => (formData[k] || '') !== ((hospital as any)[k] || ''));
+    const closeEditor = () => { setIsEditing(false); setFormData(hospital); };
+    const reqStatus = pendingRequest ? (STATUS_LABEL[pendingRequest.status] || { label: pendingRequest.status, tone: 'muted' as const }) : null;
+
     return (
-        <div className="space-y-6">
-            {/* Notification */}
+        <>
             {notification.show && (
                 <GlassNotification
                     title={notification.title}
@@ -412,279 +399,120 @@ const HospitalSettingsPage: React.FC = () => {
                 isDeactivate={modalConfig.isDeactivate}
             />
 
-            {/* Page Header */}
-            <div className="mb-6">
-                <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-200">Settings</h1>
-                <p className="text-slate-600 dark:text-slate-400 mt-1">Manage your hospital account and information</p>
-            </div>
-
-            {/* Account Status Section */}
-            <Card title="Account Status">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Current Status</p>
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                            hospital.active 
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-200' 
-                                : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-200'
-                        }`}>
-                            {hospital.active ? 'Active' : 'Inactive'}
-                        </span>
-                    </div>
-                    <button
-                        onClick={hospital.active ? showDeactivateModal : showActivateModal}
-                        disabled={updating}
-                        className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                            hospital.active 
-                                ? 'bg-red-500 hover:bg-red-600 text-white' 
-                                : 'bg-green-500 hover:bg-green-600 text-white'
-                        }`}
+            <SettingsPage kicker="Hospital account" title="Settings" subtitle={`${hospital.name} · on G1Card since ${new Date(hospital.createdAt).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}`}>
+                {pendingRequest && reqStatus && (
+                    <SettingsSection
+                        title="Requested changes"
+                        description="Your current details stay live until an admin approves the change."
+                        actions={pendingRequest.status === 'CHANGES_REQUESTED' ? <DialogButton variant="primary" onClick={() => setIsEditing(true)}>Edit and resubmit</DialogButton> : undefined}
                     >
-                        {updating ? 'Updating...' : hospital.active ? 'Deactivate Account' : 'Activate Account'}
-                    </button>
-                </div>
-                {!hospital.active && (
-                    <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                        <p className="text-sm text-amber-800 dark:text-amber-200">
-                            Your account is currently inactive. You cannot add patients, manage staff, or access most features until reactivated.
-                        </p>
-                    </div>
-                )}
-                <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Account Created: {new Date(hospital.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', year: 'numeric', month: 'long', day: 'numeric' })}
-                    </p>
-                </div>
-            </Card>
-
-            {/* Pending Update Request */}
-            {pendingRequest && (
-                <Card className={`border-l-4 ${
-                    pendingRequest.status === 'PENDING' ? 'border-yellow-500' :
-                    pendingRequest.status === 'CHANGES_REQUESTED' ? 'border-orange-500' : 'border-gray-500'
-                }`}>
-                    <div className="flex items-start justify-between mb-3">
-                        <div>
-                            <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Update Request Status</h3>
-                            <span className={`inline-block mt-1 px-2 py-1 rounded text-xs font-medium ${statusColor(pendingRequest.status)}`}>
-                                {pendingRequest.status.replace('_', ' ')}
-                            </span>
-                        </div>
-                    </div>
-                    {pendingRequest.status === 'PENDING' && (
-                        <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
-                            Your update request is pending admin review. Current information will remain active until approved.
-                        </p>
-                    )}
-                    {pendingRequest.status === 'CHANGES_REQUESTED' && pendingRequest.adminRemarks && (
-                        <div className="mb-3 p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg">
-                            <p className="text-sm font-medium text-orange-800 dark:text-orange-200 mb-1">Admin Remarks:</p>
-                            <p className="text-sm text-orange-700 dark:text-orange-300">{pendingRequest.adminRemarks}</p>
-                        </div>
-                    )}
-                    
-                    {/* Requested Changes */}
-                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                        <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">Requested Changes:</h4>
-                        <div className="space-y-2">
+                        <SettingRow title="Status" description={`Sent ${new Date(pendingRequest.resubmittedAt || pendingRequest.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`}>
+                            <StatusPill tone={reqStatus.tone}>{reqStatus.label}</StatusPill>
+                        </SettingRow>
+                        {pendingRequest.status === 'CHANGES_REQUESTED' && pendingRequest.adminRemarks && (
+                            <p className="st-note st-note--warn"><b>Admin:</b> {pendingRequest.adminRemarks}</p>
+                        )}
+                        <ul className="st-diff">
                             {pendingRequest.requestedChanges && Object.entries(pendingRequest.requestedChanges).map(([key, value]) => (
-                                <div key={key} className="flex items-center text-sm">
-                                    <span className="text-slate-500 dark:text-slate-400 min-w-[150px]">
-                                        {key.replace(/([A-Z])/g, ' $1').trim()}:
-                                    </span>
-                                    <span className="text-red-600 dark:text-red-400 line-through mr-2">
-                                        {pendingRequest.originalData?.[key] || 'N/A'}
-                                    </span>
-                                    <span className="text-slate-400">→</span>
-                                    <span className="text-green-600 dark:text-green-400 ml-2 font-medium">
-                                        {value as string}
-                                    </span>
-                                </div>
+                                <li key={key}>
+                                    <span className="st-diff-label">{FIELD_LABELS[key] || key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                                    <span className="st-diff-old">{pendingRequest.originalData?.[key] || 'Empty'}</span>
+                                    <span className="st-diff-arrow" aria-hidden>→</span>
+                                    <span className="st-diff-new">{String(value) || 'Empty'}</span>
+                                </li>
                             ))}
-                        </div>
-                    </div>
-
-                    {/* Conversation */}
-                    {pendingRequest.conversation && pendingRequest.conversation.length > 0 && (
-                        <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                            <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">Conversation:</h4>
-                            <div className="space-y-2 max-h-60 overflow-y-auto">
+                        </ul>
+                        {pendingRequest.conversation?.length > 0 && (
+                            <div className="st-thread">
                                 {pendingRequest.conversation.map((msg, idx) => (
-                                    <div key={idx} className={`p-3 rounded-lg text-sm ${
-                                        msg.sender === 'ADMIN' 
-                                            ? 'bg-blue-50 dark:bg-blue-900/20' 
-                                            : 'bg-green-50 dark:bg-green-900/20'
-                                    }`}>
-                                        <div className="flex justify-between items-start mb-1">
-                                            <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                                                {msg.sender === 'ADMIN' ? 'Admin' : 'You'}
-                                            </span>
-                                            <span className="text-xs text-slate-500">
-                                                {new Date(msg.timestamp).toLocaleString()}
-                                            </span>
-                                        </div>
-                                        <p className="text-slate-700 dark:text-slate-300">{msg.message}</p>
+                                    <div key={idx} className={`st-msg ${msg.sender === 'ADMIN' ? 'is-admin' : 'is-you'}`}>
+                                        <small>{msg.sender === 'ADMIN' ? 'G1Card admin' : 'You'} · {new Date(msg.timestamp).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</small>
+                                        <p>{msg.message}</p>
                                     </div>
                                 ))}
                             </div>
-                        </div>
-                    )}
-
-                    {/* Reply Section */}
-                    {pendingRequest.status === 'CHANGES_REQUESTED' && (
-                        <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                Send a message or resubmit your request:
-                            </label>
-                            <textarea
-                                value={replyMessage}
-                                onChange={(e) => setReplyMessage(e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent"
-                                rows={3}
-                                placeholder="Explain your changes or ask for clarification..."
-                            />
-                            <div className="flex gap-2 mt-2">
-                                <button
-                                    onClick={handleSendMessage}
-                                    disabled={submitting || !replyMessage.trim()}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
-                                >
-                                    Send Message
-                                </button>
-                                <button
-                                    onClick={() => setIsEditing(true)}
-                                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
-                                >
-                                    Edit & Resubmit
-                                </button>
+                        )}
+                        {pendingRequest.status === 'CHANGES_REQUESTED' && (
+                            <div className="st-reply">
+                                <textarea className="st-input" rows={2} value={replyMessage} onChange={(e) => setReplyMessage(e.target.value)} placeholder="Reply to the admin…" aria-label="Reply to the admin" />
+                                <DialogButton onClick={handleSendMessage} disabled={submitting || !replyMessage.trim()}>Send</DialogButton>
                             </div>
-                        </div>
-                    )}
-                </Card>
-            )}
-
-            {/* Hospital Information */}
-            <Card title={isEditing ? 'Edit Information' : 'Hospital Information'}>
-                <div className="flex justify-between items-center mb-4">
-                    <p className="text-sm text-slate-600 dark:text-slate-400">
-                        {isEditing ? 'Update your hospital information' : 'Current hospital details'}
-                    </p>
-                    {!pendingRequest && !isEditing && (
-                        <button
-                            onClick={() => setIsEditing(true)}
-                            className="px-4 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary text-sm"
-                        >
-                            Request Update
-                        </button>
-                    )}
-                    {isEditing && (
-                        <button
-                            onClick={() => {
-                                setIsEditing(false);
-                                setFormData(hospital);
-                            }}
-                            className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 text-sm"
-                        >
-                            Cancel
-                        </button>
-                    )}
-                </div>
-
-                {isEditing ? (
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {[
-                                { key: 'name', label: 'Hospital Name', type: 'text' },
-                                { key: 'username', label: 'Username (Email)', type: 'email' },
-                                { key: 'regNumber', label: 'Registration Number', type: 'text' },
-                                { key: 'license', label: 'License Number', type: 'text' },
-                                { key: 'address', label: 'Address', type: 'text', fullWidth: true },
-                                { key: 'city', label: 'City', type: 'text' },
-                                { key: 'state', label: 'State', type: 'text' },
-                                { key: 'pin', label: 'PIN Code', type: 'text' },
-                                { key: 'contactEmail', label: 'Contact Email', type: 'email' },
-                                { key: 'phone', label: 'Phone', type: 'tel' },
-                                { key: 'website', label: 'Website', type: 'url' },
-                                { key: 'adminName', label: 'Admin Name', type: 'text' },
-                                { key: 'adminEmail', label: 'Admin Email', type: 'email' },
-                                { key: 'adminPhone', label: 'Admin Phone', type: 'tel' },
-                                { key: 'designation', label: 'Admin Designation', type: 'text' }
-                            ].map(field => (
-                                <div key={field.key} className={field.fullWidth ? 'md:col-span-2' : ''}>
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                        {field.label}
-                                    </label>
-                                    <input
-                                        type={field.type}
-                                        value={formData[field.key] || ''}
-                                        onChange={(e) => setFormData({...formData, [field.key]: e.target.value})}
-                                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent"
-                                    />
-                                </div>
-                            ))}
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                Message to Admin (Optional)
-                            </label>
-                            <textarea
-                                value={submitMessage}
-                                onChange={(e) => setSubmitMessage(e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent"
-                                rows={3}
-                                placeholder="Add any notes or context for the admin..."
-                            />
-                        </div>
-
-                        <div className="flex gap-3 pt-4">
-                            <button
-                                onClick={handleSubmitRequest}
-                                disabled={submitting}
-                                className="px-6 py-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary disabled:opacity-50 flex items-center gap-2"
-                            >
-                                {submitting ? (
-                                    <>
-                                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        Submitting...
-                                    </>
-                                ) : 'Submit for Approval'}
-                            </button>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {[
-                            { key: 'name', label: 'Hospital Name' },
-                            { key: 'username', label: 'Username (Email)' },
-                            { key: 'regNumber', label: 'Registration Number' },
-                            { key: 'license', label: 'License Number' },
-                            { key: 'address', label: 'Address', fullWidth: true },
-                            { key: 'city', label: 'City' },
-                            { key: 'state', label: 'State' },
-                            { key: 'pin', label: 'PIN Code' },
-                            { key: 'contactEmail', label: 'Contact Email' },
-                            { key: 'phone', label: 'Phone' },
-                            { key: 'website', label: 'Website' },
-                            { key: 'adminName', label: 'Admin Name' },
-                            { key: 'adminEmail', label: 'Admin Email' },
-                            { key: 'adminPhone', label: 'Admin Phone' },
-                            { key: 'designation', label: 'Admin Designation' }
-                        ].map(field => (
-                            <div key={field.key} className={field.fullWidth ? 'md:col-span-2' : ''}>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">{field.label}</p>
-                                <p className="text-sm text-slate-800 dark:text-slate-200">
-                                    {hospital?.[field.key] || <span className="text-slate-400">Not provided</span>}
-                                </p>
-                            </div>
-                        ))}
-                    </div>
+                        )}
+                    </SettingsSection>
                 )}
-            </Card>
-        </div>
+
+                <SettingsSection
+                    title="Hospital details"
+                    description="Changes go to a G1Card admin for approval, so patients always see verified information."
+                    actions={!pendingRequest || pendingRequest.status === 'APPROVED' || pendingRequest.status === 'REJECTED'
+                        ? <DialogButton onClick={() => setIsEditing(true)}>Request a change</DialogButton>
+                        : undefined}
+                >
+                    {FIELD_GROUPS.map(group => (
+                        <div key={group.title} className="st-group">
+                            <p className="st-form-divider">{group.title}</p>
+                            <InfoGrid items={group.fields.map(f => ({ label: f.label, value: (hospital as any)[f.key], wide: f.wide }))} />
+                        </div>
+                    ))}
+                </SettingsSection>
+
+                <SettingsSection
+                    tone={hospital.active ? 'danger' : 'default'}
+                    title="Account status"
+                    description={hospital.active
+                        ? 'Deactivating pauses patient work for your whole team. Your data is kept.'
+                        : 'Your account is inactive. Patients and records stay locked until you reactivate.'}
+                    actions={
+                        <DialogButton variant={hospital.active ? 'danger' : 'primary'} onClick={hospital.active ? showDeactivateModal : showActivateModal} disabled={updating}>
+                            {updating ? 'Updating…' : hospital.active ? 'Deactivate account' : 'Reactivate account'}
+                        </DialogButton>
+                    }
+                >
+                    <SettingRow title="Current status">
+                        <StatusPill tone={hospital.active ? 'ok' : 'bad'}>{hospital.active ? 'Active' : 'Inactive'}</StatusPill>
+                    </SettingRow>
+                </SettingsSection>
+            </SettingsPage>
+
+            <AppDialog
+                open={isEditing}
+                onClose={closeEditor}
+                size="lg"
+                eyebrow={pendingRequest?.status === 'CHANGES_REQUESTED' ? 'Resubmit changes' : 'Request a change'}
+                title="Edit hospital details"
+                subtitle="Edited fields are highlighted. An admin reviews them before they go live."
+                footer={<>
+                    <span className="st-dialog-count">{changedKeys.length ? `${changedKeys.length} change${changedKeys.length === 1 ? '' : 's'}` : 'No changes yet'}</span>
+                    <DialogButton onClick={closeEditor}>Cancel</DialogButton>
+                    <DialogButton variant="primary" onClick={handleSubmitRequest} disabled={submitting || changedKeys.length === 0}>{submitting ? 'Sending…' : 'Send for approval'}</DialogButton>
+                </>}
+            >
+                <div className="st-form">
+                    {FIELD_GROUPS.map(group => (
+                        <React.Fragment key={group.title}>
+                            <p className="st-form-divider">{group.title}</p>
+                            {group.fields.map(f => {
+                                const changed = changedKeys.includes(f.key);
+                                return (
+                                    <Field key={f.key} label={f.label} htmlFor={`h-${f.key}`} wide={f.wide} hint={changed ? <>Was: {(hospital as any)[f.key] || 'empty'}</> : undefined}>
+                                        <input
+                                            id={`h-${f.key}`}
+                                            type={f.type || 'text'}
+                                            className={`st-input ${changed ? 'is-changed' : ''}`}
+                                            value={formData[f.key] || ''}
+                                            onChange={(e) => setFormData({ ...formData, [f.key]: e.target.value })}
+                                        />
+                                    </Field>
+                                );
+                            })}
+                        </React.Fragment>
+                    ))}
+                    <Field label="Note for the admin (optional)" htmlFor="h-note" wide>
+                        <textarea id="h-note" className="st-input" rows={2} value={submitMessage} onChange={(e) => setSubmitMessage(e.target.value)} placeholder="Why the change, e.g. we moved to a new building" />
+                    </Field>
+                </div>
+            </AppDialog>
+        </>
     );
 };
 

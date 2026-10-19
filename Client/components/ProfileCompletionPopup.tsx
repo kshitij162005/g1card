@@ -48,70 +48,52 @@ const ProfileCompletionPopup: React.FC<ProfileCompletionPopupProps> = ({
     const progressPercent = fields.length > 0 ? Math.round((progressCount / fields.length) * 100) : 0;
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 dark:bg-black/70 backdrop-blur-sm p-4">
-            <div className="w-full max-w-3xl rounded-3xl border border-[var(--app-border)] bg-[var(--app-surface)] shadow-[0_20px_50px_rgba(36,50,71,0.24)] dark:shadow-[0_20px_50px_rgba(2,6,23,0.65)] overflow-hidden">
-                <div className="relative p-7 border-b border-[var(--app-border)] bg-[linear-gradient(120deg,rgba(34,197,94,0.12),rgba(14,165,233,0.08),rgba(59,130,246,0.12))] dark:bg-[linear-gradient(120deg,rgba(34,197,94,0.18),rgba(14,165,233,0.10),rgba(59,130,246,0.14))]">
-                    <div className="absolute -top-20 -right-20 h-48 w-48 rounded-full bg-white/30 dark:bg-white/10 blur-3xl" />
-                    <div className="relative">
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-700 dark:text-slate-300">{roleLabel} onboarding</p>
-                        <h3 className="mt-2 text-2xl font-bold text-[var(--app-text)]">{title || `Finish your ${roleLabel.toLowerCase()} profile`}</h3>
-                        <p className="mt-1 text-sm text-[var(--app-muted)]">
-                            {subtitle || 'Answer what you can now. You can defer any question and continue using the app.'}
-                        </p>
-                        <div className="mt-5">
-                            <div className="flex items-center justify-between text-xs text-[var(--app-muted)]">
-                                <span>{progressCount} of {fields.length} handled</span>
-                                <span>{progressPercent}%</span>
-                            </div>
-                            <div className="mt-2 h-2 rounded-full bg-[var(--app-surface-soft)] overflow-hidden">
-                                <div className="h-full bg-brand-primary transition-all duration-300" style={{ width: `${progressPercent}%` }} />
-                            </div>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="profile-completion-title">
+            <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] shadow-[0_24px_60px_-20px_rgba(21,32,46,0.35)]">
+                <div className="px-7 pt-7 pb-5">
+                    <p className="text-[13px] font-semibold text-[var(--app-accent)]">{roleLabel} profile</p>
+                    <h3 id="profile-completion-title" className="mt-2 font-serif text-[28px] font-semibold leading-tight tracking-[-0.015em] text-[var(--app-text)]">
+                        {title || `Finish your ${roleLabel.toLowerCase()} profile`}
+                    </h3>
+                    <p className="mt-2 text-[15px] leading-relaxed text-[var(--app-muted)]">
+                        {subtitle || 'Answer what you can now. Anything you leave for later stays in your profile settings.'}
+                    </p>
+                    <div className="mt-5 flex items-center gap-3">
+                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-[var(--app-surface-soft)]">
+                            <div className="h-full rounded-full bg-[var(--app-accent)] transition-all duration-300" style={{ width: `${progressPercent}%` }} />
                         </div>
+                        <span className="text-xs tabular-nums text-[var(--app-muted)]">{progressCount} of {fields.length}</span>
                     </div>
                 </div>
 
-                <div className="max-h-[58vh] overflow-y-auto p-7 space-y-4">
+                <div className="flex-1 overflow-y-auto border-t border-[var(--app-border)] px-7">
                     {fields.map((field) => {
                         const isSkipped = skippedFields.includes(field.key);
-
                         return (
-                            <div key={field.key} className="rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface-soft)]/60 p-4">
-                                <div className="flex items-start justify-between gap-3">
-                                    <div>
-                                        <label htmlFor={`onboarding-${field.key}`} className="text-sm font-semibold text-[var(--app-text)]">
-                                            {field.label}
-                                        </label>
-                                        {field.helpText && <p className="mt-1 text-xs text-[var(--app-muted)]">{field.helpText}</p>}
-                                    </div>
-                                    {isSkipped ? (
-                                        <button
-                                            type="button"
-                                            onClick={() => onUnskipField(field.key)}
-                                            className="shrink-0 rounded-lg border border-[var(--app-border)] bg-[var(--app-surface)] px-3 py-1.5 text-xs font-medium text-[var(--app-text)] hover:bg-[var(--app-surface-soft)]"
-                                        >
-                                            Answer now
-                                        </button>
-                                    ) : (
-                                        <button
-                                            type="button"
-                                            onClick={() => onSkipField(field.key)}
-                                            className="shrink-0 rounded-lg border border-[var(--app-border)] bg-[var(--app-surface)] px-3 py-1.5 text-xs font-medium text-[var(--app-muted)] hover:text-[var(--app-text)]"
-                                        >
-                                            Do later
-                                        </button>
-                                    )}
+                            <div key={field.key} className="border-b border-[var(--app-border)] py-4 last:border-b-0">
+                                <div className="flex items-baseline justify-between gap-3">
+                                    <label htmlFor={`onboarding-${field.key}`} className="text-sm font-medium text-[var(--app-text)]">
+                                        {field.label}
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => (isSkipped ? onUnskipField(field.key) : onSkipField(field.key))}
+                                        className="shrink-0 text-xs font-semibold text-[var(--app-muted)] hover:text-[var(--app-text)]"
+                                    >
+                                        {isSkipped ? 'Answer now' : 'Later'}
+                                    </button>
                                 </div>
-
+                                {field.helpText && <p className="mt-1 text-xs text-[var(--app-muted)]">{field.helpText}</p>}
                                 {isSkipped ? (
-                                    <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">Deferred for later. You can update this anytime in details.</p>
+                                    <p className="mt-2 text-sm text-[var(--app-muted)]">Saved for later. You can add it from your profile any time.</p>
                                 ) : (
                                     <input
                                         id={`onboarding-${field.key}`}
                                         type={field.type || 'text'}
                                         value={field.value}
                                         onChange={(e) => onFieldChange(field.key, e.target.value)}
-                                        placeholder={field.placeholder || 'Add details'}
-                                        className="mt-3 block w-full rounded-xl border border-[var(--app-border)] bg-[var(--app-surface)] px-3 py-2.5 text-sm text-[var(--app-text)] placeholder:text-[var(--app-muted)] focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+                                        placeholder={field.placeholder || ''}
+                                        className="mt-2 block h-11 w-full rounded-[10px] border border-[var(--app-border-strong)] bg-[var(--app-surface)] px-3.5 text-[15px] text-[var(--app-text)] placeholder:text-[var(--app-muted)] focus:border-[var(--app-accent)] focus:outline-none focus:ring-[3px] focus:ring-[var(--app-accent-soft)]"
                                     />
                                 )}
                             </div>
@@ -119,30 +101,25 @@ const ProfileCompletionPopup: React.FC<ProfileCompletionPopupProps> = ({
                     })}
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--app-border)] p-5 bg-[var(--app-surface)]">
-                    <button
-                        type="button"
-                        onClick={onLater}
-                        className="rounded-lg border border-[var(--app-border)] px-4 py-2 text-sm text-[var(--app-text)] hover:bg-[var(--app-surface-soft)]"
-                    >
-                        Do entire onboarding later
+                <div className="flex flex-wrap items-center gap-3 border-t border-[var(--app-border)] px-7 py-5">
+                    <button type="button" onClick={onLater} className="text-sm font-medium text-[var(--app-muted)] hover:text-[var(--app-text)]">
+                        Do this later
                     </button>
-
-                    <div className="flex items-center gap-3">
+                    <div className="ml-auto flex items-center gap-2">
                         <button
                             type="button"
                             onClick={onOpenDetails}
-                            className="rounded-lg border border-[var(--app-border)] px-4 py-2 text-sm text-[var(--app-text)] hover:bg-[var(--app-surface-soft)]"
+                            className="h-10 rounded-full border border-[var(--app-border-strong)] px-4 text-sm font-medium text-[var(--app-text)] hover:bg-[var(--app-surface-soft)]"
                         >
-                            Open details section
+                            Open full profile
                         </button>
                         <button
                             type="button"
                             onClick={onSubmit}
                             disabled={saving}
-                            className="rounded-lg bg-brand-primary px-4 py-2 text-sm font-medium text-white hover:bg-brand-secondary disabled:opacity-70"
+                            className="h-10 rounded-full bg-[var(--app-primary)] px-5 text-sm font-semibold text-[var(--app-primary-text)] hover:bg-[var(--app-primary-hover)] disabled:opacity-60"
                         >
-                            {saving ? 'Saving...' : 'Save onboarding answers'}
+                            {saving ? 'Saving…' : 'Save answers'}
                         </button>
                     </div>
                 </div>

@@ -1,7 +1,9 @@
 import { API_URL } from '../../config/api';
+import AppDialog, { DialogButton } from '../../components/AppDialog';
+import SearchBox from '../../components/SearchBox';
 import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import Card from '../../components/Card';
+import { SettingsPage, SettingsSection, InfoGrid, SettingRow, Switch, Field, StatusPill } from '../../components/settings/Settings';
 import { useAuth } from '../../contexts/AuthContext';
 import { DetailedPatient, Role } from '../../types';
 
@@ -13,26 +15,6 @@ async function parseApiResponse(resp: Response) {
     const text = await resp.text();
     return { error: text?.slice(0, 200) || `HTTP ${resp.status}` };
 }
-
-const Section: React.FC<{ title: string; children: React.ReactNode; }> = ({ title, children }) => (
-    <div className="py-6">
-        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">{title}</h3>
-        <div className="space-y-4">{children}</div>
-    </div>
-);
-
-const ToggleSwitch: React.FC<{ label: string; checked?: boolean; disabled?: boolean; comingSoon?: boolean; onChange?: (checked: boolean) => void; }> = ({ label, checked, disabled, comingSoon, onChange }) => (
-    <label className={`flex items-center justify-between ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
-        <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
-            {label} {comingSoon && <span className="text-xs text-brand-accent ml-2">(Coming Soon)</span>}
-        </span>
-        <div className="relative inline-flex items-center h-6 rounded-full w-11">
-            <input type="checkbox" className="sr-only peer" checked={Boolean(checked)} disabled={disabled} onChange={(e) => onChange?.(e.target.checked)} />
-            <div className="w-11 h-6 bg-slate-200 dark:bg-slate-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-accent"></div>
-        </div>
-    </label>
-);
-
 
 const ACCESS_PAGE_SIZE = 5;
 
@@ -715,728 +697,393 @@ const PatientSettings: React.FC = () => {
         }
     };
 
-    const deletionStatusPillClass = latestDeletionRequest?.status === 'APPROVED'
-        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200'
-        : latestDeletionRequest?.status === 'REJECTED'
-            ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200'
-            : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200';
+    const fullName = patient?.name || `${patient?.firstName || ''} ${patient?.lastName || ''}`.trim() || user?.name || '';
+    const p = (patient || {}) as any;
+    const deletionTone = latestDeletionRequest?.status === 'APPROVED' ? 'ok' : latestDeletionRequest?.status === 'REJECTED' ? 'bad' : 'warn';
+    const openPasswordFlow = () => {
+        setChangingPassword(true);
+        setPasswordOtpRequested(false);
+        setPasswordOtpDigits(Array(OTP_LENGTH).fill(''));
+        setOtpExpiresAt(null);
+        setOtpResendAvailableAt(null);
+        setOtpNow(Date.now());
+    };
 
     return (
         <>
-        <Card title="Account Settings & Privacy">
-            <div className="divide-y divide-slate-200 dark:divide-slate-700">
-                <Section title="Profile Information">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>Name:</strong> <span className="font-semibold text-[var(--app-text)]">{patient?.name || `${patient?.firstName || ''} ${patient?.lastName || ''}` || user?.name || '—'}</span></p>
-                        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>Email:</strong> <span className="font-semibold text-[var(--app-text)]">{patient?.email || user?.email || '—'}</span> {patient?.email && <span className="text-green-600">(Verified)</span>}</p>
-                        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>Phone:</strong> <span className="font-semibold text-[var(--app-text)]">{patient?.phone || '—'}</span></p>
-                        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>DOB:</strong> <span className="font-semibold text-[var(--app-text)]">{patient?.dob || '—'}</span></p>
-                        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>Gender:</strong> <span className="font-semibold text-[var(--app-text)]">{(patient as any)?.gender || '—'}</span></p>
-                        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>Address:</strong> <span className="font-semibold text-[var(--app-text)]">{(patient as any)?.address || '—'}</span></p>
-                        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>Emergency Contact:</strong> <span className="font-semibold text-[var(--app-text)]">{(patient as any)?.emergencyContactName || '—'}</span></p>
-                        <p className="text-sm text-slate-800 dark:text-slate-200"><strong>Emergency Contact Phone:</strong> <span className="font-semibold text-[var(--app-text)]">{(patient as any)?.emergencyContactPhone || '—'}</span></p>
-                    </div>
-                    <div className="flex gap-2 mt-4">
-                        <button onClick={openEdit} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">Edit Profile</button>
-                        <button className="px-4 py-2 bg-slate-200 dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">Change Email</button>
-                    </div>
-                </Section>
-                
-                <Section title="Hospital Permissions">
-                    <p className="text-sm text-slate-600 dark:text-slate-400">Manage which hospitals can access your data and control their access level.</p>
-                    <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div className="rounded-lg bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 p-3">
-                                <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Connected</p>
-                                <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100 mt-1">{countsLoading ? '...' : accessCounts.total}</p>
-                            </div>
-                            <div className="rounded-lg bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 p-3">
-                                <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Complete Access</p>
-                                <p className="text-2xl font-semibold text-emerald-700 dark:text-emerald-300 mt-1">{completeAccessCount}</p>
-                            </div>
-                            <div className="rounded-lg bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 p-3">
-                                <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Partial Access</p>
-                                <p className="text-2xl font-semibold text-amber-700 dark:text-amber-300 mt-1">{partialAccessCount}</p>
-                            </div>
-                        </div>
-                        <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setShowPermissionsManager(true)}
-                                className="px-4 py-2 rounded-lg bg-brand-primary text-white text-sm font-medium hover:bg-brand-secondary transition-colors"
-                            >
-                                Manage Hospital Access
-                            </button>
-                        </div>
-                        {countsError && (
-                            <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">{countsError}</p>
-                        )}
-                    </div>
-                </Section>
+        <SettingsPage kicker="Your account" title="Settings" subtitle="Your profile, who can see your records, sign-in security and the emails we send you.">
+            <SettingsSection
+                title="Profile"
+                description="Hospitals you approve see these details. Keep your phone and emergency contact current."
+                actions={<>
+                    <DialogButton onClick={openEdit}>Edit profile</DialogButton>
+                </>}
+            >
+                <InfoGrid items={[
+                    { label: 'Full name', value: fullName },
+                    { label: 'Email', value: (patient?.email || user?.email) ? <>{patient?.email || user?.email} {patient?.email && <StatusPill tone="ok">Verified</StatusPill>}</> : '' },
+                    { label: 'Phone', value: p.phone },
+                    { label: 'Date of birth', value: patient?.dob ? new Date(patient.dob).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : '' },
+                    { label: 'Gender', value: p.gender },
+                    { label: 'Address', value: p.address },
+                    { label: 'Emergency contact', value: p.emergencyContactName },
+                    { label: 'Emergency contact phone', value: p.emergencyContactPhone },
+                ]} />
+            </SettingsSection>
 
-                <Section title="Security Settings">
-                    <div>
-                        <p className="text-sm"><strong>Password:</strong> •••••••• <span className="text-xs text-slate-500 ml-4">Last Changed: 15 days ago</span></p>
-                        <button
-                            onClick={() => {
-                                setChangingPassword(true);
-                                setPasswordOtpRequested(false);
-                                setPasswordOtpDigits(Array(OTP_LENGTH).fill(''));
-                                setOtpExpiresAt(null);
-                                setOtpResendAvailableAt(null);
-                                setOtpNow(Date.now());
-                            }}
-                            className="mt-2 px-4 py-2 bg-slate-200 dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600"
-                        >
-                            Change Password
-                        </button>
-                    </div>
-                   <ToggleSwitch label="Two-Factor Authentication" disabled comingSoon />
-                </Section>
-                
-                <Section title="Privacy & Data">
-                     <div className="space-y-3">
-                        <ToggleSwitch
-                            label="Allow hospitals to update my records"
-                            checked={allowHospitalsUpdate}
-                            onChange={(checked) => {
-                                // Only confirm when turning OFF
-                                if (!checked) {
-                                    const ok = window.confirm('Are you sure you want to allow hospitals to stop updating your records? This may prevent hospitals from adding or editing records on your behalf.');
-                                    if (!ok) return;
-                                }
-                                setAllowHospitalsUpdate(checked);
-                            }}
-                        />
-                        <ToggleSwitch label="Share medical history for emergency" checked />
-                    </div>
-                    <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-4">
-                        <div className="flex items-center justify-between gap-3 flex-wrap">
-                            <h4 className="font-semibold text-slate-800 dark:text-slate-200">Deletion Request Status</h4>
-                            {latestDeletionRequest ? (
-                                <span className={`px-2 py-1 rounded text-xs font-semibold ${deletionStatusPillClass}`}>
-                                    {latestDeletionRequest.status}
-                                </span>
-                            ) : (
-                                <span className="px-2 py-1 rounded text-xs font-semibold bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200">
-                                    None
-                                </span>
-                            )}
-                        </div>
-                        {deletionStatusLoading ? (
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Loading status...</p>
-                        ) : latestDeletionRequest ? (
-                            <div className="mt-2 text-xs text-slate-600 dark:text-slate-300 space-y-1">
-                                <p>Type: {latestDeletionRequest.requestType === 'ACCOUNT_DELETION' ? 'Account Deletion' : 'Data Deletion'}</p>
-                                <p>Requested: {new Date(latestDeletionRequest.createdAt).toLocaleString('en-IN')}</p>
-                                {latestDeletionRequest.reviewedAt && <p>Reviewed: {new Date(latestDeletionRequest.reviewedAt).toLocaleString('en-IN')}</p>}
-                                {latestDeletionRequest.reviewNotes && <p>Admin Notes: {latestDeletionRequest.reviewNotes}</p>}
-                            </div>
-                        ) : (
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">No deletion request has been submitted yet.</p>
-                        )}
-                    </div>
-                    <div className="flex flex-col md:flex-row justify-between items-center pt-4 border-t dark:border-slate-700 mt-6">
-                        <div className="mt-4 md:mt-0">
-                             <h4 className="font-semibold text-red-700 dark:text-red-400">Data Deletion Request</h4>
-                             <button
-                                          onClick={openDeletionConfirmModal}
-                                disabled={submittingDeletion || latestDeletionRequest?.status === 'PENDING'}
-                                className="mt-1 px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 disabled:opacity-60"
-                             >
-                                {submittingDeletion
-                                    ? 'Submitting...'
-                                    : latestDeletionRequest?.status === 'PENDING'
-                                        ? 'Request Pending Approval'
-                                        : 'Request Account Deletion'}
-                             </button>
-                        </div>
-                    </div>
-                </Section>
+            <SettingsSection
+                title="Hospital access"
+                description="Hospitals only see your records after you approve them. Change their level or take access away at any time."
+                actions={<DialogButton variant="primary" onClick={() => setShowPermissionsManager(true)}>Manage hospital access</DialogButton>}
+            >
+                <div className="st-stats">
+                    <div className="app-tone--blue"><span>{countsLoading ? '–' : accessCounts.total}</span><small>Connected hospitals</small></div>
+                    <div className="app-tone--green"><span>{countsLoading ? '–' : completeAccessCount}</span><small>Complete history</small></div>
+                    <div className="app-tone--amber"><span>{countsLoading ? '–' : partialAccessCount}</span><small>Partial access</small></div>
+                </div>
+                {countsError && <p className="st-note st-note--warn">{countsError}</p>}
+            </SettingsSection>
 
-                <Section title="Notification Preferences">
-                    <div className="space-y-3">
-                        <ToggleSwitch
-                            label="Email when hospitals access records"
-                            checked={notificationPreferences.emailWhenHospitalAccessRecords}
-                            disabled={notificationLoading || notificationSaving}
-                            onChange={(checked) => updateNotificationPreference('emailWhenHospitalAccessRecords', checked)}
-                        />
-                        <ToggleSwitch
-                            label="Email for new prescriptions"
-                            checked={notificationPreferences.emailForNewPrescriptions}
-                            disabled={notificationLoading || notificationSaving}
-                            onChange={(checked) => updateNotificationPreference('emailForNewPrescriptions', checked)}
-                        />
-                        <ToggleSwitch
-                            label="Email for consultation reminders"
-                            checked={notificationPreferences.emailForConsultationReminders}
-                            disabled={notificationLoading || notificationSaving}
-                            onChange={(checked) => updateNotificationPreference('emailForConsultationReminders', checked)}
-                        />
-                    </div>
-                </Section>
+            <SettingsSection title="Sign-in & security" description="Changing your password needs a one-time code sent to your email.">
+                <SettingRow title="Password" description="Use at least 8 characters with upper and lower case letters and a number.">
+                    <DialogButton onClick={openPasswordFlow}>Change password</DialogButton>
+                </SettingRow>
+                <SettingRow title="Two-factor authentication" badge="Coming soon" description="A second check at sign-in.">
+                    <Switch label="Two-factor authentication" checked={false} disabled />
+                </SettingRow>
+            </SettingsSection>
 
-                 <div className="pt-8 flex justify-end space-x-4">
-                             <button type="button" onClick={reloadNotificationPreferences} className="px-6 py-2 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-transparent hover:bg-slate-50 dark:hover:bg-slate-700">
-                        Cancel
-                    </button>
-                            <button type="button" onClick={saveNotificationPreferences} disabled={notificationSaving || notificationLoading} className="px-6 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-brand-primary hover:bg-brand-secondary disabled:opacity-60">
-                                {notificationSaving ? 'Saving...' : 'Save Notification Changes'}
-                    </button>
-                </div>
+            <SettingsSection title="Privacy" description="Control what approved hospitals can do with your records.">
+                <SettingRow title="Allow hospitals to update my records" description="Approved hospitals can add prescriptions, reports and visit notes.">
+                    <Switch
+                        label="Allow hospitals to update my records"
+                        checked={allowHospitalsUpdate}
+                        onChange={(checked) => {
+                            // Only confirm when turning OFF
+                            if (!checked) {
+                                const ok = window.confirm('Stop hospitals from adding or updating your records? They will still be able to view what you have approved.');
+                                if (!ok) return;
+                            }
+                            setAllowHospitalsUpdate(checked);
+                        }}
+                    />
+                </SettingRow>
+                <SettingRow title="Share medical history in an emergency" badge="Coming soon" description="Let emergency staff see allergies and conditions without waiting for approval.">
+                    <Switch label="Share medical history in an emergency" checked={false} disabled />
+                </SettingRow>
+            </SettingsSection>
+
+            <SettingsSection
+                title="Email notifications"
+                description="Choose which updates we email you. You’ll always see everything in Notifications."
+                actions={<>
+                    <DialogButton onClick={reloadNotificationPreferences} disabled={notificationSaving || notificationLoading}>Undo changes</DialogButton>
+                    <DialogButton variant="primary" onClick={saveNotificationPreferences} disabled={notificationSaving || notificationLoading}>{notificationSaving ? 'Saving…' : 'Save preferences'}</DialogButton>
+                </>}
+            >
+                <SettingRow title="When a hospital opens my records">
+                    <Switch label="Email when hospitals access records" checked={notificationPreferences.emailWhenHospitalAccessRecords} disabled={notificationLoading || notificationSaving} onChange={(checked) => updateNotificationPreference('emailWhenHospitalAccessRecords', checked)} />
+                </SettingRow>
+                <SettingRow title="New prescriptions">
+                    <Switch label="Email for new prescriptions" checked={notificationPreferences.emailForNewPrescriptions} disabled={notificationLoading || notificationSaving} onChange={(checked) => updateNotificationPreference('emailForNewPrescriptions', checked)} />
+                </SettingRow>
+                <SettingRow title="Consultation reminders">
+                    <Switch label="Email for consultation reminders" checked={notificationPreferences.emailForConsultationReminders} disabled={notificationLoading || notificationSaving} onChange={(checked) => updateNotificationPreference('emailForConsultationReminders', checked)} />
+                </SettingRow>
+            </SettingsSection>
+
+            <SettingsSection
+                tone="danger"
+                title="Delete account"
+                description="An admin reviews every request. Once approved, your records and access links are permanently removed."
+                actions={
+                    <DialogButton
+                        variant="danger"
+                        onClick={openDeletionConfirmModal}
+                        disabled={submittingDeletion || latestDeletionRequest?.status === 'PENDING'}
+                    >
+                        {submittingDeletion ? 'Submitting…' : latestDeletionRequest?.status === 'PENDING' ? 'Request pending review' : 'Request account deletion'}
+                    </DialogButton>
+                }
+            >
+                <SettingRow
+                    title="Latest request"
+                    description={deletionStatusLoading
+                        ? 'Loading…'
+                        : latestDeletionRequest
+                            ? <>
+                                {latestDeletionRequest.requestType === 'ACCOUNT_DELETION' ? 'Account deletion' : 'Data deletion'} · requested {new Date(latestDeletionRequest.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                {latestDeletionRequest.reviewedAt && <> · reviewed {new Date(latestDeletionRequest.reviewedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</>}
+                                {latestDeletionRequest.reviewNotes && <><br />Admin note: {latestDeletionRequest.reviewNotes}</>}
+                            </>
+                            : 'You haven’t asked to delete your account.'}
+                >
+                    {latestDeletionRequest ? <StatusPill tone={deletionTone}>{latestDeletionRequest.status.charAt(0) + latestDeletionRequest.status.slice(1).toLowerCase()}</StatusPill> : <StatusPill tone="muted">None</StatusPill>}
+                </SettingRow>
+            </SettingsSection>
+        </SettingsPage>
+
+        <AppDialog
+            open={showEdit}
+            onClose={() => setShowEdit(false)}
+            size="md"
+            eyebrow="Profile"
+            title="Edit your details"
+            subtitle="Hospitals you approve see these, so keep them accurate."
+            footer={<>
+                <DialogButton onClick={() => setShowEdit(false)}>Cancel</DialogButton>
+                <DialogButton variant="primary" onClick={saveProfile} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</DialogButton>
+            </>}
+        >
+            <div className="st-form">
+                <Field label="First name" htmlFor="edit-firstName"><input id="edit-firstName" className="st-input" value={form.firstName} onChange={(e) => updateField('firstName', e.target.value)} autoComplete="given-name" /></Field>
+                <Field label="Last name" htmlFor="edit-lastName"><input id="edit-lastName" className="st-input" value={form.lastName} onChange={(e) => updateField('lastName', e.target.value)} autoComplete="family-name" /></Field>
+                <Field label="Email" htmlFor="edit-email"><input id="edit-email" type="email" className="st-input" value={form.email} onChange={(e) => updateField('email', e.target.value)} autoComplete="email" /></Field>
+                <Field label="Phone" htmlFor="edit-phone"><input id="edit-phone" type="tel" className="st-input" value={form.phone} onChange={(e) => updateField('phone', e.target.value)} autoComplete="tel" placeholder="10-digit mobile number" /></Field>
+                <Field label="Date of birth" htmlFor="edit-dob"><input id="edit-dob" type="date" className="st-input" value={form.dob} onChange={(e) => updateField('dob', e.target.value)} max={new Date().toISOString().slice(0, 10)} /></Field>
+                <Field label="Gender" htmlFor="edit-gender">
+                    <select id="edit-gender" className="st-input" value={form.gender} onChange={(e) => updateField('gender', e.target.value)}>
+                        <option value="">Select</option>
+                        {['Female', 'Male', 'Non-binary', 'Prefer not to say'].map(g => <option key={g} value={g}>{g}</option>)}
+                        {form.gender && !['Female', 'Male', 'Non-binary', 'Prefer not to say'].includes(form.gender) && <option value={form.gender}>{form.gender}</option>}
+                    </select>
+                </Field>
+                <Field label="Address" htmlFor="edit-address" wide><input id="edit-address" className="st-input" value={form.address} onChange={(e) => updateField('address', e.target.value)} autoComplete="street-address" placeholder="House, street, city" /></Field>
+                <p className="st-form-divider">Emergency contact</p>
+                <Field label="Name" htmlFor="edit-emergencyName"><input id="edit-emergencyName" className="st-input" value={form.emergencyContactName} onChange={(e) => updateField('emergencyContactName', e.target.value)} placeholder="e.g. Yash Kotecha (Father)" /></Field>
+                <Field label="Phone" htmlFor="edit-emergencyPhone"><input id="edit-emergencyPhone" type="tel" className="st-input" value={form.emergencyContactPhone} onChange={(e) => updateField('emergencyContactPhone', e.target.value)} /></Field>
             </div>
-        </Card>
-        {showEdit && (
-            <div className="patient-settings-modal fixed inset-0 z-40 flex items-center justify-center p-4 animate-in fade-in duration-200">
-                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-pointer" onClick={() => setShowEdit(false)} />
-                <div className="relative w-full max-w-lg animate-in zoom-in-95 duration-200">
-                    <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden">
-                        <div className="border-b border-slate-800 px-6 py-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h2 className="text-lg font-semibold text-white tracking-tight">Edit Profile Information</h2>
-                                    <p className="text-sm text-slate-400 mt-1">Update your personal details</p>
-                                </div>
-                                <button onClick={() => setShowEdit(false)} className="text-slate-500 hover:text-slate-300 transition-colors p-1" aria-label="Close">
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                        <div className="px-6 py-5">
-                            <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label htmlFor="edit-firstName" className="block text-sm font-medium text-slate-300 mb-1.5">First Name</label>
-                                        <input id="edit-firstName" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.firstName} onChange={(e)=>updateField('firstName', e.target.value)} />
-                                    </div>
-                                    <div>
-                                        <label htmlFor="edit-lastName" className="block text-sm font-medium text-slate-300 mb-1.5">Last Name</label>
-                                        <input id="edit-lastName" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.lastName} onChange={(e)=>updateField('lastName', e.target.value)} />
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label htmlFor="edit-email" className="block text-sm font-medium text-slate-300 mb-1.5">Email Address</label>
-                                        <input id="edit-email" type="email" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.email} onChange={(e)=>updateField('email', e.target.value)} />
-                                    </div>
-                                    <div>
-                                        <label htmlFor="edit-phone" className="block text-sm font-medium text-slate-300 mb-1.5">Phone Number</label>
-                                        <input id="edit-phone" type="tel" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.phone} onChange={(e)=>updateField('phone', e.target.value)} />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label htmlFor="edit-address" className="block text-sm font-medium text-slate-300 mb-1.5">Address</label>
-                                    <input id="edit-address" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.address} onChange={(e)=>updateField('address', e.target.value)} />
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label htmlFor="edit-dob" className="block text-sm font-medium text-slate-300 mb-1.5">Date of Birth</label>
-                                        <input id="edit-dob" type="date" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.dob} onChange={(e)=>updateField('dob', e.target.value)} />
-                                    </div>
-                                    <div>
-                                        <label htmlFor="edit-gender" className="block text-sm font-medium text-slate-300 mb-1.5">Gender</label>
-                                        <input id="edit-gender" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.gender} onChange={(e)=>updateField('gender', e.target.value)} placeholder="e.g. Female" />
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label htmlFor="edit-emergencyName" className="block text-sm font-medium text-slate-300 mb-1.5">Emergency Contact Name</label>
-                                        <input id="edit-emergencyName" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.emergencyContactName} onChange={(e)=>updateField('emergencyContactName', e.target.value)} />
-                                    </div>
-                                    <div>
-                                        <label htmlFor="edit-emergencyPhone" className="block text-sm font-medium text-slate-300 mb-1.5">Emergency Contact Phone</label>
-                                        <input id="edit-emergencyPhone" type="tel" className="w-full px-3 py-2 border border-slate-700 rounded-md bg-slate-800 text-white placeholder-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none" value={form.emergencyContactPhone} onChange={(e)=>updateField('emergencyContactPhone', e.target.value)} />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="border-t border-slate-800 px-6 py-4 bg-slate-900/50">
-                            <div className="flex gap-3 justify-end">
-                                <button onClick={()=>setShowEdit(false)} className="px-5 py-2.5 text-sm font-medium text-slate-300 bg-transparent border border-slate-700 rounded-md hover:bg-slate-800 hover:border-slate-600 transition-colors">Cancel</button>
-                                <button onClick={saveProfile} disabled={saving} className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[100px]">{saving ? 'Saving...' : 'Save Changes'}</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        )}
-        {changingPassword && (
-            <div className="patient-settings-modal fixed inset-0 z-40 flex items-center justify-center p-4 animate-in fade-in duration-200">
-                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-pointer" onClick={resetPasswordFlow} />
-                <div className="relative w-full max-w-md animate-in zoom-in-95 duration-200">
-                    <div className="bg-[var(--app-surface)] dark:bg-slate-900 border border-[var(--app-border)] dark:border-slate-800 rounded-lg shadow-xl overflow-hidden">
-                        <div className="border-b border-[var(--app-border)] dark:border-slate-800 px-6 py-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h2 className="text-lg font-semibold text-[var(--app-text)] dark:text-white tracking-tight">Change Password</h2>
-                                    <p className="text-sm text-[var(--app-muted)] dark:text-slate-400 mt-1">Update your account password</p>
-                                </div>
-                                <button onClick={resetPasswordFlow} className="text-[var(--app-muted)] dark:text-slate-500 hover:text-[var(--app-text)] dark:hover:text-slate-300 transition-colors p-1" aria-label="Close">
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                        <div className="px-6 py-5">
-                            <div className="space-y-4">
-                                <div>
-                                    <label htmlFor="currentPassword" className="block text-sm font-medium text-[var(--app-text)] dark:text-slate-300 mb-1.5">Current Password (if set)</label>
-                                    <input
-                                        id="currentPassword"
-                                        type="password"
-                                        className="w-full px-3 py-2 border border-[var(--app-border)] dark:border-slate-700 rounded-md bg-[var(--app-surface)] dark:bg-slate-800 text-[var(--app-text)] dark:text-white placeholder:text-[var(--app-muted)] dark:placeholder:text-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none"
-                                        value={passwordForm.currentPassword}
-                                        onChange={(e) => updatePasswordField('currentPassword', e.target.value)}
-                                        placeholder="Leave blank for Google-only accounts"
-                                    />
-                                    <p className="mt-1 text-xs text-[var(--app-muted)] dark:text-slate-400">Required only if this account already has a password.</p>
-                                </div>
-                                <div>
-                                    <label htmlFor="newPassword" className="block text-sm font-medium text-[var(--app-text)] dark:text-slate-300 mb-1.5">New Password</label>
-                                    <input
-                                        id="newPassword"
-                                        type="password"
-                                        className="w-full px-3 py-2 border border-[var(--app-border)] dark:border-slate-700 rounded-md bg-[var(--app-surface)] dark:bg-slate-800 text-[var(--app-text)] dark:text-white placeholder:text-[var(--app-muted)] dark:placeholder:text-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none"
-                                        value={passwordForm.newPassword}
-                                        onChange={(e) => updatePasswordField('newPassword', e.target.value)}
-                                        placeholder="Enter new password"
-                                    />
-                                </div>
-                                <div>
-                                    <label htmlFor="confirmPassword" className="block text-sm font-medium text-[var(--app-text)] dark:text-slate-300 mb-1.5">Confirm New Password</label>
-                                    <input
-                                        id="confirmPassword"
-                                        type="password"
-                                        className="w-full px-3 py-2 border border-[var(--app-border)] dark:border-slate-700 rounded-md bg-[var(--app-surface)] dark:bg-slate-800 text-[var(--app-text)] dark:text-white placeholder:text-[var(--app-muted)] dark:placeholder:text-slate-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none"
-                                        value={passwordForm.confirmPassword}
-                                        onChange={(e) => updatePasswordField('confirmPassword', e.target.value)}
-                                        placeholder="Re-enter new password"
-                                    />
-                                </div>
-                                {passwordOtpRequested && (
-                                    <div className="rounded-lg border border-blue-300 dark:border-blue-800/50 bg-blue-50 dark:bg-blue-900/20 px-4 py-3">
-                                        <label htmlFor="passwordOtp" className="block text-sm font-medium text-blue-900 dark:text-slate-300 mb-1.5">Email OTP</label>
-                                        <div className="grid grid-cols-6 gap-2">
-                                            {Array.from({ length: OTP_LENGTH }).map((_, index) => (
-                                                <input
-                                                    key={index}
-                                                    id={index === 0 ? 'passwordOtp' : undefined}
-                                                    ref={(element) => {
-                                                        otpInputRefs.current[index] = element;
-                                                    }}
-                                                    inputMode="numeric"
-                                                    pattern="[0-9]*"
-                                                    maxLength={1}
-                                                    className="h-11 w-full rounded-md border border-blue-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-center text-lg font-semibold text-slate-900 dark:text-white tracking-wide outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
-                                                    value={passwordOtpDigits[index]}
-                                                    onChange={(e) => handleOtpDigitChange(index, e.target.value)}
-                                                    onKeyDown={(e) => handleOtpDigitKeyDown(index, e)}
-                                                    onPaste={handleOtpPaste}
-                                                />
-                                            ))}
-                                        </div>
-                                        <div className="mt-3 flex flex-col gap-1 text-xs text-blue-900 dark:text-blue-100">
-                                            <p>
-                                                OTP valid for 10 min. Expires in <span className="font-semibold text-blue-950 dark:text-white">{formatCountdown(otpExpiresInMs)}</span>
-                                                {otpExpiresAt ? ` (${new Date(otpExpiresAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })})` : ''}
-                                            </p>
-                                            <p>
-                                                Resend available in <span className="font-semibold text-blue-950 dark:text-white">{formatCountdown(otpResendInMs)}</span>
-                                            </p>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                            <div className="bg-slate-100 dark:bg-slate-800/30 border border-slate-300 dark:border-slate-700/50 rounded-md px-4 py-3 mt-5">
-                                <div className="flex gap-3">
-                                    <svg className="w-5 h-5 text-slate-600 dark:text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <p className="text-xs text-slate-700 dark:text-slate-400 leading-relaxed">
-                                        Password must be at least 8 characters long and include uppercase, lowercase, and numbers.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="border-t border-[var(--app-border)] dark:border-slate-800 px-6 py-4 bg-[var(--app-surface)] dark:bg-slate-900/50">
-                            <div className="flex gap-3 justify-end">
-                                <button
-                                    onClick={() => {
-                                        resetPasswordFlow();
-                                    }}
-                                    className="px-5 py-2.5 text-sm font-medium text-slate-800 dark:text-slate-300 bg-transparent border border-slate-300 dark:border-slate-700 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 hover:border-slate-400 dark:hover:border-slate-600 transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={requestPasswordOtp}
-                                    disabled={passwordActionLoading || (passwordOtpRequested && otpResendInMs > 0)}
-                                    className="px-5 py-2.5 text-sm font-medium text-slate-800 dark:text-slate-200 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors disabled:opacity-60 disabled:bg-slate-200 dark:disabled:bg-slate-700 disabled:text-slate-500 dark:disabled:text-slate-400"
-                                >
-                                    {passwordActionLoading && !passwordOtpRequested
-                                        ? 'Sending OTP...'
-                                        : passwordActionLoading && passwordOtpRequested
-                                            ? 'Resending...'
-                                            : !passwordOtpRequested
-                                                ? 'Send OTP'
-                                                : otpResendInMs > 0
-                                                    ? `Resend in ${formatCountdown(otpResendInMs)}`
-                                                    : 'Resend OTP'}
-                                </button>
-                                <button
-                                    onClick={submitPasswordChange}
-                                    disabled={passwordActionLoading || !passwordOtpRequested}
-                                    className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-60"
-                                >
-                                    {passwordActionLoading && passwordOtpRequested ? 'Updating...' : 'Update Password'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        )}
-        {showDeletionConfirmModal && (
-            <div className="patient-settings-modal fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-pointer" onClick={closeDeletionConfirmModal} />
-                <div className="relative w-full max-w-lg animate-in zoom-in-95 duration-200">
-                    <div className="bg-[var(--app-surface)] dark:bg-slate-900 border border-[var(--app-border)] dark:border-slate-800 rounded-lg shadow-xl overflow-hidden">
-                        <div className="border-b border-[var(--app-border)] dark:border-slate-800 px-6 py-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h2 className="text-lg font-semibold text-[var(--app-text)] dark:text-white tracking-tight">Confirm Account Deletion</h2>
-                                    <p className="text-sm text-[var(--app-muted)] dark:text-slate-400 mt-1">This action is permanent and cannot be undone.</p>
-                                </div>
-                                <button onClick={closeDeletionConfirmModal} className="text-[var(--app-muted)] dark:text-slate-500 hover:text-[var(--app-text)] dark:hover:text-slate-300 transition-colors p-1" aria-label="Close">
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                        <div className="px-6 py-5 space-y-4">
-                            <div className="rounded-md border border-red-300 dark:border-red-800/60 bg-red-50 dark:bg-red-900/20 px-4 py-3">
-                                <p className="text-sm text-red-800 dark:text-red-200 font-semibold">Deleting your account will remove all of your records, access links, OTP history, and related data from the database.</p>
-                            </div>
-                            <div>
-                                <label htmlFor="deleteReason" className="block text-sm font-medium text-[var(--app-text)] dark:text-slate-300 mb-1.5">Reason (optional)</label>
-                                <textarea
-                                    id="deleteReason"
-                                    rows={3}
-                                    value={deletionReasonDraft}
-                                    onChange={(e) => setDeletionReasonDraft(e.target.value)}
-                                    placeholder="Tell us why you are deleting your account"
-                                    className="w-full px-3 py-2 border border-[var(--app-border)] dark:border-slate-700 rounded-md bg-[var(--app-surface)] dark:bg-slate-800 text-[var(--app-text)] dark:text-white placeholder:text-[var(--app-muted)] dark:placeholder:text-slate-500 focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none"
-                                />
-                            </div>
-                            <label className="flex items-start gap-3 cursor-pointer">
+        </AppDialog>
+
+        <AppDialog
+            open={changingPassword}
+            onClose={resetPasswordFlow}
+            size="sm"
+            eyebrow="Security"
+            title="Change password"
+            subtitle={passwordOtpRequested ? 'Enter the 6-digit code we emailed you, then save.' : 'We’ll email you a one-time code to confirm it’s you.'}
+            footer={<>
+                <DialogButton onClick={resetPasswordFlow}>Cancel</DialogButton>
+                <DialogButton onClick={requestPasswordOtp} disabled={passwordActionLoading || (passwordOtpRequested && otpResendInMs > 0)}>
+                    {passwordActionLoading && !passwordOtpRequested ? 'Sending…'
+                        : passwordActionLoading && passwordOtpRequested ? 'Resending…'
+                            : !passwordOtpRequested ? 'Send code'
+                                : otpResendInMs > 0 ? `Resend in ${formatCountdown(otpResendInMs)}` : 'Resend code'}
+                </DialogButton>
+                {passwordOtpRequested && (
+                    <DialogButton variant="primary" onClick={submitPasswordChange} disabled={passwordActionLoading}>
+                        {passwordActionLoading ? 'Updating…' : 'Update password'}
+                    </DialogButton>
+                )}
+            </>}
+        >
+            <div className="st-form st-form--single">
+                <Field label="Current password" htmlFor="currentPassword" hint="Leave blank if you’ve only ever signed in with Google.">
+                    <input id="currentPassword" type="password" className="st-input" value={passwordForm.currentPassword} onChange={(e) => updatePasswordField('currentPassword', e.target.value)} autoComplete="current-password" />
+                </Field>
+                <Field label="New password" htmlFor="newPassword" hint="We recommend 8+ characters with upper and lower case letters and a number.">
+                    <input id="newPassword" type="password" className="st-input" value={passwordForm.newPassword} onChange={(e) => updatePasswordField('newPassword', e.target.value)} autoComplete="new-password" />
+                </Field>
+                <Field label="Confirm new password" htmlFor="confirmPassword">
+                    <input id="confirmPassword" type="password" className="st-input" value={passwordForm.confirmPassword} onChange={(e) => updatePasswordField('confirmPassword', e.target.value)} autoComplete="new-password" />
+                    {passwordForm.confirmPassword && passwordForm.newPassword !== passwordForm.confirmPassword && <small className="st-error">Passwords don’t match yet.</small>}
+                </Field>
+                {passwordOtpRequested && (
+                    <div className="st-otp">
+                        <label htmlFor="passwordOtp">Code from your email</label>
+                        <div className="st-otp-boxes">
+                            {Array.from({ length: OTP_LENGTH }).map((_, index) => (
                                 <input
-                                    type="checkbox"
-                                    checked={deletionConfirmChecked}
-                                    onChange={(e) => setDeletionConfirmChecked(e.target.checked)}
-                                    className="mt-1 h-4 w-4 rounded border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-800 text-red-500 focus:ring-red-500"
+                                    key={index}
+                                    id={index === 0 ? 'passwordOtp' : undefined}
+                                    ref={(element) => { otpInputRefs.current[index] = element; }}
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    maxLength={1}
+                                    aria-label={`Digit ${index + 1}`}
+                                    value={passwordOtpDigits[index]}
+                                    onChange={(e) => handleOtpDigitChange(index, e.target.value)}
+                                    onKeyDown={(e) => handleOtpDigitKeyDown(index, e)}
+                                    onPaste={handleOtpPaste}
                                 />
-                                <span className="text-sm text-slate-800 dark:text-slate-300 leading-relaxed">
-                                    I understand this is irreversible and my account data will be permanently erased.
-                                </span>
-                            </label>
+                            ))}
                         </div>
-                        <div className="border-t border-[var(--app-border)] dark:border-slate-800 px-6 py-4 bg-[var(--app-surface)] dark:bg-slate-900/50">
-                            <div className="flex gap-3 justify-end">
-                                <button
-                                    onClick={closeDeletionConfirmModal}
-                                    disabled={submittingDeletion}
-                                    className="px-5 py-2.5 text-sm font-medium text-slate-800 dark:text-slate-300 bg-transparent border border-slate-300 dark:border-slate-700 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 hover:border-slate-400 dark:hover:border-slate-600 transition-colors disabled:opacity-60"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={submitDeletionRequest}
-                                    disabled={submittingDeletion || !deletionConfirmChecked}
-                                    className="px-5 py-2.5 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors disabled:opacity-60"
-                                >
-                                    {submittingDeletion ? 'Deleting Account...' : 'Delete My Account'}
-                                </button>
-                            </div>
-                        </div>
+                        <small>Expires in <b>{formatCountdown(otpExpiresInMs)}</b>{otpExpiresAt ? ` (at ${new Date(otpExpiresAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })})` : ''}</small>
                     </div>
-                </div>
+                )}
             </div>
-        )}
-        {showPermissionsManager && (
-            <div className="patient-settings-modal fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-pointer" onClick={closePermissionsManager} />
-                <div className="relative w-full max-w-5xl animate-in zoom-in-95 duration-200">
-                    <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden">
-                        <div className="border-b border-slate-800 px-6 py-4">
-                            <div className="flex items-center justify-between gap-4">
-                                <div>
-                                    <h2 className="text-lg font-semibold text-white tracking-tight">Hospital Access Manager</h2>
-                                    <p className="text-sm text-slate-400 mt-1">Search, review and control hospital permissions.</p>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={closePermissionsManager}
-                                    className="text-slate-500 hover:text-slate-300 transition-colors p-1"
-                                    aria-label="Close"
-                                >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </div>
-                            <div className="mt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                                <input
-                                    type="text"
-                                    value={permissionSearch}
-                                    onChange={(e) => setPermissionSearch(e.target.value)}
-                                    placeholder="Search hospital"
-                                    className="w-full md:w-80 px-3 py-2 text-sm border border-slate-700 rounded-lg bg-slate-800 text-slate-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                                />
-                                <p className="text-sm text-slate-400">{filteredPermissions.length} result{filteredPermissions.length === 1 ? '' : 's'}</p>
-                            </div>
-                        </div>
-                        <div className="p-6">
-                            {permissionsLoading ? (
-                                <p className="text-sm text-slate-400">Loading hospital permissions...</p>
-                            ) : permissionsError ? (
-                                <div className="space-y-3">
-                                    <p className="text-sm text-red-300">{permissionsError}</p>
-                                    <button
-                                        type="button"
-                                        onClick={() => setPermissionsRefreshKey((key) => key + 1)}
-                                        className="px-4 py-2 rounded-md border border-slate-600 text-slate-200 hover:bg-slate-800 transition-colors"
-                                    >
-                                        Retry
-                                    </button>
-                                </div>
-                            ) : hospitalPermissions.length === 0 ? (
-                                <p className="text-sm text-slate-400">No hospitals currently have access to your records.</p>
-                            ) : filteredPermissions.length === 0 ? (
-                                <p className="text-sm text-slate-400">No hospitals match your search.</p>
-                            ) : (
-                                <div className="rounded-xl border border-slate-700 overflow-hidden">
-                                    <div className="overflow-x-auto max-h-[22rem] overflow-y-auto">
-                                        <table className="min-w-full text-sm">
-                                            <thead className="bg-slate-800/70 sticky top-0">
-                                                <tr>
-                                                    <th className="px-4 py-3 text-left font-semibold text-slate-300">Hospital</th>
-                                                    <th className="px-4 py-3 text-left font-semibold text-slate-300">Access</th>
-                                                    <th className="px-4 py-3 text-left font-semibold text-slate-300">Last Accessed</th>
-                                                    <th className="px-4 py-3 text-right font-semibold text-slate-300">Actions</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-700 bg-slate-900/30">
-                                                {paginatedPermissions.map((h) => {
-                                                    const nextLevel: 'GENERAL' | 'COMPLETE' = h.accessLevel === 'COMPLETE' ? 'GENERAL' : 'COMPLETE';
-                                                    return (
-                                                        <tr key={h.accessId}>
-                                                            <td className="px-4 py-3 font-medium text-slate-100">{h.hospitalName}</td>
-                                                            <td className="px-4 py-3">
-                                                                <span className={`inline-flex px-2 py-1 rounded-md text-xs font-semibold ${h.accessLevel === 'COMPLETE' ? 'bg-emerald-900/30 text-emerald-300' : 'bg-amber-900/30 text-amber-300'}`}>
-                                                                    {h.accessLevel === 'COMPLETE' ? 'Complete' : 'Partial'}
-                                                                </span>
-                                                            </td>
-                                                            <td className="px-4 py-3 text-slate-300">{formatDate(h.lastAccessed)}</td>
-                                                            <td className="px-4 py-3">
-                                                                <div className="flex justify-end gap-2">
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleAccessLevelChange(h.accessId, h.hospitalName, h.accessLevel, nextLevel)}
-                                                                        className="px-3 py-1.5 rounded-md border border-slate-600 text-slate-200 hover:bg-slate-800 transition-colors"
-                                                                    >
-                                                                        Switch to {nextLevel === 'COMPLETE' ? 'Complete' : 'Partial'}
-                                                                    </button>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleRevokeHospital(h.accessId, h.hospitalName)}
-                                                                        className="px-3 py-1.5 rounded-md border border-red-800 text-red-300 hover:bg-red-900/20 transition-colors"
-                                                                    >
-                                                                        Revoke
-                                                                    </button>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    {permissionPages > 1 && (
-                                        <div className="flex items-center justify-between px-4 py-3 border-t border-slate-700 bg-slate-800/40">
-                                            <p className="text-xs text-slate-300">
-                                                Showing {(permissionPage - 1) * ACCESS_PAGE_SIZE + 1}-{Math.min(permissionPage * ACCESS_PAGE_SIZE, filteredPermissions.length)} of {filteredPermissions.length}
-                                            </p>
-                                            <div className="flex items-center gap-2">
-                                                <button
-                                                    type="button"
-                                                    disabled={permissionPage === 1}
-                                                    onClick={() => setPermissionPage((p) => Math.max(1, p - 1))}
-                                                    className="px-3 py-1.5 rounded-md border border-slate-600 text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                >
-                                                    Prev
-                                                </button>
-                                                <span className="text-xs text-slate-300">{permissionPage}/{permissionPages}</span>
-                                                <button
-                                                    type="button"
-                                                    disabled={permissionPage === permissionPages}
-                                                    onClick={() => setPermissionPage((p) => Math.min(permissionPages, p + 1))}
-                                                    className="px-3 py-1.5 rounded-md border border-slate-600 text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                >
-                                                    Next
-                                                </button>
+        </AppDialog>
+
+        <AppDialog
+            open={showDeletionConfirmModal}
+            onClose={closeDeletionConfirmModal}
+            size="sm"
+            tone="danger"
+            eyebrow="Delete account"
+            title="Ask to delete your account?"
+            subtitle="An admin reviews the request. Once approved it can’t be undone."
+            footer={<>
+                <DialogButton onClick={closeDeletionConfirmModal} disabled={submittingDeletion}>Keep my account</DialogButton>
+                <DialogButton variant="danger" onClick={submitDeletionRequest} disabled={submittingDeletion || !deletionConfirmChecked}>{submittingDeletion ? 'Sending…' : 'Request deletion'}</DialogButton>
+            </>}
+        >
+            <div className="st-form st-form--single">
+                <p className="st-note st-note--bad">Your records, hospital access links and sign-in history will be permanently removed.</p>
+                <Field label="Reason (optional)" htmlFor="deleteReason">
+                    <textarea id="deleteReason" rows={3} className="st-input" value={deletionReasonDraft} onChange={(e) => setDeletionReasonDraft(e.target.value)} placeholder="Anything that would help us improve" />
+                </Field>
+                <label className={`app-check-row ${deletionConfirmChecked ? 'is-checked' : ''}`}>
+                    <input type="checkbox" checked={deletionConfirmChecked} onChange={(e) => setDeletionConfirmChecked(e.target.checked)} />
+                    <span>I understand this is permanent once approved.</span>
+                </label>
+            </div>
+        </AppDialog>
+
+        <AppDialog
+            open={showPermissionsManager}
+            onClose={closePermissionsManager}
+            size="xl"
+            eyebrow="Manage access"
+            title="Who can see your records"
+            subtitle="Change how much each hospital can see, or take access away. Changes apply straight away."
+        >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <SearchBox
+                    className="w-full sm:w-80"
+                    placeholder="Search hospitals"
+                    live
+                    initialValue={permissionSearch}
+                    onSearch={q => setPermissionSearch(q)}
+                />
+                <p className="text-sm text-[var(--app-muted)]">
+                    {hospitalPermissions.length} hospital{hospitalPermissions.length === 1 ? '' : 's'} connected
+                </p>
+            </div>
+
+            <div className="mt-5">
+                {permissionsLoading ? (
+                    <div className="space-y-3" aria-label="Loading">
+                        {[0, 1, 2].map((n) => <div key={n} className="h-16 animate-pulse rounded-xl bg-[var(--app-surface-soft)]" />)}
+                    </div>
+                ) : permissionsError ? (
+                    <div className="rounded-xl border border-[var(--app-border)] p-5">
+                        <p className="text-sm text-[var(--app-danger)]">{permissionsError}</p>
+                        <DialogButton className="mt-3" onClick={() => setPermissionsRefreshKey((key) => key + 1)}>Try again</DialogButton>
+                    </div>
+                ) : hospitalPermissions.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-[var(--app-border-strong)] px-6 py-10 text-center">
+                        <p className="font-serif text-lg font-semibold">No hospital can see your records</p>
+                        <p className="mt-1 text-sm text-[var(--app-muted)]">When a hospital asks for access you’ll get a notification to approve or deny it.</p>
+                    </div>
+                ) : filteredPermissions.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-[var(--app-muted)]">No hospitals match “{permissionSearch}”.</p>
+                ) : (
+                    <>
+                        <ul className="divide-y divide-[var(--app-border)] overflow-hidden rounded-xl border border-[var(--app-border)]">
+                            {paginatedPermissions.map((h) => {
+                                const nextLevel: 'GENERAL' | 'COMPLETE' = h.accessLevel === 'COMPLETE' ? 'GENERAL' : 'COMPLETE';
+                                const complete = h.accessLevel === 'COMPLETE';
+                                return (
+                                    <li key={h.accessId} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center">
+                                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--app-accent-soft)] text-sm font-bold text-[var(--app-accent)]">
+                                                {h.hospitalName.split(/\s+/).filter(Boolean).slice(0, 2).map((w: string) => w[0]?.toUpperCase()).join('')}
+                                            </span>
+                                            <div className="min-w-0">
+                                                <p className="truncate font-semibold">{h.hospitalName}</p>
+                                                <p className="text-xs text-[var(--app-muted)]">Last opened your records {formatDate(h.lastAccessed)}</p>
                                             </div>
                                         </div>
-                                    )}
+                                        <span className={`inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${complete ? 'bg-[var(--app-success-soft)] text-[var(--app-success-text)]' : 'bg-[var(--app-warning-soft)] text-[var(--app-warning)]'}`}>
+                                            <span className={`h-1.5 w-1.5 rounded-full ${complete ? 'bg-[var(--app-success-text)]' : 'bg-[var(--app-warning)]'}`} />
+                                            {complete ? 'Complete history' : 'Partial access'}
+                                        </span>
+                                        <div className="flex gap-2 sm:ml-4">
+                                            <DialogButton onClick={() => handleAccessLevelChange(h.accessId, h.hospitalName, h.accessLevel, nextLevel)}>
+                                                Switch to {nextLevel === 'COMPLETE' ? 'complete' : 'partial'}
+                                            </DialogButton>
+                                            <DialogButton className="!text-[var(--app-danger)]" onClick={() => handleRevokeHospital(h.accessId, h.hospitalName)}>
+                                                Revoke
+                                            </DialogButton>
+                                        </div>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                        {permissionPages > 1 && (
+                            <div className="mt-4 flex items-center justify-between text-sm text-[var(--app-muted)]">
+                                <span>
+                                    {(permissionPage - 1) * ACCESS_PAGE_SIZE + 1}–{Math.min(permissionPage * ACCESS_PAGE_SIZE, filteredPermissions.length)} of {filteredPermissions.length}
+                                </span>
+                                <div className="flex gap-2">
+                                    <DialogButton disabled={permissionPage === 1} onClick={() => setPermissionPage((p) => Math.max(1, p - 1))}>Previous</DialogButton>
+                                    <DialogButton disabled={permissionPage === permissionPages} onClick={() => setPermissionPage((p) => Math.min(permissionPages, p + 1))}>Next</DialogButton>
                                 </div>
-                            )}
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
+        </AppDialog>
+
+        <AppDialog
+            open={Boolean(revokeModal?.show)}
+            onClose={() => setRevokeModal(null)}
+            size="sm"
+            tone="danger"
+            eyebrow="Revoke access"
+            title={`Stop ${revokeModal?.hospitalName || 'this hospital'} seeing your records?`}
+            footer={
+                <>
+                    <DialogButton onClick={() => setRevokeModal(null)}>Keep access</DialogButton>
+                    <DialogButton variant="danger" onClick={confirmRevokeAccess}>Revoke access</DialogButton>
+                </>
+            }
+        >
+            <ul className="space-y-2 text-sm leading-relaxed text-[var(--app-muted)]">
+                <li>They lose access to your records immediately.</li>
+                <li>They can’t add to or update your health information.</li>
+                <li>They’ll have to ask again, and you decide whether to approve.</li>
+            </ul>
+            <p className="mt-4 rounded-xl bg-[var(--app-surface-soft)] px-4 py-3 text-sm text-[var(--app-muted)]">
+                Anything they viewed before stays in your audit history.
+            </p>
+        </AppDialog>
+
+        <AppDialog
+            open={Boolean(accessLevelModal?.show)}
+            onClose={() => setAccessLevelModal(null)}
+            size="sm"
+            eyebrow="Change access level"
+            title={accessLevelModal?.hospitalName || 'Hospital'}
+            footer={
+                <>
+                    <DialogButton onClick={() => setAccessLevelModal(null)}>Cancel</DialogButton>
+                    <DialogButton variant="primary" onClick={confirmAccessLevelChange}>Confirm change</DialogButton>
+                </>
+            }
+        >
+            {accessLevelModal && (
+                <>
+                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                        <div className="rounded-xl border border-[var(--app-border)] p-3">
+                            <p className="text-xs text-[var(--app-muted)]">Now</p>
+                            <p className="mt-0.5 font-semibold">{accessLevelModal.currentLevel === 'COMPLETE' ? 'Complete history' : 'Partial access'}</p>
+                        </div>
+                        <span className="text-[var(--app-muted)]" aria-hidden>→</span>
+                        <div className="rounded-xl border border-[var(--app-accent)] bg-[var(--app-accent-soft)] p-3">
+                            <p className="text-xs text-[var(--app-accent)]">After</p>
+                            <p className="mt-0.5 font-semibold">{accessLevelModal.newLevel === 'COMPLETE' ? 'Complete history' : 'Partial access'}</p>
                         </div>
                     </div>
-                </div>
-            </div>
-        )}
-        {revokeModal?.show && (
-            <div className="patient-settings-modal fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-pointer" onClick={() => setRevokeModal(null)} />
-                <div className="relative w-full max-w-md animate-in zoom-in-95 duration-200">
-                    <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden">
-                        <div className="border-b border-slate-800 px-6 py-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h2 className="text-lg font-semibold text-white tracking-tight">Revoke Hospital Access</h2>
-                                    <p className="text-sm text-slate-400 mt-1">{revokeModal.hospitalName}</p>
-                                </div>
-                                <button onClick={() => setRevokeModal(null)} className="text-slate-500 hover:text-slate-300 transition-colors p-1" aria-label="Close">
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                        <div className="px-6 py-5">
-                            <div className="bg-red-900/20 border border-red-800/50 rounded-md px-4 py-3.5 mb-5">
-                                <div className="flex gap-3">
-                                    <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                    </svg>
-                                    <div>
-                                        <p className="text-sm text-red-300 font-medium mb-2">
-                                            You are about to revoke access for <strong>{revokeModal.hospitalName}</strong>
-                                        </p>
-                                        <p className="text-xs text-red-400/90 mb-2">This action will immediately:</p>
-                                        <ul className="text-xs text-red-400/80 space-y-1 ml-1">
-                                            <li>• Terminate all access to your medical records</li>
-                                            <li>• Prevent updates to your health information</li>
-                                            <li>• Require a new authorization to restore access</li>
-                                        </ul>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="bg-slate-800/30 border border-slate-700/50 rounded-md px-4 py-3">
-                                <div className="flex gap-3">
-                                    <svg className="w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <p className="text-xs text-slate-400 leading-relaxed">
-                                        This is a permanent action. The hospital can request access again, but you will need to approve it.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="border-t border-slate-800 px-6 py-4 bg-slate-900/50">
-                            <div className="flex gap-3 justify-end">
-                                <button
-                                    onClick={() => setRevokeModal(null)}
-                                    className="px-5 py-2.5 text-sm font-medium text-slate-300 bg-transparent border border-slate-700 rounded-md hover:bg-slate-800 hover:border-slate-600 transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={confirmRevokeAccess}
-                                    className="px-5 py-2.5 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors"
-                                >
-                                    Revoke Access
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        )}
-        {accessLevelModal?.show && (
-            <div className="patient-settings-modal fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-pointer" onClick={() => setAccessLevelModal(null)} />
-                <div className="relative w-full max-w-md animate-in zoom-in-95 duration-200">
-                    <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden">
-                        <div className="border-b border-slate-800 px-6 py-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h2 className="text-lg font-semibold text-white tracking-tight">Modify Access Level</h2>
-                                    <p className="text-sm text-slate-400 mt-1">{accessLevelModal.hospitalName}</p>
-                                </div>
-                                <button onClick={() => setAccessLevelModal(null)} className="text-slate-500 hover:text-slate-300 transition-colors p-1" aria-label="Close">
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                        <div className="px-6 py-5">
-                            <p className="text-sm text-slate-300 leading-relaxed mb-5">
-                                You are about to change the access level for <span className="font-medium text-white">{accessLevelModal.hospitalName}</span>.
-                            </p>
-                            <div className="bg-slate-800/50 border border-slate-700 rounded-md p-4 mb-5">
-                                <div className="flex items-center justify-between mb-3">
-                                    <span className="text-sm text-slate-400">Current Access:</span>
-                                    <span className="text-sm font-medium text-white">{accessLevelModal.currentLevel === 'COMPLETE' ? 'Complete Access' : 'Partial Access'}</span>
-                                </div>
-                                <div className="flex items-center justify-center my-2">
-                                    <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                                    </svg>
-                                </div>
-                                <div className="flex items-center justify-between pt-3 border-t border-slate-700">
-                                    <span className="text-sm text-slate-400">New Access:</span>
-                                    <span className="text-sm font-medium text-blue-400">{accessLevelModal.newLevel === 'COMPLETE' ? 'Complete Access' : 'Partial Access'}</span>
-                                </div>
-                            </div>
-                            <div className="bg-slate-800/30 border border-slate-700/50 rounded-md px-4 py-3">
-                                <div className="flex gap-3">
-                                    <svg className="w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <p className="text-xs text-slate-400 leading-relaxed">
-                                        {accessLevelModal.newLevel === 'COMPLETE' 
-                                            ? 'Complete access grants the hospital permission to view all your medical records including lab results, imaging, and detailed treatment history.'
-                                            : 'Partial access limits the hospital to viewing only basic medical information and hospital-specific records.'}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="border-t border-slate-800 px-6 py-4 bg-slate-900/50">
-                            <div className="flex gap-3 justify-end">
-                                <button
-                                    onClick={() => setAccessLevelModal(null)}
-                                    className="px-5 py-2.5 text-sm font-medium text-slate-300 bg-transparent border border-slate-700 rounded-md hover:bg-slate-800 hover:border-slate-600 transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={confirmAccessLevelChange}
-                                    className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
-                                >
-                                    Confirm Change
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        )}
+                    <p className="mt-4 text-sm leading-relaxed text-[var(--app-muted)]">
+                        {accessLevelModal.newLevel === 'COMPLETE'
+                            ? 'They’ll be able to see your full history from every hospital, including lab results and treatment notes.'
+                            : 'They’ll only see basic medical information and the records they created themselves.'}
+                    </p>
+                </>
+            )}
+        </AppDialog>
         </>
     );
 };

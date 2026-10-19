@@ -5,6 +5,8 @@ import Card from '../../components/Card';
 import { useNavigate } from 'react-router-dom';
 import Loader from '../../components/Loader';
 import ProfileCompletionPopup from '../../components/ProfileCompletionPopup';
+import StatCard from '../../components/StatCard';
+import { timeOfDayGreeting } from '../../utils/greeting';
 
 const ONBOARDING_SNOOZE_MS = 24 * 60 * 60 * 1000;
 
@@ -23,14 +25,6 @@ const HOSPITAL_ONBOARDING_FIELDS = [
 
 type HospitalOnboardingKey = typeof HOSPITAL_ONBOARDING_FIELDS[number]['key'];
 
-const StatCard: React.FC<{ title: string; value: string | number; loading?: boolean; }> = ({ title, value, loading }) => (
-    <Card className="text-center">
-        <p className="text-sm text-slate-500 dark:text-slate-400">{title}</p>
-        <p className="text-3xl font-bold text-brand-primary dark:text-brand-accent">
-            {loading ? '—' : value}
-        </p>
-    </Card>
-);
 
 interface RecentPatient {
     id: string;
@@ -40,6 +34,7 @@ interface RecentPatient {
     phone?: string;
     gender?: string;
     createdAt: string;
+    suspended?: boolean;
 }
 
 interface HospitalProfile {
@@ -251,8 +246,9 @@ const HospitalDashboard: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <Card className="dashboard-hero bg-[linear-gradient(130deg,#dce7f6_0%,#e7eef8_52%,#dceaf7_100%)] dark:bg-gradient-to-r dark:from-slate-800 dark:to-slate-800">
-                <h2 className="text-2xl font-bold text-[var(--app-text)]">Welcome, {user?.name || 'Hospital'}</h2>
+            <Card className="dashboard-hero">
+                <p className="app-hero-kicker">{timeOfDayGreeting()}</p>
+                <h2 className="text-2xl font-bold text-[var(--app-text)]">{user?.name || 'Your hospital'}</h2>
                 <div className="flex flex-wrap gap-4 text-sm text-[var(--app-muted)] mt-2">
                     <span>Verification Status: <span className="text-status-green font-semibold">Approved</span></span>
                     <span>Last Activity: {formatLastActivity()}</span>
@@ -260,8 +256,8 @@ const HospitalDashboard: React.FC = () => {
             </Card>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <StatCard title="Active Patients" value={metrics.patientsTotal} loading={loadingMetrics} />
-                <StatCard title="Medical Records" value={metrics.recordsTotal} loading={loadingMetrics} />
+                <StatCard title="Patients with access" value={metrics.patientsTotal} loading={loadingMetrics} tone="blue" icon="people" />
+                <StatCard title="Records created" value={metrics.recordsTotal} loading={loadingMetrics} tone="teal" icon="records" />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -276,7 +272,7 @@ const HospitalDashboard: React.FC = () => {
                                 <li key={item.id} className="py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer" onClick={() => navigate(`/hospital/patients/${item.id}`)}>
                                     <div className="flex flex-col md:flex-row md:justify-between md:items-center text-sm gap-2">
                                         <div className="flex flex-col">
-                                            <span className="font-semibold text-slate-800 dark:text-slate-200 text-base">{item.name || 'Unknown Patient'}</span>
+                                            <span className="font-semibold text-slate-800 dark:text-slate-200 text-base inline-flex items-center gap-2">{item.name || 'Unknown Patient'}{item.suspended && <span className="app-suspended-badge" title="This patient's G1Card account is suspended by an admin">Suspended</span>}</span>
                                             <span className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Patient ID: {item.patientId}</span>
                                         </div>
                                         <div className="text-xs text-slate-500 dark:text-slate-400">
@@ -308,7 +304,7 @@ const HospitalDashboard: React.FC = () => {
                 <div className="flex flex-wrap gap-3">
                     <button onClick={() => navigate('/hospital/patients/add')} className="px-4 py-2.5 bg-brand-primary text-white text-sm rounded-lg hover:bg-brand-secondary transition-all shadow-sm hover:shadow-md">+ Add Patient</button>
                     <button onClick={() => navigate('/hospital/patients')} className="px-4 py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-all">View Patients</button>
-                    <button onClick={() => navigate('/hospital/forms')} className="px-4 py-2.5 bg-emerald-600 dark:bg-emerald-700 text-white text-sm rounded-lg hover:bg-emerald-700 dark:hover:bg-emerald-800 transition-all shadow-sm hover:shadow-md">+ Add Record</button>
+                    <button onClick={() => navigate('/hospital/forms')} className="px-4 py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-all">+ Add Record</button>
                     <button onClick={() => navigate('/hospital/reports')} className="px-4 py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-all">Generate Report</button>
                     <button onClick={() => navigate('/hospital/settings')} className="px-4 py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-all">Account Settings</button>
                 </div>

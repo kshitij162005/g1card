@@ -1,6 +1,34 @@
 import express from 'express';
+import { buildRecordEmbeddingPayload, generateEmbedding } from '../utils/embedding.js';
+import { answerAdminQuestion } from '../utils/goluBrain.js';
+import { listProviders } from '../utils/aiClient.js';
+import { listNotifications, countUnread, markRead, markAllRead } from '../utils/notificationFeed.js';
+
+// Treat user search text literally inside Mongo regex queries
+const escapeRegex = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const router = express.Router();
+
+async function requireAdmin(adminId) {
+  if (!adminId) return null;
+  const Superadmin = (await import('../models/Superadmin.js')).default;
+  return Superadmin.findById(adminId).lean();
+}
+
+function trimTitle(message) {
+  const text = String(message || '').trim();
+  if (!text) return 'Health Intelligence Chat';
+  return text.length > 64 ? `${text.slice(0, 64)}...` : text;
+}
+
+function isGreeting(text) {
+  const normalized = String(text || '').trim().toLowerCase();
+  const greetingSet = new Set(['hi', 'hello', 'hey', 'hii', 'hiii', 'yo', 'good morning', 'good afternoon', 'good evening']);
+  if (greetingSet.has(normalized)) return true;
+  const words = normalized.split(/\s+/).filter(Boolean);
+  if (words.length > 3) return false;
+  return greetingSet.has(words.join(' '));
+}
 
 // Admin dashboard statistics (must come before /:id route)
 router.get('/dashboard/stats', async (req, res) => {
@@ -34,6 +62,259 @@ router.get('/dashboard/stats', async (req, res) => {
   }
 });
 
+// ==================== SUPERADMIN HEALTH INTELLIGENCE CHAT ====================
+
+// List recent chat sessions
+router.get('/chat/sessions', async (req, res) => {
+  try {
+    const adminId = String(req.query.adminId || '').trim();
+    const admin = await requireAdmin(adminId);
+    if (!admin) return res.status(403).json({ error: 'Superadmin not found' });
+
+    const SuperadminChatSession = (await import('../models/SuperadminChatSession.js')).default;
+    const sessions = await SuperadminChatSession.find({ adminId })
+      .sort({ updatedAt: -1 })
+      .limit(30)
+      .select('_id title updatedAt createdAt')
+      .lean();
+
+    return res.json({ ok: true, sessions });
+  } catch (err) {
+    console.error('list chat sessions error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Fetch a specific chat session
+router.get('/chat/sessions/:sessionId', async (req, res) => {
+  try {
+    const adminId = String(req.query.adminId || '').trim();
+    const admin = await requireAdmin(adminId);
+    if (!admin) return res.status(403).json({ error: 'Superadmin not found' });
+
+    const SuperadminChatSession = (await import('../models/SuperadminChatSession.js')).default;
+    const session = await SuperadminChatSession.findOne({ _id: req.params.sessionId, adminId }).lean();
+    if (!session) return res.status(404).json({ error: 'Chat session not found' });
+
+    return res.json({ ok: true, session });
+  } catch (err) {
+    console.error('fetch chat session error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Delete a chat session
+router.delete('/chat/sessions/:sessionId', async (req, res) => {
+  try {
+    const adminId = String(req.query.adminId || '').trim();
+    const admin = await requireAdmin(adminId);
+    if (!admin) return res.status(403).json({ error: 'Superadmin not found' });
+
+    const SuperadminChatSession = (await import('../models/SuperadminChatSession.js')).default;
+    const deleted = await SuperadminChatSession.findOneAndDelete({ _id: req.params.sessionId, adminId }).lean();
+    if (!deleted) return res.status(404).json({ error: 'Chat session not found' });
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('delete chat session error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Chat endpoint: plan read-only queries from the question + conversation, answer with evidence
+router.post('/chat', async (req, res) => {
+  try {
+    const { adminId, message, sessionId, prefer } = req.body || {};
+    const preference = prefer?.provider ? { provider: String(prefer.provider), model: prefer.model ? String(prefer.model) : undefined } : null;
+    if (!adminId || !message) return res.status(400).json({ error: 'adminId and message are required' });
+
+    const admin = await requireAdmin(adminId);
+    if (!admin) return res.status(403).json({ error: 'Superadmin not found' });
+
+    const SuperadminChatSession = (await import('../models/SuperadminChatSession.js')).default;
+    const question = String(message).trim().slice(0, 4000);
+
+    let session = sessionId ? await SuperadminChatSession.findOne({ _id: sessionId, adminId }) : null;
+    // The model is chosen when a chat starts and cannot change afterwards
+    const chatPreference = session ? (session.preference || null) : preference;
+    const history = session ? session.messages.map(m => ({ role: m.role, content: m.content, sources: m.sources })) : [];
+
+    let answer;
+    let sources = [];
+    let model;
+    if (isGreeting(question) && history.length === 0) {
+      answer = 'Hi! I am Golu. Ask me anything about patients, hospitals, records, consents or trends on G1Card.';
+    } else {
+      ({ answer, sources, model } = await answerAdminQuestion({ question, history, prefer: chatPreference }));
+    }
+
+    if (!session) {
+      session = await SuperadminChatSession.create({ adminId, title: trimTitle(question), messages: [], preference: chatPreference });
+    }
+    session.messages.push({ role: 'user', content: question });
+    session.messages.push({ role: 'assistant', content: answer, sources, model });
+    await session.save();
+
+    const keepIds = await SuperadminChatSession.find({ adminId })
+      .sort({ updatedAt: -1 })
+      .limit(30)
+      .distinct('_id');
+    await SuperadminChatSession.deleteMany({ adminId, _id: { $nin: keepIds } });
+
+    return res.json({ ok: true, sessionId: session._id, answer, messages: session.messages, sources, model, preference: session.preference || null });
+  } catch (err) {
+    console.error('superadmin chat error:', err);
+    const message = err?.message || String(err);
+    if (message.includes('MISTRAL_API_KEY_ADMIN')) {
+      return res.status(503).json({ error: 'Admin AI is not configured on server yet' });
+    }
+    return res.status(500).json({ error: message });
+  }
+});
+
+const INDEX_STATE_KEY = 'golu.recordIndex';
+let reindexInFlight = null;
+
+async function getIndexState() {
+  const SystemState = (await import('../models/SystemState.js')).default;
+  const Record = (await import('../models/Record.js')).default;
+  const RecordEmbedding = (await import('../models/RecordEmbedding.js')).default;
+  const [state, totalRecords, indexedRecords] = await Promise.all([
+    SystemState.findOne({ key: INDEX_STATE_KEY }).lean(),
+    Record.countDocuments({}),
+    RecordEmbedding.countDocuments({}),
+  ]);
+  return {
+    lastIndexedAt: state?.value?.lastIndexedAt || null,
+    lastRun: state?.value?.lastRun || null,
+    totalRecords,
+    indexedRecords,
+    running: Boolean(reindexInFlight),
+  };
+}
+
+// Index records for Golu's semantic search. Incremental by default: only records that changed since
+// the last run or that have no embedding yet. `full: true` re-embeds everything (capped by limit).
+async function runReindex({ full = false, limit = 500 } = {}) {
+  const SystemState = (await import('../models/SystemState.js')).default;
+  const Record = (await import('../models/Record.js')).default;
+  const RecordEmbedding = (await import('../models/RecordEmbedding.js')).default;
+  await import('../models/Patient.js');
+  await import('../models/FormTemplate.js');
+
+  const startedAt = new Date();
+  const state = await SystemState.findOne({ key: INDEX_STATE_KEY }).lean();
+  const since = state?.value?.lastIndexedAt ? new Date(state.value.lastIndexedAt) : null;
+
+  let filter = {};
+  if (!full) {
+    const indexedIds = await RecordEmbedding.distinct('recordId');
+    filter = { $or: [{ _id: { $nin: indexedIds } }, ...(since ? [{ updatedAt: { $gt: since } }] : [])] };
+  }
+
+  const records = await Record.find(filter)
+    .sort({ updatedAt: -1 })
+    .limit(Math.min(parseInt(limit, 10) || 500, 2000))
+    .populate('patient')
+    .populate('hospital', 'name')
+    .populate('form', 'name')
+    .lean();
+
+  let indexed = 0;
+  let skipped = 0;
+  for (const record of records) {
+    const patient = record.patient;
+    const hospital = record.hospital;
+    if (!patient || !hospital) {
+      skipped++;
+      continue;
+    }
+    const formName = record.form?.name || 'Medical Record';
+    const payload = buildRecordEmbeddingPayload({ patient, record, formName, hospitalName: hospital.name });
+    const embedding = await generateEmbedding(payload.text);
+    await RecordEmbedding.updateOne(
+      { recordId: record._id },
+      {
+        $set: {
+          recordId: record._id,
+          patientId: patient._id,
+          hospitalId: hospital._id,
+          hospitalName: hospital.name,
+          formName,
+          admissionDate: payload.admissionDate,
+          patientName: payload.patientName,
+          patientEmail: payload.patientEmail,
+          patientAge: payload.patientAge,
+          patientGender: payload.patientGender,
+          patientConditions: payload.patientConditions,
+          patientMedications: payload.patientMedications,
+          notes: payload.notes,
+          text: payload.text,
+          embedding,
+        },
+      },
+      { upsert: true }
+    );
+    indexed++;
+  }
+
+  const lastRun = { mode: full ? 'full' : 'incremental', indexed, skipped, checked: records.length, durationMs: Date.now() - startedAt.getTime() };
+  await SystemState.updateOne(
+    { key: INDEX_STATE_KEY },
+    { $set: { value: { lastIndexedAt: startedAt.toISOString(), lastRun } } },
+    { upsert: true }
+  );
+  return lastRun;
+}
+
+// Index status (for the "last indexed" timer)
+router.get('/chat/index-status', async (req, res) => {
+  try {
+    const admin = await requireAdmin(String(req.query.adminId || '').trim());
+    if (!admin) return res.status(403).json({ error: 'Superadmin not found' });
+    return res.json({ ok: true, ...(await getIndexState()) });
+  } catch (err) {
+    console.error('index status error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Reindex records (incremental unless full=true). Concurrent requests share one run.
+router.post('/chat/reindex', async (req, res) => {
+  try {
+    const { adminId, limit = 500, full = false } = req.body || {};
+    if (!adminId) return res.status(400).json({ error: 'adminId is required' });
+
+    const admin = await requireAdmin(adminId);
+    if (!admin) return res.status(403).json({ error: 'Superadmin not found' });
+
+    if (!reindexInFlight) {
+      reindexInFlight = runReindex({ full: Boolean(full), limit }).finally(() => { reindexInFlight = null; });
+    }
+    const run = await reindexInFlight;
+    return res.json({ ok: true, ...run, ...(await getIndexState()) });
+  } catch (err) {
+    console.error('reindex embeddings error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// AI providers/models available to Golu, with live status (probe=1 pings each provider)
+router.get('/chat/models', async (req, res) => {
+  try {
+    const admin = await requireAdmin(String(req.query.adminId || '').trim());
+    if (!admin) return res.status(403).json({ error: 'Superadmin not found' });
+    const providers = await listProviders({ role: 'admin', probe: req.query.probe === '1' });
+    return res.json({ ok: true, providers, checkedAt: new Date().toISOString() });
+  } catch (err) {
+    console.error('list ai models error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+
+// ==================== END SUPERADMIN HEALTH INTELLIGENCE CHAT ====================
+
 // List pending hospital registration requests (for approval)
 router.get('/hospitals/pending', async (req, res) => {
   try {
@@ -44,11 +325,11 @@ router.get('/hospitals/pending', async (req, res) => {
     const filter = { status: 'pending' };
     if (search) {
       filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { contactEmail: { $regex: search, $options: 'i' } },
-        { city: { $regex: search, $options: 'i' } },
-        { state: { $regex: search, $options: 'i' } },
-        { regNumber: { $regex: search, $options: 'i' } },
+        { name: { $regex: escapeRegex(search), $options: 'i' } },
+        { contactEmail: { $regex: escapeRegex(search), $options: 'i' } },
+        { city: { $regex: escapeRegex(search), $options: 'i' } },
+        { state: { $regex: escapeRegex(search), $options: 'i' } },
+        { regNumber: { $regex: escapeRegex(search), $options: 'i' } },
       ];
     }
 
@@ -147,16 +428,18 @@ router.get('/patients', async (req, res) => {
   try {
     const Patient = (await import('../models/Patient.js')).default;
     const Hospital = (await import('../models/Hospital.js')).default;
-    const { search = '', page = 1, limit = 10 } = req.query;
+    const { search = '', page = 1, limit = 10, status = '' } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const filter = {};
+    if (status === 'suspended') filter.suspended = true;
+    if (status === 'active') filter.suspended = { $ne: true };
     if (search) {
       filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-        { patientId: { $regex: search, $options: 'i' } },
+        { name: { $regex: escapeRegex(search), $options: 'i' } },
+        { email: { $regex: escapeRegex(search), $options: 'i' } },
+        { phone: { $regex: escapeRegex(search), $options: 'i' } },
+        { patientId: { $regex: escapeRegex(search), $options: 'i' } },
       ];
     }
 
@@ -216,6 +499,52 @@ router.get('/patients', async (req, res) => {
   }
 });
 
+// Suspend or reactivate a patient account
+router.post('/patients/:patientId/suspension', async (req, res) => {
+  try {
+    const { adminId, suspended, reason = '' } = req.body || {};
+    const admin = await requireAdmin(String(adminId || '').trim());
+    if (!admin) return res.status(403).json({ error: 'Superadmin not found' });
+
+    const Patient = (await import('../models/Patient.js')).default;
+    const patient = await Patient.findById(req.params.patientId);
+    if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
+    const suspend = Boolean(suspended);
+    patient.suspended = suspend;
+    patient.suspendedAt = suspend ? new Date() : undefined;
+    patient.suspendedReason = suspend ? String(reason).slice(0, 500) : '';
+    patient.suspendedBy = suspend ? admin._id : undefined;
+    await patient.save();
+
+    // Let the patient know in-app (they'll see it if reactivated, and it records the action)
+    try {
+      const Notification = (await import('../models/Notification.js')).default;
+      await Notification.create({
+        type: 'GENERAL',
+        recipient: patient._id,
+        recipientModel: 'Patient',
+        sender: admin._id,
+        senderModel: 'Superadmin',
+        title: suspend ? 'Your account was suspended' : 'Your account was reactivated',
+        message: suspend
+          ? `A G1Card administrator suspended your account${reason ? `: ${String(reason).slice(0, 200)}` : '.'}`
+          : 'A G1Card administrator reactivated your account. You can use G1Card again.',
+      });
+    } catch (notifyErr) {
+      console.warn('suspension notification failed:', notifyErr?.message || notifyErr);
+    }
+
+    return res.json({
+      ok: true,
+      patient: { _id: patient._id, suspended: patient.suspended, suspendedAt: patient.suspendedAt || null, suspendedReason: patient.suspendedReason || '' },
+    });
+  } catch (err) {
+    console.error('patient suspension error:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
 // List all hospitals with search and pagination (must come before /:id route)
 router.get('/hospitals', async (req, res) => {
   try {
@@ -226,10 +555,10 @@ router.get('/hospitals', async (req, res) => {
     const filter = {};
     if (search) {
       filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { city: { $regex: search, $options: 'i' } },
-        { state: { $regex: search, $options: 'i' } },
-        { contactEmail: { $regex: search, $options: 'i' } },
+        { name: { $regex: escapeRegex(search), $options: 'i' } },
+        { city: { $regex: escapeRegex(search), $options: 'i' } },
+        { state: { $regex: escapeRegex(search), $options: 'i' } },
+        { contactEmail: { $regex: escapeRegex(search), $options: 'i' } },
       ];
     }
 
@@ -823,6 +1152,34 @@ router.patch('/deletion-requests/:requestId/review', async (req, res) => {
 });
 
 // Fetch superadmin by id (safe view) - MUST be last to not conflict with other routes
+// Platform configuration as it really is right now (read-only; no secrets)
+router.get('/system', async (req, res) => {
+  try {
+    const mongoose = (await import('mongoose')).default;
+    const { describeEmailSetup } = await import('../utils/emailService.js');
+    const providers = await listProviders({ role: 'admin' }).catch(() => []);
+    return res.json({
+      ok: true,
+      system: {
+        environment: process.env.VERCEL ? 'Vercel' : (process.env.NODE_ENV || 'development'),
+        appUrl: process.env.APP_BASE_URL || 'https://g1card.vercel.app',
+        database: { connected: mongoose.connection.readyState === 1, name: mongoose.connection.name || '' },
+        email: describeEmailSetup(),
+        googleSignIn: { configured: Boolean(process.env.GOOGLE_CLIENT_ID) },
+        ai: {
+          routing: (process.env.AI_ROUTING || 'priority').toLowerCase(),
+          providers: providers.map(p => ({ name: p.label || p.provider, configured: Boolean(p.configured), models: (p.models || []).length })),
+        },
+        // These match the signup/password OTP code in routes.js and the patient settings flow
+        otp: { length: 6, validityMinutes: 10, resendCooldownSeconds: 60 },
+        uptimeSeconds: Math.round(process.uptime()),
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const Superadmin = (await import('../models/Superadmin.js')).default;
@@ -838,5 +1195,11 @@ router.get('/:id', async (req, res) => {
     return res.status(500).json({ error: err.message || String(err) });
   }
 });
+
+// Admin inbox: deletion requests, hospital update requests and other platform notices
+router.get('/admins/:id/notifications/count', (req, res) => countUnread(req, res, 'Superadmin'));
+router.get('/admins/:id/notifications', (req, res) => listNotifications(req, res, 'Superadmin'));
+router.patch('/admins/:id/notifications/read-all', (req, res) => markAllRead(req, res, 'Superadmin'));
+router.patch('/admins/:id/notifications/:notificationId/read', (req, res) => markRead(req, res, 'Superadmin'));
 
 export default router;

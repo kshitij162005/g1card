@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { API_URL } from '../config/api';
 
 export interface SSEEvent {
     type: string;
@@ -27,8 +28,7 @@ export function useSSE({ userId, userType, onEvent, enabled = true }: UseSSEOpti
         }
 
         const connectSSE = () => {
-            const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8082';
-            const url = `${API_BASE_URL}/api/sse/stream/${userId}/${userType}`;
+            const url = `${API_URL}/sse/stream/${userId}/${userType}`;
 
             console.log(`[SSE] Connecting to ${url}`);
             const eventSource = new EventSource(url);

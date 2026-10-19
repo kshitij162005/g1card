@@ -1,4 +1,5 @@
 import { API_URL } from '../../config/api';
+import SearchBox from '../../components/SearchBox';
 
 
 import React, { useState, useEffect } from 'react';
@@ -55,6 +56,7 @@ const PatientManagement: React.FC = () => {
                     status: consentStatus,
                     patientId: it.patientId || it._id,
                     accessLevel: it.accessLevel,
+                    suspended: Boolean((it as any).suspended),
                 } as any);
             }));
         } catch (err) {
@@ -80,12 +82,11 @@ const PatientManagement: React.FC = () => {
                     <div className="flex items-center gap-2">
                         <button onClick={() => navigate('/hospital/patients/add')} className="px-4 py-2 bg-brand-primary text-white text-sm rounded-lg hover:bg-brand-secondary">+ Add Patient</button>
                     </div>
-                    <input 
-                        type="text"
-                        placeholder="Search by Patient ID/Name..."
-                        className="w-full md:w-1/3 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-brand-accent focus:border-brand-accent bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                        value={searchTerm}
-                        onChange={e => { setSearchTerm(e.target.value); setPage(1); fetchPatients(e.target.value); }}
+                    <SearchBox
+                        className="w-full md:w-96"
+                        placeholder="Search by patient name or ID"
+                        live
+                        onSearch={q => { setSearchTerm(q); setPage(1); fetchPatients(q); }}
                     />
                     <div className="flex items-center gap-2">
                          <button 
@@ -171,9 +172,9 @@ const PatientManagement: React.FC = () => {
                                 const consentStatus = String(patient.status || '').toUpperCase();
                                 const canInteract = consentStatus === 'APPROVED';
                                 return (
-                                <tr key={patient.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-slate-800 dark:text-slate-200">
+                                <tr key={patient.id} className={`hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-slate-800 dark:text-slate-200 ${(patient as any).suspended ? 'app-row-suspended' : ''}`}>
                                     <td className="py-4 px-6 whitespace-nowrap font-mono text-sm">{(patient as any).patientId || patient.id}</td>
-                                    <td className="py-4 px-6 whitespace-nowrap">{patient.name}</td>
+                                    <td className="py-4 px-6 whitespace-nowrap"><span className="inline-flex items-center gap-2">{patient.name}{(patient as any).suspended && <span className="app-suspended-badge" title="This patient's G1Card account is suspended by an admin">Suspended</span>}</span></td>
                                     <td className="py-4 px-6 whitespace-nowrap">{patient.dob}</td>
                                     <td className="py-4 px-6 whitespace-nowrap">
                                         <span className={`px-2 inline-flex text-xs leading-5 font-bold rounded-full ${getStatusChip(patient.status)}`}>

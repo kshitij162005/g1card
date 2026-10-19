@@ -6,17 +6,219 @@ import Card from '../../components/Card';
 import { DetailedPatient } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import Loader from '../../components/Loader';
+import { normaliseBloodGroup, formatHeight, computeBmi, bmiCategory } from '../../utils/health';
+
+interface SummaryItem {
+    text: string;
+    cites: number[];
+    date?: string;
+}
+
+interface SummaryReference {
+    n: number;
+    ref: string;
+    kind: 'profile' | 'record';
+    title: string;
+    recordId?: string;
+    hospital?: string;
+    date?: string | null;
+}
 
 interface AiSummaryPayload {
-    overview: string;
-    bulletPoints: string[];
-    criticalAlerts: string[];
-    ongoingTreatments: string[];
-    surgeries: string[];
-    allergies: string[];
-    medications: string[];
-    timeline: string[];
+    overview: SummaryItem;
+    sections: Partial<Record<'criticalAlerts' | 'allergies' | 'medications' | 'ongoingTreatments' | 'conditions' | 'surgeries' | 'keyFindings', SummaryItem[]>>;
+    timeline: SummaryItem[];
+    references: SummaryReference[];
+    structured: boolean;
 }
+
+interface AiSummaryMeta {
+    generatedAt: string;
+    recordCount: number;
+    accessLevel: string;
+    model?: { provider: string; providerLabel?: string; model: string };
+}
+
+const SUMMARY_SECTIONS: Array<{ key: keyof AiSummaryPayload['sections']; title: string }> = [
+    { key: 'allergies', title: 'Allergies' },
+    { key: 'medications', title: 'Medications' },
+    { key: 'ongoingTreatments', title: 'Ongoing treatment' },
+    { key: 'conditions', title: 'Conditions' },
+    { key: 'surgeries', title: 'Surgeries & procedures' },
+    { key: 'keyFindings', title: 'Key findings' },
+];
+
+const formatShortDate = (value?: string | null) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return value;
+    return date.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' });
+};
+
+const Citations: React.FC<{ cites: number[]; references: SummaryReference[]; onOpen: (ref: SummaryReference) => void }> = ({ cites, references, onOpen }) => {
+    if (!cites.length) return null;
+    return (
+        <span className="inline-flex flex-wrap gap-1 ml-1.5 align-middle">
+            {cites.map(n => {
+                const ref = references.find(r => r.n === n);
+                if (!ref) return null;
+                const label = ref.kind === 'profile'
+                    ? 'Patient profile'
+                    : `${ref.title}${ref.hospital ? ` · ${ref.hospital}` : ''}${ref.date ? ` · ${formatShortDate(ref.date)}` : ''}`;
+                return (
+                    <button
+                        key={n}
+                        type="button"
+                        onClick={() => onOpen(ref)}
+                        title={ref.kind === 'record' ? `Open: ${label}` : label}
+                        className="min-w-[1.25rem] h-5 px-1 rounded-md text-[11px] font-semibold leading-5 text-center bg-[var(--app-surface-soft)] text-[var(--app-muted)] border border-[var(--app-border)] hover:bg-brand-primary hover:text-white hover:border-brand-primary transition-colors"
+                    >
+                        {n}
+                    </button>
+                );
+            })}
+        </span>
+    );
+};
+
+const AiSummaryPanel: React.FC<{
+    summary: AiSummaryPayload | null;
+    meta: AiSummaryMeta | null;
+    loading: boolean;
+    error: string | null;
+    recordCount: number;
+    onRegenerate: () => void;
+    onOpenReference: (ref: SummaryReference) => void;
+}> = ({ summary, meta, loading, error, recordCount, onRegenerate, onOpenReference }) => {
+    const alerts = summary?.sections.criticalAlerts || [];
+    const sections = SUMMARY_SECTIONS.filter(section => (summary?.sections[section.key] || []).length > 0);
+    const subtitle = [
+        meta?.model ? `${meta.model.providerLabel || meta.model.provider} · ${meta.model.model.replace(/^[^/]+\//, '').replace(/:free$/, '')}` : null,
+        meta ? `${meta.recordCount} record${meta.recordCount === 1 ? '' : 's'}` : null,
+        meta?.generatedAt ? new Date(meta.generatedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }) : null,
+    ].filter(Boolean).join(' · ');
+
+    return (
+        <Card>
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <h4 className="text-base font-semibold text-[var(--app-text)]">AI summary</h4>
+                    <p className="text-xs text-[var(--app-muted)] mt-0.5">
+                        {loading ? `Reading the patient profile and ${recordCount || 'all'} record${recordCount === 1 ? '' : 's'}…` : subtitle || 'Generated from the patient profile and records'}
+                    </p>
+                </div>
+                {!loading && (summary || error) && (
+                    <button type="button" onClick={onRegenerate} className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg border border-[var(--app-border)] text-[var(--app-text)] hover:bg-[var(--app-surface-soft)]">
+                        Regenerate
+                    </button>
+                )}
+            </div>
+
+            {loading && (
+                <div className="mt-5 space-y-3 animate-pulse" aria-label="Generating summary">
+                    <div className="h-3 rounded bg-[var(--app-surface-soft)] w-11/12" />
+                    <div className="h-3 rounded bg-[var(--app-surface-soft)] w-4/5" />
+                    <div className="grid sm:grid-cols-2 gap-4 pt-3">
+                        {[0, 1, 2, 3].map(n => (
+                            <div key={n} className="space-y-2">
+                                <div className="h-2.5 rounded bg-[var(--app-surface-soft)] w-1/3" />
+                                <div className="h-3 rounded bg-[var(--app-surface-soft)] w-5/6" />
+                                <div className="h-3 rounded bg-[var(--app-surface-soft)] w-2/3" />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {!loading && error && (
+                <p className="mt-4 text-sm text-red-600 dark:text-red-400">{error}</p>
+            )}
+
+            {!loading && summary && (
+                <div className="mt-4 space-y-6">
+                    <p className="text-[15px] leading-relaxed text-[var(--app-text)]">
+                        {summary.overview.text}
+                        <Citations cites={summary.overview.cites} references={summary.references} onOpen={onOpenReference} />
+                    </p>
+
+                    {alerts.length > 0 && (
+                        <div className="border-l-2 border-red-500 pl-4">
+                            <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-1.5">Needs attention</p>
+                            <ul className="space-y-1.5">
+                                {alerts.map((item, idx) => (
+                                    <li key={idx} className="text-sm text-[var(--app-text)] leading-relaxed">
+                                        {item.text}
+                                        <Citations cites={item.cites} references={summary.references} onOpen={onOpenReference} />
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
+                    {sections.length > 0 && (
+                        <div className="grid sm:grid-cols-2 gap-x-8 gap-y-5">
+                            {sections.map(section => (
+                                <div key={section.key}>
+                                    <p className="text-xs font-semibold text-[var(--app-muted)] mb-1.5">{section.title}</p>
+                                    <ul className="space-y-1.5">
+                                        {(summary.sections[section.key] || []).map((item, idx) => (
+                                            <li key={idx} className="text-sm text-[var(--app-text)] leading-relaxed pl-3 relative before:content-[''] before:absolute before:left-0 before:top-[0.6em] before:w-1 before:h-1 before:rounded-full before:bg-[var(--app-muted)]">
+                                                {item.text}
+                                                <Citations cites={item.cites} references={summary.references} onOpen={onOpenReference} />
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {summary.timeline.length > 0 && (
+                        <div>
+                            <p className="text-xs font-semibold text-[var(--app-muted)] mb-2">Timeline</p>
+                            <ol className="space-y-2">
+                                {summary.timeline.map((item, idx) => (
+                                    <li key={idx} className="flex gap-4 text-sm">
+                                        <span className="w-24 shrink-0 text-[var(--app-muted)] tabular-nums">{formatShortDate(item.date) || '—'}</span>
+                                        <span className="text-[var(--app-text)] leading-relaxed">
+                                            {item.text}
+                                            <Citations cites={item.cites} references={summary.references} onOpen={onOpenReference} />
+                                        </span>
+                                    </li>
+                                ))}
+                            </ol>
+                        </div>
+                    )}
+
+                    {summary.references.length > 0 && (
+                        <div className="pt-4 border-t border-[var(--app-border)]">
+                            <p className="text-xs font-semibold text-[var(--app-muted)] mb-2">Evidence</p>
+                            <ol className="space-y-1">
+                                {summary.references.map(ref => (
+                                    <li key={ref.n} className="flex items-baseline gap-2 text-sm">
+                                        <span className="w-5 shrink-0 text-xs font-semibold text-[var(--app-muted)] tabular-nums">{ref.n}</span>
+                                        {ref.kind === 'record' ? (
+                                            <button type="button" onClick={() => onOpenReference(ref)} className="text-left text-[var(--app-text)] hover:text-brand-primary hover:underline underline-offset-2">
+                                                {ref.title}
+                                                <span className="text-[var(--app-muted)]"> · {ref.hospital}{ref.date ? ` · ${formatShortDate(ref.date)}` : ''}</span>
+                                            </button>
+                                        ) : (
+                                            <span className="text-[var(--app-text)]">Patient profile <span className="text-[var(--app-muted)]">· Overview tab</span></span>
+                                        )}
+                                    </li>
+                                ))}
+                            </ol>
+                        </div>
+                    )}
+
+                    <p className="text-xs text-[var(--app-muted)]">
+                        AI-generated from this patient's records. Check the cited records before making treatment decisions.
+                    </p>
+                </div>
+            )}
+        </Card>
+    );
+};
 
 const Section: React.FC<{ title: string; onAdd?: () => void; children: React.ReactNode; }> = ({ title, onAdd, children }) => (
     <Card>
@@ -35,7 +237,8 @@ const RecordCard: React.FC<{
     formatFieldType: (type?: string) => string;
     hospitalId: string;
     patientId: string;
-}> = ({ record, isPinned, humanize, formatFieldType, hospitalId, patientId }) => {
+    highlighted?: boolean;
+}> = ({ record, isPinned, humanize, formatFieldType, hospitalId, patientId, highlighted = false }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const [fullRecord, setFullRecord] = useState<any>(null);
     const [loadingDetails, setLoadingDetails] = useState(false);
@@ -65,7 +268,14 @@ const RecordCard: React.FC<{
         }
     };
     
+    // Opened from an AI summary citation: expand so the cited details are visible
+    useEffect(() => {
+        if (highlighted && !isExpanded) handleToggleExpand();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [highlighted]);
+
     return (
+        <div id={`record-${record._id}`} className={`scroll-mt-24 rounded-2xl transition-shadow duration-500 ${highlighted ? 'ring-2 ring-brand-primary ring-offset-2 ring-offset-[var(--app-bg)]' : ''}`}>
         <Card className={`border ${isPinned ? 'border-brand-primary/80 shadow-md' : 'border-slate-200 dark:border-slate-700'}`}>
             <div 
                 className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 cursor-pointer"
@@ -151,6 +361,7 @@ const RecordCard: React.FC<{
                 </div>
             )}
         </Card>
+        </div>
     );
 };
 
@@ -171,7 +382,9 @@ const PatientRecord: React.FC = () => {
     const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
     const [aiSummaryError, setAiSummaryError] = useState<string | null>(null);
     const [aiSummary, setAiSummary] = useState<AiSummaryPayload | null>(null);
-    const [aiSummaryMeta, setAiSummaryMeta] = useState<{ generatedAt: string; recordCount: number; accessLevel: string } | null>(null);
+    const [aiSummaryMeta, setAiSummaryMeta] = useState<AiSummaryMeta | null>(null);
+    const [highlightedRecordId, setHighlightedRecordId] = useState<string | null>(null);
+    const [suspension, setSuspension] = useState<{ suspended: boolean; since?: string } | null>(null);
     const RECORDS_PER_PAGE = 10;
 
     useEffect(() => {
@@ -190,6 +403,7 @@ const PatientRecord: React.FC = () => {
                 setAccessError(null);
                 setAccessLevel(data.accessLevel || null);
                 const p = data.patient || {};
+                setSuspension(p.suspended ? { suspended: true, since: p.suspendedAt || undefined } : null);
                 const detailed: DetailedPatient = {
                     id: p.id || patientId,
                     name: p.name || '',
@@ -282,6 +496,36 @@ const PatientRecord: React.FC = () => {
         return otherRecords.slice(start, start + RECORDS_PER_PAGE);
     }, [otherRecords, otherPage]);
 
+    // Jump to a record cited by the AI summary: switch to its page, scroll to it and highlight it
+    const openSummaryReference = (ref: SummaryReference) => {
+        if (ref.kind !== 'record' || !ref.recordId) {
+            setActiveTab('overview');
+            return;
+        }
+        const pinnedIndex = pinnedRecords.findIndex(r => String(r._id) === ref.recordId);
+        const otherIndex = otherRecords.findIndex(r => String(r._id) === ref.recordId);
+        if (pinnedIndex >= 0) setPinnedPage(Math.floor(pinnedIndex / RECORDS_PER_PAGE) + 1);
+        else if (otherIndex >= 0) setOtherPage(Math.floor(otherIndex / RECORDS_PER_PAGE) + 1);
+        else {
+            notify('That record is not in the list you can view.');
+            return;
+        }
+        setHighlightedRecordId(null);
+        requestAnimationFrame(() => setHighlightedRecordId(ref.recordId!));
+    };
+
+    useEffect(() => {
+        if (!highlightedRecordId) return;
+        const scroll = window.setTimeout(() => {
+            document.getElementById(`record-${highlightedRecordId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 80);
+        const clear = window.setTimeout(() => setHighlightedRecordId(null), 4000);
+        return () => {
+            window.clearTimeout(scroll);
+            window.clearTimeout(clear);
+        };
+    }, [highlightedRecordId]);
+
     const formatDateIST = (dateString: string) => {
         if (!dateString) return 'N/A';
         const date = new Date(dateString);
@@ -373,9 +617,10 @@ const PatientRecord: React.FC = () => {
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200">PATIENT RECORD - {patient.name} (ID: {patient.id})</h2>
+                    <p className="text-xs font-medium text-[var(--app-accent)]">Patient record</p>
+                    <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200 mt-1">{patient.name}</h2>
                     <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                        <span>Last Updated: {formatDateIST(patient.lastUpdated)}</span> | <span>Created: {formatDateIST(patient.created)}</span>
+                        <span className="font-mono text-xs">ID {patient.id}</span> · <span>Last Updated: {formatDateIST(patient.lastUpdated)}</span> | <span>Created: {formatDateIST(patient.created)}</span>
                     </div>
                 </div>
                 <div className="flex gap-2">
@@ -397,6 +642,16 @@ const PatientRecord: React.FC = () => {
                                 The patient may have revoked your access or denied your access request. Please contact the patient to request access again.
                             </p>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {suspension?.suspended && (
+                <div className="app-suspended-banner" role="status">
+                    <span className="app-suspended-badge">Suspended</span>
+                    <div>
+                        <p className="font-semibold">This patient’s G1Card account is suspended{suspension.since ? ` since ${new Date(suspension.since).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}.</p>
+                        <p className="mt-0.5 text-sm opacity-90">A G1Card admin has put the account on hold. The patient can’t use their portal, so they won’t see new records or requests until it’s reactivated.</p>
                     </div>
                 </div>
             )}
@@ -490,10 +745,10 @@ const PatientRecord: React.FC = () => {
                         </Section>
                         <Section title="Health Information">
                             <ul className="text-sm space-y-2">
-                                <li><strong>Blood Group:</strong> {patient.bloodGroup}</li>
-                                <li><strong>Height:</strong> {patient.height}</li>
-                                <li><strong>Weight:</strong> {patient.weight}</li>
-                                <li><strong>BMI:</strong> {patient.bmi}</li>
+                                <li><strong>Blood Group:</strong> {normaliseBloodGroup(patient.bloodGroup) || '—'}</li>
+                                <li><strong>Height:</strong> {(() => { const h = formatHeight(patient.height); return h.main ? <>{h.main}{h.hint && <span className="text-slate-500"> · {h.hint}</span>}</> : '—'; })()}</li>
+                                <li><strong>Weight:</strong> {patient.weight ? `${patient.weight} kg` : '—'}</li>
+                                <li><strong>BMI:</strong> {(() => { const b = computeBmi(patient.height, patient.weight) ?? (Number(patient.bmi) || null); return b ? <>{b} <span style={{ color: bmiCategory(b).tone }}>· {bmiCategory(b).label}</span></> : '—'; })()}</li>
                             </ul>
                         </Section>
                         <Section title="Allergies & Intolerances">
@@ -545,68 +800,22 @@ const PatientRecord: React.FC = () => {
                                 disabled={aiSummaryLoading}
                                 className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                {aiSummaryLoading ? 'Analyzing Records...' : 'AI Medical Summary'}
+                                {aiSummaryLoading ? 'Generating summary…' : aiSummary ? 'Regenerate AI summary' : 'AI summary'}
                             </button>
                             <button onClick={handleAddRecord} className="px-4 py-2 text-sm bg-brand-primary text-white rounded-lg hover:bg-brand-secondary">+ Add Record</button>
                         </div>
                     </div>
 
                     {(aiSummaryLoading || aiSummaryError || aiSummary) && (
-                        <Card>
-                            <div className="space-y-3">
-                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                                    <h4 className="text-base font-semibold text-slate-800 dark:text-slate-100">AI Patient History Summary</h4>
-                                    {aiSummaryMeta?.generatedAt && (
-                                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                                            Generated: {new Date(aiSummaryMeta.generatedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
-                                        </p>
-                                    )}
-                                </div>
-
-                                {aiSummaryLoading && (
-                                    <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
-                                        Reading patient profile and records...
-                                    </div>
-                                )}
-
-                                {aiSummaryError && (
-                                    <div className="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-lg px-3 py-2">
-                                        {aiSummaryError}
-                                    </div>
-                                )}
-
-                                {aiSummary && (
-                                    <>
-                                        <p className="text-sm text-slate-800 dark:text-slate-300">
-                                            {aiSummary.overview}
-                                        </p>
-
-                                        {aiSummary.criticalAlerts.length > 0 && (
-                                            <div>
-                                                <p className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-400 mb-1">Critical Alerts</p>
-                                                <ul className="list-disc list-inside text-sm text-red-800 dark:text-red-300 space-y-1 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-lg px-3 py-2">
-                                                    {aiSummary.criticalAlerts.map((item, idx) => <li key={`critical-${idx}`}>{item}</li>)}
-                                                </ul>
-                                            </div>
-                                        )}
-
-                                        {aiSummary.bulletPoints.length > 0 && (
-                                            <div>
-                                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-400 mb-1">Medical Nutshell</p>
-                                                <ul className="list-disc list-inside text-sm text-slate-800 dark:text-slate-300 space-y-1">
-                                                    {aiSummary.bulletPoints.map((item, idx) => <li key={`summary-${idx}`}>{item}</li>)}
-                                                </ul>
-                                            </div>
-                                        )}
-
-                                        <p className="text-xs text-amber-900 dark:text-amber-200 bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-800 rounded px-2 py-1">
-                                            Safety note: Validate AI output against full records before treatment decisions.
-                                        </p>
-                                    </>
-                                )}
-                            </div>
-                        </Card>
+                        <AiSummaryPanel
+                            summary={aiSummary}
+                            meta={aiSummaryMeta}
+                            loading={aiSummaryLoading}
+                            error={aiSummaryError}
+                            recordCount={records.length}
+                            onRegenerate={handleGenerateAiSummary}
+                            onOpenReference={openSummaryReference}
+                        />
                     )}
 
                     {loadingRecords ? (
@@ -632,6 +841,7 @@ const PatientRecord: React.FC = () => {
                                             formatFieldType={formatFieldType}
                                             hospitalId={user?.id || ''}
                                             patientId={patientId || ''}
+                                            highlighted={highlightedRecordId === String(record._id)}
                                         />
                                     ))}
                                     {/* Pagination for pinned records */}
@@ -676,6 +886,7 @@ const PatientRecord: React.FC = () => {
                                             formatFieldType={formatFieldType}
                                             hospitalId={user?.id || ''}
                                             patientId={patientId || ''}
+                                            highlighted={highlightedRecordId === String(record._id)}
                                         />
                                     ))}
                                     {/* Pagination for other records */}

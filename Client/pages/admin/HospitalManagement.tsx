@@ -1,4 +1,5 @@
 import { API_URL } from '../../config/api';
+import SearchBox from '../../components/SearchBox';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../../components/Card';
@@ -83,18 +84,15 @@ const HospitalManagement: React.FC = () => {
         hospitalName: ''
     });
 
-    useEffect(() => {
-        setPage(1); // Reset to page 1 when search changes
-    }, [searchTerm]);
-
+    // Re-fetch whenever the page or the submitted search changes
     useEffect(() => {
         fetchHospitals();
-    }, [page]);
+    }, [page, searchTerm]);
 
     const fetchHospitals = async () => {
         setLoading(true);
         try {
-            const resp = await fetch(`${API_URL}/superadmin/hospitals?search=${searchTerm}&page=${page}&limit=10`);
+            const resp = await fetch(`${API_URL}/superadmin/hospitals?search=${encodeURIComponent(searchTerm)}&page=${page}&limit=10`);
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Failed');
             setHospitals(data.hospitals || []);
@@ -149,12 +147,10 @@ const HospitalManagement: React.FC = () => {
             />
             <div className="space-y-4">
                 <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-                    <input 
-                        type="text"
-                        placeholder="Search Hospital..."
-                        className="w-full md:w-1/3 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:ring-brand-accent focus:border-brand-accent"
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
+                    <SearchBox
+                        className="w-full md:w-96"
+                        placeholder="Search hospitals by name, city or email"
+                        onSearch={q => { setPage(1); setSearchTerm(q); }}
                     />
                      <select 
                         className="w-full md:w-1/4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-brand-accent focus:border-brand-accent"
